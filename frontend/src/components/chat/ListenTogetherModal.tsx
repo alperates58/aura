@@ -17,6 +17,7 @@ import {
   isYouTubeUrl,
   isYouTubeMusicUrl,
   isYouTubePlaylistUrl,
+  extractYouTubeId,
   extractYouTubePlaylistId,
   MediaMeta,
 } from "@/lib/youtube";
@@ -157,7 +158,22 @@ export default function ListenTogetherModal({
       thumbnail: "",
     };
 
-    startSession(conversationId, meta);
+    const selectedYoutubeId = meta.youtubeId || meta.tracks?.[0]?.id || extractYouTubeId(url) || undefined;
+    const selectedTitle = meta.tracks?.[0]?.title || meta.title;
+    const selectedArtist = meta.tracks?.[0]?.artist || meta.artist;
+    const selectedThumbnail = meta.tracks?.[0]?.thumbnail || meta.thumbnail;
+
+    startSession(conversationId, {
+      mediaType: meta.mediaType,
+      url: meta.url,
+      youtubeId: selectedYoutubeId,
+      playlistId: meta.playlistId,
+      playlistIndex: 0,
+      tracks: meta.tracks,
+      title: selectedTitle,
+      artist: selectedArtist,
+      thumbnail: selectedThumbnail,
+    });
     onClose();
   };
 
@@ -297,6 +313,8 @@ export default function ListenTogetherModal({
                       mediaType: "youtube_playlist",
                       url: inputQuery.trim(),
                       playlistId: previewMeta.playlistId,
+                      playlistIndex: idx,
+                      tracks: previewMeta.tracks,
                       youtubeId: track.id,
                       title: track.title,
                       artist: track.artist,

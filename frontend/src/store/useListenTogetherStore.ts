@@ -2,6 +2,15 @@ import { create } from "zustand";
 import { useSocketStore } from "./useSocketStore";
 import { useAuthStore } from "./useAuthStore";
 
+export interface PlaylistTrackItem {
+  id: string;
+  title: string;
+  artist: string;
+  duration?: string;
+  thumbnail: string;
+  url?: string;
+}
+
 export interface ListenTogetherSession {
   conversationId: string;
   senderId?: string;
@@ -10,6 +19,7 @@ export interface ListenTogetherSession {
   youtubeId?: string;
   playlistId?: string;
   playlistIndex?: number;
+  tracks?: PlaylistTrackItem[];
   title: string;
   artist: string;
   thumbnail: string;
@@ -43,6 +53,8 @@ interface ListenTogetherState {
       url: string;
       youtubeId?: string;
       playlistId?: string;
+      playlistIndex?: number;
+      tracks?: PlaylistTrackItem[];
       title: string;
       artist: string;
       thumbnail: string;
@@ -54,6 +66,8 @@ interface ListenTogetherState {
   seekTo: (time: number) => void;
   nextTrack: () => void;
   previousTrack: () => void;
+  selectTrackByIndex: (index: number) => void;
+  setTracks: (tracks: PlaylistTrackItem[]) => void;
   stopSession: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
@@ -81,13 +95,16 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
     const startedByName = currentUser?.display_name || currentUser?.username || "Siz";
     const startedById = currentUser?.id || "";
 
+    const isPl = meta.mediaType === "youtube_playlist" || Boolean(meta.playlistId);
+
     const newSession: ListenTogetherSession = {
       conversationId: convId,
-      mediaType: meta.mediaType,
+      mediaType: isPl ? "youtube_playlist" : meta.mediaType,
       url: meta.url,
       youtubeId: meta.youtubeId,
       playlistId: meta.playlistId,
-      playlistIndex: 0,
+      playlistIndex: meta.playlistIndex ?? 0,
+      tracks: meta.tracks || [],
       title: meta.title,
       artist: meta.artist,
       thumbnail: meta.thumbnail,
@@ -111,11 +128,11 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
     useSocketStore.getState().sendAction("listen_together_sync", {
       conversation_id: convId,
       action_type: "start",
-      media_type: meta.mediaType,
+      media_type: newSession.mediaType,
       url: meta.url,
       youtube_id: meta.youtubeId,
       playlist_id: meta.playlistId,
-      playlist_index: 0,
+      playlist_index: meta.playlistIndex ?? 0,
       title: meta.title,
       artist: meta.artist,
       thumbnail: meta.thumbnail,
@@ -124,6 +141,26 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
       is_playing: true,
       current_time: 0,
     });
+
+    // Eğer playlistId var ama tracks boşsa, arka planda parça listesini çek ve oturuma ekle
+    if (meta.playlistId && (!meta.tracks || meta.tracks.length === 0)) {
+      fetch(`/api/youtube/info?playlistId=${encodeURIComponent(meta.playlistId)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.tracks && data.tracks.length > 0) {
+            const current = get().session;
+            if (current && current.playlistId === meta.playlistId) {
+              set({
+                session: {
+                  ...current,
+                  tracks: data.tracks,
+                },
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    }
   },
 
   play: () => {
@@ -187,6 +224,47 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
   nextTrack: () => {
     const s = get().session;
     if (!s) return;
+
+    if (s.tracks && s.tracks.length > 0) {
+      const curIdx = s.playlistIndex ?? 0;
+      const nextIdx = (curIdx + 1) % s.tracks.length;
+      const nextTrack = s.tracks[nextIdx];
+
+      const updated: ListenTogetherSession = {
+        ...s,
+        playlistIndex: nextIdx,
+        youtubeId: nextTrack.id,
+        title: nextTrack.title,
+        artist: nextTrack.artist,
+        thumbnail: nextTrack.thumbnail || s.thumbnail,
+        currentTime: 0,
+        isPlaying: true,
+      };
+
+      set({
+        session: updated,
+        syncTrigger: { type: "change", time: 0, timestamp: Date.now() },
+      });
+
+      useSocketStore.getState().sendAction("listen_together_sync", {
+        conversation_id: s.conversationId,
+        action_type: "change",
+        media_type: s.mediaType,
+        url: nextTrack.url || s.url,
+        youtube_id: nextTrack.id,
+        playlist_id: s.playlistId,
+        playlist_index: nextIdx,
+        title: nextTrack.title,
+        artist: nextTrack.artist,
+        thumbnail: nextTrack.thumbnail || s.thumbnail,
+        started_by_name: s.startedByName,
+        started_by_id: s.startedById,
+        is_playing: true,
+        current_time: 0,
+      });
+      return;
+    }
+
     set({
       syncTrigger: { type: "next", time: 0, timestamp: Date.now() },
     });
@@ -202,6 +280,47 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
   previousTrack: () => {
     const s = get().session;
     if (!s) return;
+
+    if (s.tracks && s.tracks.length > 0) {
+      const curIdx = s.playlistIndex ?? 0;
+      const prevIdx = (curIdx - 1 + s.tracks.length) % s.tracks.length;
+      const prevTrack = s.tracks[prevIdx];
+
+      const updated: ListenTogetherSession = {
+        ...s,
+        playlistIndex: prevIdx,
+        youtubeId: prevTrack.id,
+        title: prevTrack.title,
+        artist: prevTrack.artist,
+        thumbnail: prevTrack.thumbnail || s.thumbnail,
+        currentTime: 0,
+        isPlaying: true,
+      };
+
+      set({
+        session: updated,
+        syncTrigger: { type: "change", time: 0, timestamp: Date.now() },
+      });
+
+      useSocketStore.getState().sendAction("listen_together_sync", {
+        conversation_id: s.conversationId,
+        action_type: "change",
+        media_type: s.mediaType,
+        url: prevTrack.url || s.url,
+        youtube_id: prevTrack.id,
+        playlist_id: s.playlistId,
+        playlist_index: prevIdx,
+        title: prevTrack.title,
+        artist: prevTrack.artist,
+        thumbnail: prevTrack.thumbnail || s.thumbnail,
+        started_by_name: s.startedByName,
+        started_by_id: s.startedById,
+        is_playing: true,
+        current_time: 0,
+      });
+      return;
+    }
+
     set({
       syncTrigger: { type: "prev", time: 0, timestamp: Date.now() },
     });
@@ -212,6 +331,52 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
       is_playing: true,
       current_time: 0,
     });
+  },
+
+  selectTrackByIndex: (index: number) => {
+    const s = get().session;
+    if (!s || !s.tracks || !s.tracks[index]) return;
+
+    const track = s.tracks[index];
+    const updated: ListenTogetherSession = {
+      ...s,
+      playlistIndex: index,
+      youtubeId: track.id,
+      title: track.title,
+      artist: track.artist,
+      thumbnail: track.thumbnail || s.thumbnail,
+      currentTime: 0,
+      isPlaying: true,
+    };
+
+    set({
+      session: updated,
+      syncTrigger: { type: "change", time: 0, timestamp: Date.now() },
+    });
+
+    useSocketStore.getState().sendAction("listen_together_sync", {
+      conversation_id: s.conversationId,
+      action_type: "change",
+      media_type: s.mediaType,
+      url: track.url || s.url,
+      youtube_id: track.id,
+      playlist_id: s.playlistId,
+      playlist_index: index,
+      title: track.title,
+      artist: track.artist,
+      thumbnail: track.thumbnail || s.thumbnail,
+      started_by_name: s.startedByName,
+      started_by_id: s.startedById,
+      is_playing: true,
+      current_time: 0,
+    });
+  },
+
+  setTracks: (tracks: PlaylistTrackItem[]) => {
+    const s = get().session;
+    if (s) {
+      set({ session: { ...s, tracks } });
+    }
   },
 
   stopSession: () => {
@@ -300,6 +465,31 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
       return;
     }
 
+    // Şarkı / Parça değişimi olayı
+    if (action_type === "change") {
+      const existing = get().session;
+      if (existing) {
+        set({
+          session: {
+            ...existing,
+            youtubeId: youtube_id || existing.youtubeId,
+            playlistIndex: playlist_index !== undefined ? playlist_index : existing.playlistIndex,
+            title: title || existing.title,
+            artist: artist || existing.artist,
+            thumbnail: thumbnail || existing.thumbnail,
+            currentTime: 0,
+            isPlaying: is_playing !== undefined ? is_playing : true,
+          },
+          syncTrigger: {
+            type: "change",
+            time: 0,
+            timestamp: Date.now(),
+          },
+        });
+      }
+      return;
+    }
+
     // Playlist ileri / geri olayı
     if (action_type === "next") {
       set({ syncTrigger: { type: "next", time: 0, timestamp: Date.now() } });
@@ -312,21 +502,23 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
 
     const existingSession = get().session;
 
-    // Yeni veya değişen şarkı / oturum
+    // Yeni veya değişen oturum
     if (
       !existingSession ||
       existingSession.conversationId !== conversation_id ||
-      (url && existingSession.url !== url)
+      (url && existingSession.url !== url && !playlist_id)
     ) {
+      const isPl = media_type === "youtube_playlist" || Boolean(playlist_id);
       const newSession: ListenTogetherSession = {
         conversationId: conversation_id,
         senderId: payload.sender_id,
-        mediaType: media_type || (playlist_id ? "youtube_playlist" : "youtube"),
+        mediaType: isPl ? "youtube_playlist" : (media_type || "youtube"),
         url: url || "",
         youtubeId: youtube_id,
         playlistId: playlist_id,
         playlistIndex: playlist_index || 0,
-        title: title || (media_type === "audio" ? "Canlı Ses Akışı" : "YouTube Parçası"),
+        tracks: existingSession && existingSession.playlistId === playlist_id ? existingSession.tracks : [],
+        title: title || (isPl ? "Çalma Listesi" : "YouTube Parçası"),
         artist: artist || "Fısıltı Dinle",
         thumbnail: thumbnail || (youtube_id ? `https://img.youtube.com/vi/${youtube_id}/hqdefault.jpg` : ""),
         startedByName: started_by_name || "Diğer Kullanıcı",
@@ -346,6 +538,26 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
           timestamp: Date.now(),
         },
       });
+
+      // Alıcı için de parçaları arka planda otomatik çek
+      if (playlist_id && (!newSession.tracks || newSession.tracks.length === 0)) {
+        fetch(`/api/youtube/info?playlistId=${encodeURIComponent(playlist_id)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.tracks && data.tracks.length > 0) {
+              const cur = get().session;
+              if (cur && cur.playlistId === playlist_id) {
+                set({
+                  session: {
+                    ...cur,
+                    tracks: data.tracks,
+                  },
+                });
+              }
+            }
+          })
+          .catch(() => {});
+      }
       return;
     }
 

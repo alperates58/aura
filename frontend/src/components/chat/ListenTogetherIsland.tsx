@@ -19,6 +19,7 @@ import {
   SkipForward,
   ListMusic,
   User,
+  Loader2,
 } from "lucide-react";
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
 
@@ -47,6 +48,7 @@ export default function ListenTogetherIsland({
   const seekTo = useListenTogetherStore((state) => state.seekTo);
   const nextTrack = useListenTogetherStore((state) => state.nextTrack);
   const previousTrack = useListenTogetherStore((state) => state.previousTrack);
+  const selectTrackByIndex = useListenTogetherStore((state) => state.selectTrackByIndex);
   const toggleMute = useListenTogetherStore((state) => state.toggleMute);
   const setVolume = useListenTogetherStore((state) => state.setVolume);
   const toggleIslandExpanded = useListenTogetherStore((state) => state.toggleIslandExpanded);
@@ -66,12 +68,16 @@ export default function ListenTogetherIsland({
   const volume = session.volume;
   const startedByName = session.startedByName || "Siz";
 
+  const tracks = session.tracks || [];
+  const hasTracks = tracks.length > 0;
+  const isPlaylist =
+    session.mediaType === "youtube_playlist" ||
+    Boolean(session.playlistId) ||
+    hasTracks;
   const isYouTube =
     session.mediaType === "youtube" ||
     session.mediaType === "youtube_music" ||
-    session.mediaType === "youtube_playlist";
-  const isPlaylist =
-    session.mediaType === "youtube_playlist" || Boolean(session.playlistId);
+    isPlaylist;
   const isMusic = session.mediaType === "youtube_music";
 
   return (
@@ -204,7 +210,7 @@ export default function ListenTogetherIsland({
         /* 2. GENİŞLETİLMİŞ DİNAMİK ADA KARTI (EXPANDED CARD) */
         <div
           onClick={(e) => e.stopPropagation()}
-          className="w-[330px] sm:w-[380px] rounded-3xl p-4 bg-slate-950/95 backdrop-blur-3xl border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] text-white flex flex-col gap-3.5 select-none animate-in zoom-in-95 duration-200"
+          className="w-[340px] sm:w-[410px] rounded-3xl p-4 bg-slate-950/95 backdrop-blur-3xl border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] text-white flex flex-col gap-3.5 select-none animate-in zoom-in-95 duration-200"
         >
           {/* Üst Bilgi: Başlatan Kişi & Kapat Butonları */}
           <div className="flex items-center justify-between">
@@ -269,7 +275,7 @@ export default function ListenTogetherIsland({
                 {isPlaylist ? (
                   <span className="px-1.5 py-0.5 rounded-md bg-amber-600/30 border border-amber-500/40 text-[9px] font-bold text-amber-300 flex items-center gap-1">
                     <ListMusic className="w-3 h-3" />
-                    <span>Çalma Listesi</span>
+                    <span>Çalma Listesi ({tracks.length ? `${tracks.length} Parça` : "Liste"})</span>
                   </span>
                 ) : isMusic ? (
                   <span className="px-1.5 py-0.5 rounded-md bg-red-600/30 border border-red-500/40 text-[9px] font-bold text-red-300">
@@ -344,33 +350,33 @@ export default function ListenTogetherIsland({
               />
             </div>
 
-            {/* Merkez: Önceki Şarkı (veya 10s geri), Oynat/Durdur, Sonraki Şarkı (veya 10s ileri) */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              {isPlaylist ? (
+            {/* Merkez: Önceki Şarkı, 10s geri, Oynat/Durdur, 10s ileri, Sonraki Şarkı */}
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {(isPlaylist || hasTracks) && (
                 <button
                   type="button"
                   onClick={previousTrack}
                   title="Önceki Şarkı"
-                  className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  className="p-1.5 sm:p-2 rounded-xl text-pink-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
                 >
                   <SkipBack className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => seekTo(Math.max(0, currentTime - 10))}
-                  title="10 saniye geri sar"
-                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                >
-                  <RotateCcw className="w-4 h-4" />
                 </button>
               )}
 
               <button
                 type="button"
+                onClick={() => seekTo(Math.max(0, currentTime - 10))}
+                title="10 saniye geri sar"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
                 onClick={togglePlay}
                 title={isPlaying ? "Durdur" : "Oynat"}
-                className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white flex items-center justify-center transition shadow-lg shadow-pink-600/35 hover:scale-105 cursor-pointer"
+                className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white flex items-center justify-center transition shadow-lg shadow-pink-600/35 hover:scale-105 cursor-pointer shrink-0"
               >
                 {isPlaying ? (
                   <Pause className="w-5 h-5 fill-white" />
@@ -379,23 +385,23 @@ export default function ListenTogetherIsland({
                 )}
               </button>
 
-              {isPlaylist ? (
+              <button
+                type="button"
+                onClick={() => seekTo(Math.min(duration || Infinity, currentTime + 10))}
+                title="10 saniye ileri sar"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+              </button>
+
+              {(isPlaylist || hasTracks) && (
                 <button
                   type="button"
                   onClick={nextTrack}
                   title="Sonraki Şarkı"
-                  className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  className="p-1.5 sm:p-2 rounded-xl text-pink-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
                 >
                   <SkipForward className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => seekTo(Math.min(duration || Infinity, currentTime + 10))}
-                  title="10 saniye ileri sar"
-                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                >
-                  <RotateCw className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -418,6 +424,94 @@ export default function ListenTogetherIsland({
               )}
             </div>
           </div>
+
+          {/* Çalma Listesindeki Şarkılar (Varsa) */}
+          {hasTracks && (
+            <div className="flex flex-col gap-1.5 pt-2 border-t border-white/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                  <ListMusic className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Çalma Listesi ({tracks.length} Parça)</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {(session.playlistIndex ?? 0) + 1} / {tracks.length}
+                </span>
+              </div>
+
+              {/* Scrollable Şarkı Listesi */}
+              <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1">
+                {tracks.map((track, idx) => {
+                  const isCurrent =
+                    (session.playlistIndex ?? 0) === idx ||
+                    session.youtubeId === track.id ||
+                    session.title === track.title;
+                  return (
+                    <div
+                      key={track.id + idx}
+                      onClick={() => selectTrackByIndex(idx)}
+                      className={`p-1.5 rounded-xl flex items-center justify-between gap-2 cursor-pointer transition text-xs ${
+                        isCurrent
+                          ? "bg-pink-600/30 border border-pink-500/50 text-white font-semibold shadow-sm"
+                          : "bg-slate-900/60 hover:bg-slate-800/80 border border-transparent text-slate-300 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`text-[10px] font-mono w-4 text-right shrink-0 ${
+                            isCurrent ? "text-pink-400 font-bold" : "text-slate-500"
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-slate-800 shrink-0 border border-white/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={track.thumbnail}
+                            alt={track.title}
+                            className="w-full h-full object-cover"
+                          />
+                          {isCurrent && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex flex-col">
+                          <span
+                            className={`text-[11px] truncate ${
+                              isCurrent ? "text-pink-300 font-bold" : "text-white"
+                            }`}
+                          >
+                            {track.title}
+                          </span>
+                          <span className="text-[9px] text-slate-400 truncate">
+                            {track.artist}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isCurrent ? (
+                        <span className="text-[9px] font-bold text-pink-300 px-1.5 py-0.5 rounded bg-pink-500/20 shrink-0 border border-pink-500/30">
+                          Çalıyor
+                        </span>
+                      ) : (
+                        <div className="p-1 rounded-lg text-slate-500 hover:text-pink-300 transition shrink-0">
+                          <Play className="w-3 h-3 fill-current ml-0.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {isPlaylist && !hasTracks && (
+            <div className="flex items-center justify-center py-2 text-xs text-slate-400 gap-2 border-t border-white/10">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" />
+              <span>Çalma listesi parçaları yükleniyor...</span>
+            </div>
+          )}
 
           {/* Alt Kısım: "Parçayı Değiştir" / Yeni Link Girişi Butonu */}
           <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">

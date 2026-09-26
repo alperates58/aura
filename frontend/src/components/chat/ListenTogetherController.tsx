@@ -54,6 +54,7 @@ export default function ListenTogetherController() {
   const isInternalUpdateRef = useRef(false);
   const currentVideoIdRef = useRef<string | null>(null);
   const currentPlaylistIdRef = useRef<string | null>(null);
+  const hasAutoAdvancedRef = useRef(false);
 
   const mediaType = session?.mediaType;
   const isYouTube =
@@ -137,6 +138,10 @@ export default function ListenTogetherController() {
                 play();
               } else if (event.data === 2 && useListenTogetherStore.getState().session?.isPlaying) {
                 pause();
+              } else if (event.data === 0) {
+                // Şarkı bitti (ENDED) -> Otomatik sıradaki şarkıya geç
+                console.log("[ListenTogether] Şarkı sona erdi (ENDED), sonraki parçaya geçiliyor...");
+                useListenTogetherStore.getState().nextTrack();
               }
 
               // Çalma listesinde şarkı değiştikçe başlığı güncelle
@@ -166,7 +171,17 @@ export default function ListenTogetherController() {
       } else {
         // Video veya playlist değiştiyse yükle
         const player = ytPlayerRef.current;
-        if (playlistId && currentPlaylistIdRef.current !== playlistId) {
+        if (youtubeId && currentVideoIdRef.current !== youtubeId) {
+          currentVideoIdRef.current = youtubeId;
+          hasAutoAdvancedRef.current = false;
+          try {
+            player.loadVideoById({
+              videoId: youtubeId,
+              startSeconds: session?.currentTime || 0,
+            });
+            if (isPlaying) player.playVideo();
+          } catch {}
+        } else if (playlistId && currentPlaylistIdRef.current !== playlistId && !youtubeId) {
           currentPlaylistIdRef.current = playlistId;
           try {
             player.loadPlaylist({
@@ -177,21 +192,12 @@ export default function ListenTogetherController() {
             });
             if (isPlaying) player.playVideo();
           } catch {}
-        } else if (youtubeId && currentVideoIdRef.current !== youtubeId) {
-          currentVideoIdRef.current = youtubeId;
-          try {
-            player.loadVideoById({
-              videoId: youtubeId,
-              startSeconds: session?.currentTime || 0,
-            });
-            if (isPlaying) player.playVideo();
-          } catch {}
         }
       }
     });
   }, [isYouTube, youtubeId, playlistId]);
 
-  // 2. Senkronizasyon Tetikleyicisi (Play / Pause / Seek / Next / Prev / Start / Stop)
+  // 2. Senkronizasyon Tetikleyicisi (Play / Pause / Seek / Next / Prev / Change / Start / Stop)
   useEffect(() => {
     if (!syncTrigger) return;
     const { type, time } = syncTrigger;
@@ -207,21 +213,27 @@ export default function ListenTogetherController() {
           player.pauseVideo();
         } else if (type === "seek") {
           player.seekTo(time, true);
+        } else if (type === "change") {
+          hasAutoAdvancedRef.current = false;
+          if (youtubeId) {
+            currentVideoIdRef.current = youtubeId;
+            player.loadVideoById(youtubeId, 0);
+          }
         } else if (type === "next") {
           player.nextVideo();
         } else if (type === "prev") {
           player.previousVideo();
         } else if (type === "start") {
-          if (playlistId) {
+          if (youtubeId) {
+            currentVideoIdRef.current = youtubeId;
+            player.loadVideoById(youtubeId, time || 0);
+          } else if (playlistId) {
             player.loadPlaylist({
               list: playlistId,
               listType: "playlist",
               index: 0,
               startSeconds: time || 0,
             });
-          } else if (youtubeId && currentVideoIdRef.current !== youtubeId) {
-            currentVideoIdRef.current = youtubeId;
-            player.loadVideoById(youtubeId, time);
           } else {
             player.seekTo(time, true);
             player.playVideo();
@@ -285,6 +297,14 @@ export default function ListenTogetherController() {
           }
           if (typeof dur === "number" && !isNaN(dur) && dur > 0) {
             setDuration(dur);
+          }
+          // Şarkı sonuna ulaşıldığında (örneğin 4:38 / 4:38) otomatik sıradaki parçaya geçiş güvenliği
+          if (typeof cur === "number" && typeof dur === "number" && dur > 5 && cur >= dur - 0.8) {
+            if (!hasAutoAdvancedRef.current) {
+              hasAutoAdvancedRef.current = true;
+              console.log("[ListenTogether] Süre sonuna gelindi, sıradaki parçaya geçiliyor...");
+              useListenTogetherStore.getState().nextTrack();
+            }
           }
         } catch {}
       } else if (!isYouTube && audioRef.current) {

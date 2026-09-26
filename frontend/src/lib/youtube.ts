@@ -82,22 +82,28 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
   const ytId = extractYouTubeId(url);
   const isMusic = isYouTubeMusicUrl(url);
 
-  // 1. Çalma Listesi Kontrolü
-  if (playlistId && (url.includes("playlist?list=") || !ytId)) {
+  // 1. Çalma Listesi Kontrolü (URL'de list= varsa her zaman playlist olarak ele al)
+  if (playlistId) {
     try {
       const res = await fetch(`/api/youtube/info?playlistId=${encodeURIComponent(playlistId)}`);
       if (res.ok) {
         const info = await res.json();
         if (info && info.title) {
+          let selectedTrack = info.tracks?.[0];
+          if (ytId && info.tracks && info.tracks.length > 0) {
+            const found = info.tracks.find((t: PlaylistTrack) => t.id === ytId);
+            if (found) selectedTrack = found;
+          }
+
           return {
             mediaType: "youtube_playlist",
             url,
             playlistId,
-            youtubeId: ytId || (info.tracks?.[0]?.id ?? undefined),
+            youtubeId: selectedTrack?.id || ytId || undefined,
             title: info.title,
             artist: info.artist || (isMusic ? "YouTube Music" : "YouTube"),
-            thumbnail: info.thumbnail || (ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : ""),
-            trackCount: info.trackCount,
+            thumbnail: selectedTrack?.thumbnail || info.thumbnail || (ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : ""),
+            trackCount: info.trackCount || info.tracks?.length || 0,
             tracks: info.tracks || [],
           };
         }
