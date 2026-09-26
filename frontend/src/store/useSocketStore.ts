@@ -404,6 +404,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
                 useCallStore.getState().onCallEnded(data.payload);
               });
               break;
+
+            case "listen_together_sync":
+              import("./useListenTogetherStore").then(({ useListenTogetherStore }) => {
+                useListenTogetherStore.getState().handleRemoteSync(data.payload);
+              });
+              break;
           }
         } catch (e) {
           console.error("Mesaj parse edilemedi:", e);

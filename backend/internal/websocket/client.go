@@ -346,5 +346,28 @@ func (c *Client) handleAction(msg WSMessage) {
 			IsTyping:       false,
 		})
 		c.hub.SendToUser(otherUserID, typingPayload)
+
+	case "listen_together_sync":
+		var p ListenTogetherSyncPayload
+		if err := json.Unmarshal(msg.Payload, &p); err != nil {
+			return
+		}
+
+		conv, err := c.hub.chatRepo.GetConversationByID(ctx, p.ConversationID)
+		if err != nil || conv == nil {
+			return
+		}
+		if conv.UserOneID != c.userID && conv.UserTwoID != c.userID {
+			return
+		}
+
+		otherUserID := conv.UserTwoID
+		if conv.UserOneID != c.userID {
+			otherUserID = conv.UserOneID
+		}
+
+		p.SenderID = c.userID
+		syncPayload, _ := NewWSMessage("listen_together_sync", p)
+		c.hub.SendToUser(otherUserID, syncPayload)
 	}
 }

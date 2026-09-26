@@ -1,18 +1,20 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
-  Play,
-  Pause,
   Headphones,
   Music,
-  Volume2,
-  VolumeX,
   Radio,
+  Sparkles,
   ExternalLink,
+  Play,
+  Clipboard,
+  Check,
+  Flame,
 } from "lucide-react";
-import { useSocketStore } from "@/store/useSocketStore";
+import { fetchMediaMetadata, isYouTubeUrl, isYouTubeMusicUrl, MediaMeta } from "@/lib/youtube";
+import { useListenTogetherStore } from "@/store/useListenTogetherStore";
 
 interface ListenTogetherModalProps {
   isOpen: boolean;
@@ -20,260 +22,259 @@ interface ListenTogetherModalProps {
   onClose: () => void;
 }
 
+// Hızlı Başlatma Hazır Listesi (Hemen dinlemek isteyenler için)
+const QUICK_PRESETS = [
+  {
+    title: "Lofi Girl - Canlı Beats",
+    artist: "Lofi Hip Hop Radio",
+    url: "https://www.youtube.com/watch?v=jfKfPfyJRdk",
+    tag: "Lofi",
+  },
+  {
+    title: "Synthwave / Chillwave Akışı",
+    artist: "Lofi Girl",
+    url: "https://www.youtube.com/watch?v=4xDzrJKXOOY",
+    tag: "Synthwave",
+  },
+  {
+    title: "Akustik ve Sakinleştirici Parçalar",
+    artist: "Chill Music Lab",
+    url: "https://www.youtube.com/watch?v=mAKsZ26SabQ",
+    tag: "Acoustic",
+  },
+];
+
 export default function ListenTogetherModal({
   isOpen,
   conversationId,
   onClose,
 }: ListenTogetherModalProps) {
-  const [audioUrl, setAudioUrl] = useState("");
-  const [activeMediaUrl, setActiveMediaUrl] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [previewMeta, setPreviewMeta] = useState<MediaMeta | null>(null);
+  const [isLoadingMeta, setIsLoadingMeta] = useState(false);
+  const [hasCopied, setHasCopied] = useState(false);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isSyncingFromRemote = useRef(false);
+  const startSession = useListenTogetherStore((state) => state.startSession);
 
-  const { socket, sendAction } = useSocketStore();
-
-  // Karşı taraftan gelen senkronizasyon event'lerini dinle
+  // Link değiştikçe önizleme meta verisini çek
   useEffect(() => {
-    if (!socket || !isOpen || !conversationId) return;
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setPreviewMeta(null);
+      return;
+    }
 
-    const handleMessage = (event: MessageEvent) => {
+    let isCancelled = false;
+    setIsLoadingMeta(true);
+
+    const timer = setTimeout(async () => {
       try {
-        const data = JSON.parse(event.data);
-        if (
-          data.action === "listen_together_sync" &&
-          data.payload?.conversation_id === conversationId
-        ) {
-          const { url, is_playing, current_time } = data.payload;
-          isSyncingFromRemote.current = true;
-
-          if (url && url !== activeMediaUrl) {
-            setActiveMediaUrl(url);
-          }
-
-          const audio = audioRef.current;
-          if (audio) {
-            // Drift düzeltme (1.5 saniyeden fazla kayma varsa seek et)
-            if (Math.abs(audio.currentTime - current_time) > 1.5) {
-              audio.currentTime = current_time;
-            }
-
-            if (is_playing && audio.paused) {
-              audio.play().catch(() => {});
-              setIsPlaying(true);
-            } else if (!is_playing && !audio.paused) {
-              audio.pause();
-              setIsPlaying(false);
-            }
-          }
-
-          setTimeout(() => {
-            isSyncingFromRemote.current = false;
-          }, 300);
+        const meta = await fetchMediaMetadata(trimmed);
+        if (!isCancelled) {
+          setPreviewMeta(meta);
         }
-      } catch {}
-    };
+      } catch {
+        if (!isCancelled) setPreviewMeta(null);
+      } finally {
+        if (!isCancelled) setIsLoadingMeta(false);
+      }
+    }, 350);
 
-    socket.addEventListener("message", handleMessage);
-    return () => socket.removeEventListener("message", handleMessage);
-  }, [socket, isOpen, conversationId, activeMediaUrl]);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [urlInput]);
 
   if (!isOpen) return null;
 
-  const broadcastSync = (playing: boolean, time: number, url?: string) => {
-    if (!conversationId || isSyncingFromRemote.current) return;
-    sendAction("listen_together_sync", {
-      conversation_id: conversationId,
-      url: url || activeMediaUrl,
-      is_playing: playing,
-      current_time: time,
-    });
+  const handlePasteClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setUrlInput(text.trim());
+        setHasCopied(true);
+        setTimeout(() => setHasCopied(false), 1500);
+      }
+    } catch {}
   };
 
-  const handleStartStream = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!audioUrl.trim()) return;
-    setActiveMediaUrl(audioUrl.trim());
-    setIsPlaying(true);
-    broadcastSync(true, 0, audioUrl.trim());
+  const handleStart = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!conversationId || !urlInput.trim()) return;
+
+    const meta = previewMeta || {
+      mediaType: isYouTubeMusicUrl(urlInput)
+        ? "youtube_music"
+        : isYouTubeUrl(urlInput)
+        ? "youtube"
+        : "audio",
+      url: urlInput.trim(),
+      title: "Müzik Parçası",
+      artist: "Birlikte Dinle",
+      thumbnail: "",
+    };
+
+    startSession(conversationId, meta);
+    onClose();
   };
 
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (audio.paused) {
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-      broadcastSync(true, audio.currentTime);
-    } else {
-      audio.pause();
-      setIsPlaying(false);
-      broadcastSync(false, audio.currentTime);
-    }
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextTime = parseFloat(e.target.value);
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = nextTime;
-      setCurrentTime(nextTime);
-      broadcastSync(isPlaying, nextTime);
-    }
-  };
-
-  const formatTime = (sec: number) => {
-    const mins = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${mins}:${s < 10 ? "0" : ""}${s}`;
+  const handlePickPreset = (presetUrl: string) => {
+    setUrlInput(presetUrl);
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl p-5 flex flex-col gap-4 text-white">
+      <div className="w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl p-5 sm:p-6 flex flex-col gap-4 text-white animate-in zoom-in-95 duration-200">
         {/* Üst Bar */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Headphones className="w-5 h-5 text-pink-400" />
+        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center shadow-lg shadow-pink-600/30">
+              <Headphones className="w-5 h-5 text-white" />
+            </div>
             <div>
-              <h3 className="text-sm font-bold">Birlikte Dinle (1-e-1)</h3>
-              <p className="text-[11px] text-slate-400">Canlı eşzamanlı müzik & ses akışı</p>
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
+                <span>Birlikte Dinle</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-400 text-[10px] font-bold border border-pink-500/30">
+                  1-e-1 Senkron
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                YouTube, YouTube Music veya MP3/Radyo akışını aynı anda dinleyin
+              </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Medya URL Girişi */}
-        {!activeMediaUrl ? (
-          <form onSubmit={handleStartStream} className="flex flex-col gap-3">
-            <p className="text-xs text-slate-300">
-              Birlikte dinlemek için doğrudan bir ses (MP3/WAV/AAC) veya radyo akışı linki girin:
-            </p>
-            <div className="flex gap-2">
+        {/* Link Giriş Alanı */}
+        <form onSubmit={handleStart} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+              <span>Müzik veya Video Linki:</span>
+              <button
+                type="button"
+                onClick={handlePasteClipboard}
+                className="text-[11px] text-pink-400 hover:text-pink-300 transition flex items-center gap-1 cursor-pointer"
+              >
+                {hasCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Clipboard className="w-3 h-3" />}
+                <span>{hasCopied ? "Yapıştırıldı" : "Panodan Yapıştır"}</span>
+              </button>
+            </label>
+            <div className="relative flex items-center">
               <input
-                type="url"
-                value={audioUrl}
-                onChange={(e) => setAudioUrl(e.target.value)}
-                placeholder="https://example.com/song.mp3"
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
+                type="text"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://music.youtube.com/watch?v=... veya https://youtube.com/..."
+                className="w-full bg-slate-950 border border-slate-700/80 focus:border-pink-500 rounded-2xl pl-3.5 pr-20 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition shadow-inner"
                 autoFocus
               />
               <button
                 type="submit"
-                disabled={!audioUrl.trim()}
-                className="px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                disabled={!urlInput.trim()}
+                className="absolute right-1.5 px-3.5 py-1.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition shadow-md cursor-pointer"
               >
                 Başlat
               </button>
             </div>
-          </form>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {/* Oynatıcı Kartı */}
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-pink-500/20 border border-pink-500/30 flex items-center justify-center shrink-0">
-                  <Music className="w-6 h-6 text-pink-400" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-white truncate">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <span className="truncate">Canlı Ses Akışı</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono truncate block mt-0.5">
-                    {activeMediaUrl}
-                  </span>
-                </div>
-              </div>
+          </div>
+        </form>
 
-              {/* Gizli Audio Elemanı */}
-              <audio
-                ref={audioRef}
-                src={activeMediaUrl}
-                autoPlay
-                onTimeUpdate={() => {
-                  if (audioRef.current) {
-                    setCurrentTime(audioRef.current.currentTime);
-                  }
-                }}
-                onLoadedMetadata={() => {
-                  if (audioRef.current) {
-                    setDuration(audioRef.current.duration || 0);
-                  }
-                }}
-                onEnded={() => {
-                  setIsPlaying(false);
-                  broadcastSync(false, 0);
-                }}
-              />
-
-              {/* İlerleme Çubuğu */}
-              <div className="flex flex-col gap-1">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  step={0.5}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  className="w-full accent-pink-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{duration ? formatTime(duration) : "--:--"}</span>
-                </div>
-              </div>
-
-              {/* Kontrol Butonları */}
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={() => {
-                    const audio = audioRef.current;
-                    if (audio) {
-                      audio.muted = !isMuted;
-                      setIsMuted(!isMuted);
-                    }
-                  }}
-                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-300 transition cursor-pointer"
-                >
-                  {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                </button>
-
-                <button
-                  onClick={togglePlay}
-                  className="w-12 h-12 rounded-full bg-pink-600 hover:bg-pink-500 text-white flex items-center justify-center transition shadow-lg shadow-pink-600/30 hover:scale-105 cursor-pointer"
-                >
-                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (audioRef.current) {
-                      audioRef.current.pause();
-                    }
-                    setActiveMediaUrl(null);
-                    setAudioUrl("");
-                    setIsPlaying(false);
-                    broadcastSync(false, 0, "");
-                  }}
-                  className="text-xs text-rose-400 hover:text-rose-300 transition cursor-pointer"
-                >
-                  Değiştir
-                </button>
-              </div>
+        {/* Canlı Önizleme Kartı */}
+        {isLoadingMeta ? (
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center gap-3 animate-pulse">
+            <div className="w-12 h-12 bg-slate-800 rounded-xl" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 bg-slate-800 rounded w-3/4" />
+              <div className="h-2.5 bg-slate-800 rounded w-1/2" />
             </div>
           </div>
-        )}
+        ) : previewMeta ? (
+          <div className="p-3 bg-slate-950 border border-slate-800/90 rounded-2xl flex items-center gap-3 shadow-lg">
+            <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-white/10">
+              {previewMeta.thumbnail ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewMeta.thumbnail}
+                  alt={previewMeta.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-pink-600/20 text-pink-400">
+                  <Music className="w-6 h-6" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {previewMeta.mediaType === "youtube_music" ? (
+                  <span className="px-1.5 py-0.2 rounded bg-red-600/30 border border-red-500/40 text-[9px] font-bold text-red-300">
+                    YouTube Music
+                  </span>
+                ) : previewMeta.mediaType === "youtube" ? (
+                  <span className="px-1.5 py-0.2 rounded bg-rose-600/30 border border-rose-500/40 text-[9px] font-bold text-rose-300">
+                    YouTube
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 rounded bg-pink-600/30 border border-pink-500/40 text-[9px] font-bold text-pink-300">
+                    Ses Dosyası
+                  </span>
+                )}
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+              <h4 className="text-xs font-bold text-white truncate">{previewMeta.title}</h4>
+              <p className="text-[10px] text-slate-400 truncate">{previewMeta.artist}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Hızlı Önerilen Parçalar (Presets) */}
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+            <Flame className="w-3.5 h-3.5 text-amber-400" />
+            <span>Hızlı Başlat (Örnek Akışlar):</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {QUICK_PRESETS.map((p, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handlePickPreset(p.url)}
+                className="p-2.5 rounded-2xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-left transition flex flex-col justify-between cursor-pointer group"
+              >
+                <div>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                    {p.tag}
+                  </span>
+                  <p className="text-xs font-semibold text-white group-hover:text-pink-300 transition truncate mt-1.5">
+                    {p.title}
+                  </p>
+                  <p className="text-[10px] text-slate-400 truncate">{p.artist}</p>
+                </div>
+                <div className="flex items-center justify-end mt-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-800 group-hover:bg-pink-600 text-slate-400 group-hover:text-white flex items-center justify-center transition">
+                    <Play className="w-3 h-3 fill-current ml-0.5" />
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bilgilendirme Notu */}
+        <div className="bg-slate-950/50 border border-white/5 rounded-2xl p-2.5 text-[11px] text-slate-400 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-pink-400 shrink-0" />
+          <span>
+            Başlattığınızda müzik sohbetin üstünde <strong>Dinamik Ada</strong> olarak asılı kalır; yazışırken kesintisiz dinleyebilir ve dilediğiniz an durdurabilirsiniz.
+          </span>
+        </div>
       </div>
     </div>
   );

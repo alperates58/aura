@@ -49,6 +49,21 @@ type TypingPayload struct {
 	ConversationID uuid.UUID `json:"conversation_id"`
 }
 
+type ListenTogetherSyncPayload struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	SenderID       uuid.UUID `json:"sender_id,omitempty"`
+	MediaType      string    `json:"media_type"` // "youtube", "youtube_music", "audio"
+	URL            string    `json:"url"`
+	YouTubeID      string    `json:"youtube_id,omitempty"`
+	Title          string    `json:"title,omitempty"`
+	Artist         string    `json:"artist,omitempty"`
+	Thumbnail      string    `json:"thumbnail,omitempty"`
+	IsPlaying      bool      `json:"is_playing"`
+	CurrentTime    float64   `json:"current_time"`
+	Duration       float64   `json:"duration,omitempty"`
+	ActionType     string    `json:"action_type,omitempty"` // "start", "play", "pause", "seek", "stop"
+}
+
 // Giden Paketler (Server -> Client)
 type MessageSentPayload struct {
 	TempID  string                 `json:"temp_id,omitempty"`

@@ -32,6 +32,8 @@ import PdfPreviewModal from "@/components/chat/PdfPreviewModal";
 import MediaGalleryModal, { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
 import DoodleModal from "@/components/chat/DoodleModal";
 import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
+import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
+import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import { compressImage, validateVideo } from "@/lib/compression";
 import { api, resolveMediaUrl, getApiBaseUrl } from "@/lib/api";
 import { formatLastSeen } from "@/lib/utils";
@@ -2295,9 +2297,17 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Mesaj Akışı */}
-            <div
-              ref={messagesContainerRef}
+            {/* Mesaj Akışı ve Dinamik Ada Alanı */}
+            <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              {/* BİRLİKTE DİNLE DİNAMİK ADA (DYNAMIC ISLAND) */}
+              <ListenTogetherIsland
+                otherUserName={activeConv.other_user?.display_name || activeConv.other_user?.username}
+                onOpenChooser={() => setIsListenTogetherOpen(true)}
+              />
+
+              {/* Mesaj Akışı */}
+              <div
+                ref={messagesContainerRef}
               onScroll={async (e) => {
                 const el = e.currentTarget;
                 if (!activeConversationId) return;
@@ -2383,6 +2393,7 @@ export default function HomePage() {
                 })
               )}
               <div ref={messagesEndRef} className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
+            </div>
             </div>
 
             {/* Mesaj Giriş Barı & Alıntılama & Medya Menüsü */}
@@ -3020,12 +3031,13 @@ export default function HomePage() {
         }}
       />
 
-      {/* 1-E-1 SENKRON MÜZİK DİNLEME (LISTEN TOGETHER) MODALI */}
+      {/* 1-E-1 SENKRON MÜZİK DİNLEME (LISTEN TOGETHER) MODALI & ARKA PLAN KONTROLCÜSÜ */}
       <ListenTogetherModal
         isOpen={isListenTogetherOpen}
         conversationId={activeConversationId}
         onClose={() => setIsListenTogetherOpen(false)}
       />
+      <ListenTogetherController />
 
       {/* Ana Ekran Geri Tuşu Çift Dokunma Bilgilendirme Kartı */}
       {showExitToast && (
