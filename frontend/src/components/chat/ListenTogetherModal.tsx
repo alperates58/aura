@@ -11,7 +11,6 @@ import {
   Search,
   Loader2,
   ListMusic,
-  ExternalLink,
 } from "lucide-react";
 import {
   fetchMediaMetadata,
@@ -259,7 +258,7 @@ export default function ListenTogetherModal({
                 {previewMeta.mediaType === "youtube_playlist" ? (
                   <span className="px-1.5 py-0.5 rounded bg-amber-600/30 border border-amber-500/40 text-[9px] font-bold text-amber-300 flex items-center gap-1">
                     <ListMusic className="w-3 h-3" />
-                    <span>Çalma Listesi</span>
+                    <span>Çalma Listesi ({previewMeta.trackCount || previewMeta.tracks?.length || "Liste"})</span>
                   </span>
                 ) : previewMeta.mediaType === "youtube_music" ? (
                   <span className="px-1.5 py-0.5 rounded bg-red-600/30 border border-red-500/40 text-[9px] font-bold text-red-300">
@@ -278,6 +277,66 @@ export default function ListenTogetherModal({
               </div>
               <h4 className="text-xs font-bold text-white truncate">{previewMeta.title}</h4>
               <p className="text-[10px] text-slate-400 truncate">{previewMeta.artist}</p>
+            </div>
+          </div>
+        )}
+
+        {/* 1.1 Çalma Listesi İçindeki Şarkılar Listesi (Varsa) */}
+        {isUrl && previewMeta?.tracks && previewMeta.tracks.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-slate-400">
+              Çalma Listesindeki Parçalar ({previewMeta.tracks.length}):
+            </span>
+            <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
+              {previewMeta.tracks.map((track, idx) => (
+                <div
+                  key={track.id + idx}
+                  onClick={() => {
+                    if (!conversationId) return;
+                    startSession(conversationId, {
+                      mediaType: "youtube_playlist",
+                      url: inputQuery.trim(),
+                      playlistId: previewMeta.playlistId,
+                      youtubeId: track.id,
+                      title: track.title,
+                      artist: track.artist,
+                      thumbnail: track.thumbnail,
+                    });
+                    onClose();
+                  }}
+                  className="p-2 rounded-2xl bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800/80 hover:border-pink-500/40 flex items-center justify-between gap-3 cursor-pointer transition group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-[10px] font-mono text-slate-500 w-4 text-right shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-white/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={track.thumbnail}
+                        alt={track.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    </div>
+                    <div className="min-w-0 flex flex-col">
+                      <span className="text-xs font-semibold text-white group-hover:text-pink-300 transition truncate">
+                        {track.title}
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate">
+                        {track.artist}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="px-2.5 py-1 rounded-xl bg-pink-600/30 group-hover:bg-pink-600 text-pink-300 group-hover:text-white border border-pink-500/40 text-[11px] font-bold transition flex items-center gap-1 shrink-0"
+                  >
+                    <Play className="w-3 h-3 fill-current ml-0.5" />
+                    <span>Çal</span>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -366,7 +425,7 @@ export default function ListenTogetherModal({
                     Çalma Listesi
                   </span>
                   <p className="text-xs font-semibold text-white group-hover:text-pink-300 transition truncate mt-1">
-                    YouTube Music Çalma Listesi
+                    Chopin - Best of (Piano)
                   </p>
                 </div>
                 <div className="w-7 h-7 rounded-full bg-slate-800 group-hover:bg-pink-600 text-slate-400 group-hover:text-white flex items-center justify-center transition shrink-0 ml-2">

@@ -2,6 +2,15 @@
  * YouTube & YouTube Music URL yardımcıları ve Meta Veri Çıkarıcı
  */
 
+export interface PlaylistTrack {
+  id: string;
+  title: string;
+  artist: string;
+  duration?: string;
+  thumbnail: string;
+  url: string;
+}
+
 export interface MediaMeta {
   mediaType: "youtube" | "youtube_music" | "youtube_playlist" | "audio";
   url: string;
@@ -10,6 +19,8 @@ export interface MediaMeta {
   title: string;
   artist: string;
   thumbnail: string;
+  trackCount?: number;
+  tracks?: PlaylistTrack[];
 }
 
 /**
@@ -63,7 +74,7 @@ export function isYouTubePlaylistUrl(url: string): boolean {
 }
 
 /**
- * Verilen URL için başlık, kapak ve sanatçı bilgilerini çeker (API anahtarsız oEmbed).
+ * Verilen URL için başlık, kapak ve sanatçı bilgilerini çeker.
  */
 export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
   const url = inputUrl.trim();
@@ -73,6 +84,26 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
 
   // 1. Çalma Listesi Kontrolü
   if (playlistId && (url.includes("playlist?list=") || !ytId)) {
+    try {
+      const res = await fetch(`/api/youtube/info?playlistId=${encodeURIComponent(playlistId)}`);
+      if (res.ok) {
+        const info = await res.json();
+        if (info && info.title) {
+          return {
+            mediaType: "youtube_playlist",
+            url,
+            playlistId,
+            youtubeId: ytId || (info.tracks?.[0]?.id ?? undefined),
+            title: info.title,
+            artist: info.artist || (isMusic ? "YouTube Music" : "YouTube"),
+            thumbnail: info.thumbnail || (ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : ""),
+            trackCount: info.trackCount,
+            tracks: info.tracks || [],
+          };
+        }
+      }
+    } catch {}
+
     return {
       mediaType: "youtube_playlist",
       url,
@@ -109,9 +140,7 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
           };
         }
       }
-    } catch {
-      // oEmbed hata verirse fallback
-    }
+    } catch {}
 
     return {
       mediaType,
