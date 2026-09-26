@@ -21,6 +21,7 @@ import {
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
 
 interface Props {
+  conversationId?: string | null;
   otherUserName?: string;
   onOpenChooser?: () => void;
 }
@@ -32,45 +33,29 @@ function formatTime(sec: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function ListenTogetherIsland({ otherUserName, onOpenChooser }: Props) {
-  const {
-    session,
-    isPlaying,
-    currentTime,
-    duration,
-    isMuted,
-    volume,
-    isIslandExpanded,
-    showVideo,
-    togglePlay,
-    seekTo,
-    toggleMute,
-    setVolume,
-    toggleIslandExpanded,
-    toggleShowVideo,
-    stopSession,
-  } = useListenTogetherStore((state) => ({
-    session: state.session,
-    isPlaying: state.session?.isPlaying ?? false,
-    currentTime: state.session?.currentTime ?? 0,
-    duration: state.session?.duration ?? 0,
-    isMuted: state.session?.isMuted ?? false,
-    volume: state.session?.volume ?? 80,
-    isIslandExpanded: state.isIslandExpanded,
-    showVideo: state.showVideo,
-    togglePlay: state.togglePlay,
-    seekTo: state.seekTo,
-    toggleMute: state.toggleMute,
-    setVolume: state.setVolume,
-    toggleIslandExpanded: state.toggleIslandExpanded,
-    toggleShowVideo: state.toggleShowVideo,
-    stopSession: state.stopSession,
-  }));
+export default function ListenTogetherIsland({ conversationId, otherUserName, onOpenChooser }: Props) {
+  const session = useListenTogetherStore((state) => state.session);
+  const isIslandExpanded = useListenTogetherStore((state) => state.isIslandExpanded);
+  const showVideo = useListenTogetherStore((state) => state.showVideo);
+  const togglePlay = useListenTogetherStore((state) => state.togglePlay);
+  const seekTo = useListenTogetherStore((state) => state.seekTo);
+  const toggleMute = useListenTogetherStore((state) => state.toggleMute);
+  const setVolume = useListenTogetherStore((state) => state.setVolume);
+  const toggleIslandExpanded = useListenTogetherStore((state) => state.toggleIslandExpanded);
+  const toggleShowVideo = useListenTogetherStore((state) => state.toggleShowVideo);
+  const stopSession = useListenTogetherStore((state) => state.stopSession);
 
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
 
   if (!session) return null;
+  if (conversationId && session.conversationId !== conversationId) return null;
+
+  const isPlaying = session.isPlaying;
+  const currentTime = session.currentTime;
+  const duration = session.duration;
+  const isMuted = session.isMuted;
+  const volume = session.volume;
 
   const isYouTube = session.mediaType === "youtube" || session.mediaType === "youtube_music";
   const isMusic = session.mediaType === "youtube_music";

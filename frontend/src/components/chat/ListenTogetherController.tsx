@@ -41,15 +41,13 @@ function loadYouTubeApi(onReady: () => void) {
 }
 
 export default function ListenTogetherController() {
-  const {
-    session,
-    syncTrigger,
-    setCurrentTime,
-    setDuration,
-    play,
-    pause,
-    showVideo,
-  } = useListenTogetherStore();
+  const session = useListenTogetherStore((state) => state.session);
+  const syncTrigger = useListenTogetherStore((state) => state.syncTrigger);
+  const setCurrentTime = useListenTogetherStore((state) => state.setCurrentTime);
+  const setDuration = useListenTogetherStore((state) => state.setDuration);
+  const play = useListenTogetherStore((state) => state.play);
+  const pause = useListenTogetherStore((state) => state.pause);
+  const showVideo = useListenTogetherStore((state) => state.showVideo);
 
   const ytPlayerRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -234,7 +232,7 @@ export default function ListenTogetherController() {
     }, 500);
 
     return () => clearInterval(interval);
-  }, [session, isPlaying, isYouTube]);
+  }, [isPlaying, isYouTube, Boolean(session)]);
 
   if (!session) return null;
 

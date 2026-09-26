@@ -2301,6 +2301,7 @@ export default function HomePage() {
             <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
               {/* BİRLİKTE DİNLE DİNAMİK ADA (DYNAMIC ISLAND) */}
               <ListenTogetherIsland
+                conversationId={activeConv.id}
                 otherUserName={activeConv.other_user?.display_name || activeConv.other_user?.username}
                 onOpenChooser={() => setIsListenTogetherOpen(true)}
               />
