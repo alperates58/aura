@@ -53,17 +53,22 @@ export default function ListenTogetherController() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isInternalUpdateRef = useRef(false);
   const currentVideoIdRef = useRef<string | null>(null);
+  const currentPlaylistIdRef = useRef<string | null>(null);
 
   const mediaType = session?.mediaType;
-  const isYouTube = mediaType === "youtube" || mediaType === "youtube_music";
+  const isYouTube =
+    mediaType === "youtube" ||
+    mediaType === "youtube_music" ||
+    mediaType === "youtube_playlist";
   const youtubeId = session?.youtubeId;
+  const playlistId = session?.playlistId;
   const isPlaying = session?.isPlaying ?? false;
   const isMuted = session?.isMuted ?? false;
   const volume = session?.volume ?? 80;
 
   // 1. YouTube Oynatıcı Başlatma ve Yönetimi
   useEffect(() => {
-    if (!isYouTube || !youtubeId) {
+    if (!isYouTube || (!youtubeId && !playlistId)) {
       if (ytPlayerRef.current) {
         try {
           ytPlayerRef.current.stopVideo();
@@ -77,19 +82,28 @@ export default function ListenTogetherController() {
       if (!container) return;
 
       if (!ytPlayerRef.current) {
-        currentVideoIdRef.current = youtubeId;
+        currentVideoIdRef.current = youtubeId || null;
+        currentPlaylistIdRef.current = playlistId || null;
+
+        const playerVars: any = {
+          autoplay: isPlaying ? 1 : 0,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          origin: typeof window !== "undefined" ? window.location.origin : "",
+        };
+
+        if (playlistId) {
+          playerVars.listType = "playlist";
+          playerVars.list = playlistId;
+        }
+
         ytPlayerRef.current = new window.YT.Player("yt-player-element", {
           height: "100%",
           width: "100%",
-          videoId: youtubeId,
-          playerVars: {
-            autoplay: isPlaying ? 1 : 0,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0,
-            playsinline: 1,
-            origin: typeof window !== "undefined" ? window.location.origin : "",
-          },
+          videoId: youtubeId || undefined,
+          playerVars,
           events: {
             onReady: (event: any) => {
               if (isMuted) {
@@ -99,9 +113,17 @@ export default function ListenTogetherController() {
                 event.target.setVolume(volume);
               }
 
-              if (session?.currentTime && session.currentTime > 0) {
+              if (playlistId && !youtubeId) {
+                event.target.loadPlaylist({
+                  list: playlistId,
+                  listType: "playlist",
+                  index: 0,
+                  startSeconds: session?.currentTime || 0,
+                });
+              } else if (session?.currentTime && session.currentTime > 0) {
                 event.target.seekTo(session.currentTime, true);
               }
+
               if (isPlaying) {
                 event.target.playVideo();
               }
@@ -116,28 +138,60 @@ export default function ListenTogetherController() {
               } else if (event.data === 2 && useListenTogetherStore.getState().session?.isPlaying) {
                 pause();
               }
+
+              // Çalma listesinde şarkı değiştikçe başlığı güncelle
+              try {
+                if (event.target.getVideoData) {
+                  const vData = event.target.getVideoData();
+                  if (vData && vData.title) {
+                    const cur = useListenTogetherStore.getState().session;
+                    if (cur && cur.title !== vData.title) {
+                      useListenTogetherStore.setState({
+                        session: {
+                          ...cur,
+                          title: vData.title,
+                          artist: vData.author || cur.artist,
+                          thumbnail: vData.video_id
+                            ? `https://img.youtube.com/vi/${vData.video_id}/hqdefault.jpg`
+                            : cur.thumbnail,
+                        },
+                      });
+                    }
+                  }
+                }
+              } catch {}
             },
           },
         });
       } else {
-        // Video değiştiyse yükle
-        if (currentVideoIdRef.current !== youtubeId) {
+        // Video veya playlist değiştiyse yükle
+        const player = ytPlayerRef.current;
+        if (playlistId && currentPlaylistIdRef.current !== playlistId) {
+          currentPlaylistIdRef.current = playlistId;
+          try {
+            player.loadPlaylist({
+              list: playlistId,
+              listType: "playlist",
+              index: 0,
+              startSeconds: session?.currentTime || 0,
+            });
+            if (isPlaying) player.playVideo();
+          } catch {}
+        } else if (youtubeId && currentVideoIdRef.current !== youtubeId) {
           currentVideoIdRef.current = youtubeId;
           try {
-            ytPlayerRef.current.loadVideoById({
+            player.loadVideoById({
               videoId: youtubeId,
               startSeconds: session?.currentTime || 0,
             });
-            if (isPlaying) {
-              ytPlayerRef.current.playVideo();
-            }
+            if (isPlaying) player.playVideo();
           } catch {}
         }
       }
     });
-  }, [isYouTube, youtubeId]);
+  }, [isYouTube, youtubeId, playlistId]);
 
-  // 2. Senkronizasyon Tetikleyicisi (Play / Pause / Seek / Start / Stop)
+  // 2. Senkronizasyon Tetikleyicisi (Play / Pause / Seek / Next / Prev / Start / Stop)
   useEffect(() => {
     if (!syncTrigger) return;
     const { type, time } = syncTrigger;
@@ -153,8 +207,19 @@ export default function ListenTogetherController() {
           player.pauseVideo();
         } else if (type === "seek") {
           player.seekTo(time, true);
+        } else if (type === "next") {
+          player.nextVideo();
+        } else if (type === "prev") {
+          player.previousVideo();
         } else if (type === "start") {
-          if (youtubeId && currentVideoIdRef.current !== youtubeId) {
+          if (playlistId) {
+            player.loadPlaylist({
+              list: playlistId,
+              listType: "playlist",
+              index: 0,
+              startSeconds: time || 0,
+            });
+          } else if (youtubeId && currentVideoIdRef.current !== youtubeId) {
             currentVideoIdRef.current = youtubeId;
             player.loadVideoById(youtubeId, time);
           } else {
@@ -187,7 +252,7 @@ export default function ListenTogetherController() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [syncTrigger, isYouTube, youtubeId]);
+  }, [syncTrigger, isYouTube, youtubeId, playlistId]);
 
   // 3. Ses ve Sessize Alma (Volume / Mute)
   useEffect(() => {
@@ -206,7 +271,7 @@ export default function ListenTogetherController() {
     }
   }, [isMuted, volume, isYouTube]);
 
-  // 4. Periyodik Zaman Güncelleme & Drift Önleme
+  // 4. Periyodik Zaman Güncelleme & Süre Tespiti
   useEffect(() => {
     if (!session || !isPlaying) return;
 
@@ -256,7 +321,6 @@ export default function ListenTogetherController() {
       )}
 
       {/* YouTube IFrame Konteyneri */}
-      {/* Video kapalıyken arka planda 1x1 piksel kesintisiz çalar, video açılınca Floating PiP olarak görünür */}
       <div
         className={
           showVideo && isYouTube

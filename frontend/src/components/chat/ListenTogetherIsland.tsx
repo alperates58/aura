@@ -14,9 +14,11 @@ import {
   Video,
   VideoOff,
   Music,
-  ExternalLink,
-  Radio,
   Sparkles,
+  SkipBack,
+  SkipForward,
+  ListMusic,
+  User,
 } from "lucide-react";
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
 
@@ -33,12 +35,18 @@ function formatTime(sec: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function ListenTogetherIsland({ conversationId, otherUserName, onOpenChooser }: Props) {
+export default function ListenTogetherIsland({
+  conversationId,
+  otherUserName,
+  onOpenChooser,
+}: Props) {
   const session = useListenTogetherStore((state) => state.session);
   const isIslandExpanded = useListenTogetherStore((state) => state.isIslandExpanded);
   const showVideo = useListenTogetherStore((state) => state.showVideo);
   const togglePlay = useListenTogetherStore((state) => state.togglePlay);
   const seekTo = useListenTogetherStore((state) => state.seekTo);
+  const nextTrack = useListenTogetherStore((state) => state.nextTrack);
+  const previousTrack = useListenTogetherStore((state) => state.previousTrack);
   const toggleMute = useListenTogetherStore((state) => state.toggleMute);
   const setVolume = useListenTogetherStore((state) => state.setVolume);
   const toggleIslandExpanded = useListenTogetherStore((state) => state.toggleIslandExpanded);
@@ -56,10 +64,15 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
   const duration = session.duration;
   const isMuted = session.isMuted;
   const volume = session.volume;
+  const startedByName = session.startedByName || "Siz";
 
-  const isYouTube = session.mediaType === "youtube" || session.mediaType === "youtube_music";
+  const isYouTube =
+    session.mediaType === "youtube" ||
+    session.mediaType === "youtube_music" ||
+    session.mediaType === "youtube_playlist";
+  const isPlaylist =
+    session.mediaType === "youtube_playlist" || Boolean(session.playlistId);
   const isMusic = session.mediaType === "youtube_music";
-  const percent = duration > 0 ? ((isScrubbing ? scrubValue : currentTime) / duration) * 100 : 0;
 
   return (
     <aside
@@ -88,7 +101,6 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
                 <Music className="w-3.5 h-3.5 text-white" />
               </div>
             )}
-            {/* Ortadaki Vinil Deliği */}
             <div className="absolute inset-0 m-auto w-2 h-2 rounded-full bg-slate-950 border border-white/30" />
           </div>
 
@@ -116,25 +128,42 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
             />
           </div>
 
-          {/* Başlık & Sanatçı */}
-          <div className="flex flex-col min-w-0 max-w-[130px] sm:max-w-[190px]">
-            <div className="flex items-center gap-1.5">
+          {/* Başlık & Sanatçı & Başlatan Kişi Notu */}
+          <div className="flex flex-col min-w-0 max-w-[120px] sm:max-w-[180px]">
+            <div className="flex items-center gap-1">
               <span className="text-[11px] font-semibold text-white truncate leading-tight">
                 {session.title}
               </span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-slate-400 truncate">
-              {isMusic ? (
+              {isPlaylist ? (
+                <span className="text-amber-400 font-bold shrink-0">Çalma Listesi</span>
+              ) : isMusic ? (
                 <span className="text-red-400 font-bold shrink-0">YT Music</span>
               ) : isYouTube ? (
                 <span className="text-rose-400 font-bold shrink-0">YouTube</span>
               ) : (
-                <span className="text-pink-400 font-bold shrink-0">Ses Akışı</span>
+                <span className="text-pink-400 font-bold shrink-0">Ses</span>
               )}
               <span>•</span>
-              <span className="truncate">{session.artist}</span>
+              <span className="text-slate-300 truncate">Açan: {startedByName}</span>
             </div>
           </div>
+
+          {/* Playlist Sonraki Şarkı Butonu (Kompakt) */}
+          {isPlaylist && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                nextTrack();
+              }}
+              title="Sonraki Şarkı"
+              className="p-1 rounded-full text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           {/* Hızlı Oynat / Durdur Butonu */}
           <button
@@ -177,24 +206,24 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
           onClick={(e) => e.stopPropagation()}
           className="w-[330px] sm:w-[380px] rounded-3xl p-4 bg-slate-950/95 backdrop-blur-3xl border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] text-white flex flex-col gap-3.5 select-none animate-in zoom-in-95 duration-200"
         >
-          {/* Üst Bilgi & Kapat Barı */}
+          {/* Üst Bilgi: Başlatan Kişi & Kapat Butonları */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="relative flex h-2 w-2 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              <span className="text-[11px] font-bold text-emerald-400 tracking-wide">
-                Canlı Senkronize
-              </span>
-              {otherUserName && (
-                <span className="text-[11px] text-slate-400 truncate max-w-[120px]">
-                  • {otherUserName} ile
+              <div className="flex items-center gap-1 text-[11px] truncate">
+                <span className="font-bold text-emerald-400">Canlı</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-pink-300 font-medium truncate flex items-center gap-1">
+                  <User className="w-3 h-3 text-pink-400 shrink-0" />
+                  <span>Müziği açan: <strong>{startedByName}</strong></span>
                 </span>
-              )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 onClick={toggleIslandExpanded}
@@ -237,7 +266,12 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
               </h4>
               <p className="text-[11px] text-slate-400 truncate mt-0.5">{session.artist}</p>
               <div className="flex items-center gap-1.5 mt-1">
-                {isMusic ? (
+                {isPlaylist ? (
+                  <span className="px-1.5 py-0.5 rounded-md bg-amber-600/30 border border-amber-500/40 text-[9px] font-bold text-amber-300 flex items-center gap-1">
+                    <ListMusic className="w-3 h-3" />
+                    <span>Çalma Listesi</span>
+                  </span>
+                ) : isMusic ? (
                   <span className="px-1.5 py-0.5 rounded-md bg-red-600/30 border border-red-500/40 text-[9px] font-bold text-red-300">
                     YouTube Music
                   </span>
@@ -283,7 +317,7 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
             </div>
           </div>
 
-          {/* Ana Kontroller (Geri 10s, Oynat/Durdur, İleri 10s, Ses, Video) */}
+          {/* Ana Kontroller */}
           <div className="flex items-center justify-between pt-1">
             {/* Sol: Sessize Alma ve Ses Düzeyi */}
             <div className="flex items-center gap-1.5">
@@ -310,16 +344,27 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
               />
             </div>
 
-            {/* Merkez: 10s Geri, Büyük Oynat/Durdur, 10s İleri */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => seekTo(Math.max(0, currentTime - 10))}
-                title="10 saniye geri sar"
-                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+            {/* Merkez: Önceki Şarkı (veya 10s geri), Oynat/Durdur, Sonraki Şarkı (veya 10s ileri) */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {isPlaylist ? (
+                <button
+                  type="button"
+                  onClick={previousTrack}
+                  title="Önceki Şarkı"
+                  className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <SkipBack className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => seekTo(Math.max(0, currentTime - 10))}
+                  title="10 saniye geri sar"
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 type="button"
@@ -334,17 +379,28 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => seekTo(Math.min(duration || Infinity, currentTime + 10))}
-                title="10 saniye ileri sar"
-                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              >
-                <RotateCw className="w-4 h-4" />
-              </button>
+              {isPlaylist ? (
+                <button
+                  type="button"
+                  onClick={nextTrack}
+                  title="Sonraki Şarkı"
+                  className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <SkipForward className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => seekTo(Math.min(duration || Infinity, currentTime + 10))}
+                  title="10 saniye ileri sar"
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <RotateCw className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            {/* Sağ: Video Toggle (Eğer YouTube ise) veya Değiştir Butonu */}
+            {/* Sağ: Video Toggle */}
             <div className="flex items-center gap-1">
               {isYouTube && (
                 <button
@@ -365,7 +421,7 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
 
           {/* Alt Kısım: "Parçayı Değiştir" / Yeni Link Girişi Butonu */}
           <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-            <span className="text-[11px] text-slate-400">Başka bir müzik mi dinleyeceksiniz?</span>
+            <span className="text-[11px] text-slate-400">Başka müzik çalmak için:</span>
             <button
               type="button"
               onClick={() => {
@@ -374,7 +430,7 @@ export default function ListenTogetherIsland({ conversationId, otherUserName, on
               className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-pink-500/50 text-pink-300 hover:text-pink-200 font-semibold transition cursor-pointer flex items-center gap-1.5"
             >
               <Sparkles className="w-3 h-3 text-pink-400" />
-              <span>Değiştir</span>
+              <span>Değiştir / Ara</span>
             </button>
           </div>
         </div>

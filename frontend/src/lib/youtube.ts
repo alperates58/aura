@@ -3,9 +3,10 @@
  */
 
 export interface MediaMeta {
-  mediaType: "youtube" | "youtube_music" | "audio";
+  mediaType: "youtube" | "youtube_music" | "youtube_playlist" | "audio";
   url: string;
   youtubeId?: string;
+  playlistId?: string;
   title: string;
   artist: string;
   thumbnail: string;
@@ -32,10 +33,19 @@ export function extractYouTubeId(url: string): string | null {
 }
 
 /**
+ * YouTube / YouTube Music Çalma Listesi (Playlist) ID'sini ayıklar (list=...).
+ */
+export function extractYouTubePlaylistId(url: string): string | null {
+  if (!url) return null;
+  const match = url.trim().match(/[?&]list=([a-zA-Z0-9_-]+)/i);
+  return match ? match[1] : null;
+}
+
+/**
  * URL'nin YouTube veya YouTube Music olup olmadığını kontrol eder.
  */
 export function isYouTubeUrl(url: string): boolean {
-  return extractYouTubeId(url) !== null;
+  return extractYouTubeId(url) !== null || extractYouTubePlaylistId(url) !== null;
 }
 
 /**
@@ -46,14 +56,36 @@ export function isYouTubeMusicUrl(url: string): boolean {
 }
 
 /**
+ * YouTube Çalma Listesi linki olup olmadığını kontrol eder.
+ */
+export function isYouTubePlaylistUrl(url: string): boolean {
+  return extractYouTubePlaylistId(url) !== null;
+}
+
+/**
  * Verilen URL için başlık, kapak ve sanatçı bilgilerini çeker (API anahtarsız oEmbed).
  */
 export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
   const url = inputUrl.trim();
+  const playlistId = extractYouTubePlaylistId(url);
   const ytId = extractYouTubeId(url);
+  const isMusic = isYouTubeMusicUrl(url);
 
+  // 1. Çalma Listesi Kontrolü
+  if (playlistId && (url.includes("playlist?list=") || !ytId)) {
+    return {
+      mediaType: "youtube_playlist",
+      url,
+      playlistId,
+      youtubeId: ytId || undefined,
+      title: isMusic ? "YouTube Music Çalma Listesi" : "YouTube Çalma Listesi",
+      artist: isMusic ? "YouTube Music Playlist" : "YouTube Playlist",
+      thumbnail: ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : "",
+    };
+  }
+
+  // 2. Tekil Video / Şarkı Kontrolü
   if (ytId) {
-    const isMusic = isYouTubeMusicUrl(url);
     const mediaType = isMusic ? "youtube_music" : "youtube";
     const thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
 
@@ -70,6 +102,7 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
             mediaType,
             url,
             youtubeId: ytId,
+            playlistId: playlistId || undefined,
             title: data.title,
             artist: data.author_name || (isMusic ? "YouTube Music" : "YouTube"),
             thumbnail: data.thumbnail_url || thumbnail,
@@ -84,13 +117,14 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
       mediaType,
       url,
       youtubeId: ytId,
+      playlistId: playlistId || undefined,
       title: isMusic ? "YouTube Music Parçası" : "YouTube Videosu",
       artist: isMusic ? "YouTube Music" : "YouTube",
       thumbnail,
     };
   }
 
-  // Doğrudan ses dosyası (MP3/WAV/AAC/Radyo)
+  // 3. Doğrudan ses dosyası (MP3/WAV/AAC/Radyo)
   let fileName = "Canlı Ses Akışı";
   try {
     const pathname = new URL(url).pathname;
