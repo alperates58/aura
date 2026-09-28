@@ -664,7 +664,7 @@ export default function StoryViewerModal() {
               </div>
             </div>
 
-            {/* Sağ Üst Kontroller (Ses Aç/Kapat, Paylaş, Sil, Kapat) */}
+            {/* Sağ Üst Kontroller (Ses Aç/Kapat, Düzenle, Ekle, Öne Çıkar, Sil, Kapat) */}
             <div className="flex items-center gap-1.5">
               {/* SES AÇMA / KAPAMA BUTONU */}
               {(hasMusic || currentStory.media_type === "video") && (
@@ -683,18 +683,6 @@ export default function StoryViewerModal() {
                   )}
                 </button>
               )}
-
-              {/* PAYLAŞ BUTONU */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleShareStory();
-                }}
-                title="Hikayeyi Paylaş"
-                className="p-2 text-white/80 hover:text-white rounded-full bg-black/40 hover:bg-black/60 border border-white/20 transition-all cursor-pointer"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
 
               {isOwnStory && (
                 <>
