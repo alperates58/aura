@@ -38,10 +38,11 @@ export default function LinkPreviewCard({ url, isMine }: Props) {
     setError(false);
 
     api
-      .get<LinkMetadata>("/media/link-preview", {
-        params: { url },
-        timeout: 6000,
-      })
+      .post<LinkMetadata>(
+        "/media/link-preview",
+        { url },
+        { timeout: 6000 }
+      )
       .then((res) => {
         if (!isMounted) return;
         if (res.data && (res.data.title || res.data.description)) {

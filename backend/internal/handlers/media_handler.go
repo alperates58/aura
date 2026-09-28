@@ -45,14 +45,49 @@ func NewMediaHandler(
 	}
 }
 
+type LinkPreviewRequest struct {
+	URL string `json:"url"`
+}
+
 func (h *MediaHandler) GetLinkPreview(c *fiber.Ctx) error {
-	rawURL := strings.TrimSpace(c.Query("url"))
-	if rawURL == "" {
+	// 1. Content-Type doğrulaması: application/json zorunludur
+	cType := strings.ToLower(c.Get("Content-Type"))
+	if !strings.Contains(cType, "application/json") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Lütfen geçerli bir url parametresi belirtin.",
+			"error": "Geçersiz içerik türü, 'application/json' bekleniyor.",
 		})
 	}
 
+	// 2. Gereksiz büyük request body kabul edilmesin (En fazla 4096 bayt)
+	body := c.Body()
+	if len(body) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "İstek gövdesi boş olamaz.",
+		})
+	}
+	if len(body) > 4096 {
+		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+			"error": "İstek boyutu çok büyük.",
+		})
+	}
+
+	// 3. JSON formatı ve model doğrulaması
+	var req LinkPreviewRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Geçersiz JSON formatı.",
+		})
+	}
+
+	// 4. Boş URL denetimi
+	rawURL := strings.TrimSpace(req.URL)
+	if rawURL == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Lütfen geçerli bir url belirtin.",
+		})
+	}
+
+	// 5. Sistem ayarlarından önizleme izin kontrolü
 	if h.settingsRepo != nil {
 		chatSettings := h.settingsRepo.GetChatSettings(c.Context())
 		if !chatSettings.EnableLinkPreviews {
@@ -62,16 +97,18 @@ func (h *MediaHandler) GetLinkPreview(c *fiber.Ctx) error {
 		}
 	}
 
+	// 6. Önizleme servisi kontrolü
 	if h.preview == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Önizleme servisi hazır değil.",
 		})
 	}
 
+	// 7. SSRF korumalı önizleme alma (URL loglanmaz, hata detayları dışarı sızdırılmaz)
 	meta, err := h.preview.GetLinkPreview(c.Context(), rawURL)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Bağlantı önizlemesi alınamadı.",
 		})
 	}
 

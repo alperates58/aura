@@ -237,7 +237,7 @@ func main() {
 	// Sohbet ve Mesajlaşma Rotaları
 	v1.Get("/media/file/:bucket/*", mediaHandler.GetMediaFile)
 	v1.Post("/media/upload", middleware.JWTMiddleware(cfg.JWTAccessSecret), mediaLimiter, mediaHandler.UploadMedia)
-	v1.Get("/media/link-preview", middleware.JWTMiddleware(cfg.JWTAccessSecret), mediaHandler.GetLinkPreview)
+	v1.Post("/media/link-preview", middleware.JWTMiddleware(cfg.JWTAccessSecret), mediaHandler.GetLinkPreview)
 
 	conversations := v1.Group("/conversations", middleware.JWTMiddleware(cfg.JWTAccessSecret))
 	conversations.Post("/", chatHandler.StartConversation)
