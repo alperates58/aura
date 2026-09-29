@@ -120,6 +120,7 @@ func main() {
 	// Repositories
 	storyRepo := database.NewStoryRepository(db)
 	securityRepo := database.NewSecurityRepository(db)
+	_ = securityRepo.EnsureSecurityBot(context.Background())
 
 	// 7. Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)

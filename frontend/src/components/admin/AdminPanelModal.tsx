@@ -51,6 +51,7 @@ import {
   Eye,
   Filter,
   MapPin,
+  Smartphone,
 } from "lucide-react";
 
 interface AdminPanelModalProps {
@@ -1056,6 +1057,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           {securityLogs.map((log) => {
                             const isUnknownUser = log.event_type === "unknown_user_login" || log.event_type === "unknown_user_attempt";
                             const isFailedPassword = log.event_type === "failed_password_login" || log.event_type === "failed_password_attempt";
+                            const isConcurrent = log.event_type === "concurrent_session_login";
 
                             let location = "";
                             if (log.details) {
@@ -1082,6 +1084,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   ) : isFailedPassword ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px]">
                                       <Lock className="w-3 h-3" /> Hatalı Şifre
+                                    </span>
+                                  ) : isConcurrent ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px]">
+                                      <Smartphone className="w-3 h-3" /> Çoklu Oturum
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px]">

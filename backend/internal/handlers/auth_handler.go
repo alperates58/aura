@@ -425,7 +425,109 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 				}
 			}
 		}
+
+		// 4. Sitedeki Kullanıcılara Doğrudan Güvenlik Mesajı Gönder
+		if h.hub != nil {
+			nowStr := time.Now().Format("15:04:05")
+			if eventType == "failed_password_attempt" && h.userRepo != nil {
+				if targetUser, err := h.userRepo.GetUserByUsername(ctx, attemptedLogin); err == nil && targetUser != nil {
+					chatMsg := fmt.Sprintf(
+						"🛡️ **AURA GÜVENLİK UYARISI**\n\nHesabınıza az önce **hatalı bir şifre** ile başarısız giriş denemesi yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nBu denemeyi siz gerçekleştirmediyseniz, hesabınızı korumak için lütfen şifrenizi derhal güncelleyin.",
+						ip, location, deviceInfo, nowStr,
+					)
+					h.hub.SendSecurityNotificationMessage(&targetUser.ID, chatMsg)
+				}
+			} else if eventType == "unknown_user_attempt" {
+				chatMsg := fmt.Sprintf(
+					"🛡️ **AURA SİSTEM GÜVENLİK BİLGİLENDİRMESİ**\n\nSistemimize kayıtsız bir kullanıcı (@%s) ile yetkisiz giriş teşebbüsünde bulunuldu. Aura Tehdit Kalkanı şüpheli bağlantıyı engelledi ve kayıt altına aldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nTüm konuşmalarınız ve verileriniz güvendedir.",
+					attemptedLogin, ip, location, deviceInfo, nowStr,
+				)
+				h.hub.SendSecurityNotificationMessage(nil, chatMsg)
+			}
+		}
 	}(ip, ua, deviceInfo, path, method)
+}
+
+func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog) {
+	go func(user *models.User, newIP, ua, newDeviceInfo string, prevAccess *models.AccessLog) {
+		ctx := context.Background()
+		location := ResolveIPLocation(newIP)
+		eventType := "concurrent_session_login"
+		nowStr := time.Now().Format("15:04:05")
+
+		prevDevice := "Aktif Oturum (Masaüstü / Mobil)"
+		prevIP := ""
+		if prevAccess != nil {
+			if prevAccess.DeviceInfo != "" {
+				prevDevice = prevAccess.DeviceInfo
+			}
+			prevIP = prevAccess.IPAddress
+		}
+
+		// 1. Veritabanına Güvenlik Olayını Kaydet
+		if h.securityRepo != nil {
+			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, user.Username, newIP, ua, newDeviceInfo, map[string]interface{}{
+				"location":    location,
+				"prev_device": prevDevice,
+				"prev_ip":     prevIP,
+				"note":        "Eşzamanlı iki oturum açıldı (ikinci cihazdan giriş)",
+			})
+		}
+
+		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla (banner)
+		if h.hub != nil {
+			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: @%s hesabında ikinci bir cihazdan giriş yapıldı! (Yeni Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
+			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+				EventType:      eventType,
+				AttemptedLogin: user.Username,
+				IPAddress:      newIP,
+				Location:       location,
+				DeviceInfo:     newDeviceInfo,
+				Message:        alertMsg,
+				Severity:       "high",
+				CreatedAt:      time.Now(),
+			})
+		}
+
+		// 3. Hikaye Paylaş (Aura Güvenlik)
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 5*time.Minute) {
+			caption := fmt.Sprintf(
+				"🛡️ GÜVENLİK ALARMI ⚠️\nÇoklu Oturum Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Konum: %s\n📱 Yeni Cihaz: %s\n⏰ Zaman: %s\nAynı anda iki oturum açıldı (ikinci cihaz).",
+				user.Username, newIP, location, newDeviceInfo, nowStr,
+			)
+
+			securityStory := models.Story{
+				UserID:          database.SecurityBotID,
+				MediaType:       "text",
+				BackgroundColor: "from-amber-950 via-slate-900 to-black",
+				Caption:         caption,
+				DurationSeconds: 10,
+				Audience:        "everyone",
+				ExpiresAt:       time.Now().Add(24 * time.Hour),
+			}
+
+			if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil {
+				if h.hub != nil {
+					h.hub.BroadcastStoryNotification(
+						database.SecurityBotID,
+						"Aura Güvenlik",
+						"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+						securityStory.Caption,
+						"everyone",
+					)
+				}
+			}
+		}
+
+		// 4. Kullanıcıya Aura Güvenlik Botundan Doğrudan Mesaj Gönder!
+		if h.hub != nil {
+			chatMsg := fmt.Sprintf(
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\nHesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Oturum:** %s\n\nBu işlemi siz gerçekleştirmediyseniz, hesabınız ele geçirilmiş olabilir. Lütfen derhal hesap şifrenizi güncelleyin.",
+				newDeviceInfo, newIP, location, nowStr, prevDevice,
+			)
+			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+		}
+	}(user, currentIP, currentUA, currentDeviceInfo, lastAccess)
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -479,6 +581,31 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		}
 	}
 
+	// 3. Eşzamanlı Oturum / İkinci Cihazdan Giriş Denetimi (Örn: PC'de açıkken mobilden giriş yapıldı)
+	isAlreadyOnline := false
+	if h.presenceService != nil {
+		isAlreadyOnline = h.presenceService.IsUserOnline(c.Context(), user.ID)
+	}
+	if !isAlreadyOnline && h.hub != nil {
+		isAlreadyOnline = h.hub.IsUserConnected(user.ID)
+	}
+
+	var lastAccess *models.AccessLog
+	if h.accessRepo != nil {
+		logs, _ := h.accessRepo.GetUserAccessLogs(c.Context(), user.ID, 1)
+		if len(logs) > 0 {
+			lastAccess = &logs[0]
+		}
+	}
+
+	currentIP := GetRealIP(c)
+	currentUA := c.Get("User-Agent")
+	currentDeviceInfo := database.ParseUserAgent(currentUA)
+
+	if isAlreadyOnline || (lastAccess != nil && time.Since(lastAccess.CreatedAt) < 30*time.Minute && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo)) {
+		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
+	}
+
 	accessToken, err := middleware.GenerateAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Oturum anahtarı üretilemedi."})
@@ -492,7 +619,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	h.setAuthCookies(c, accessToken, refreshToken)
 
 	if h.accessRepo != nil {
-		_ = h.accessRepo.LogAccess(c.Context(), user.ID, GetRealIP(c), c.Get("User-Agent"))
+		_ = h.accessRepo.LogAccess(c.Context(), user.ID, currentIP, currentUA)
 	}
 
 	return c.JSON(models.AuthResponse{

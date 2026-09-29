@@ -43,20 +43,21 @@ const parseSecurityStory = (caption?: string) => {
   let location = "";
   let device = "";
   let time = "";
-  const isFailedPassword = caption.includes("Hatalı Şifre") || caption.includes("Şüpheli Giriş") || caption.includes("Şüpheli Oturum");
+  const isFailedPassword = caption.includes("Hatalı Şifre") || caption.includes("Şüpheli Giriş");
+  const isConcurrent = caption.includes("Çoklu Oturum") || caption.includes("ikinci oturum") || caption.includes("ikinci cihaz");
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.includes("Denenen:") || trimmed.includes("Kullanıcı:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) targetUser = parts.slice(1).join(":").trim();
-    } else if (trimmed.includes("IP:")) {
+    } else if (trimmed.includes("IP:") || trimmed.includes("Yeni IP:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) ip = parts.slice(1).join(":").trim();
     } else if (trimmed.includes("Konum:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) location = parts.slice(1).join(":").trim();
-    } else if (trimmed.includes("Cihaz:")) {
+    } else if (trimmed.includes("Cihaz:") || trimmed.includes("Yeni Cihaz:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) device = parts.slice(1).join(":").trim();
     } else if (trimmed.includes("Zaman:")) {
@@ -67,7 +68,7 @@ const parseSecurityStory = (caption?: string) => {
 
   if (!targetUser && !ip) return null;
 
-  return { targetUser, ip, location, device, time, isFailedPassword };
+  return { targetUser, ip, location, device, time, isFailedPassword, isConcurrent };
 };
 
 export default function StoryViewerModal() {
@@ -861,21 +862,41 @@ export default function StoryViewerModal() {
                 )}
 
                 {secInfo ? (
-                  <div className="w-full max-w-[340px] sm:max-w-sm mx-auto p-4 sm:p-5 rounded-3xl bg-slate-950/90 border border-red-500/40 shadow-2xl shadow-red-950/70 backdrop-blur-xl animate-in zoom-in-95 duration-200 text-left select-none">
+                  <div className={`w-full max-w-[340px] sm:max-w-sm mx-auto p-4 sm:p-5 rounded-3xl bg-slate-950/90 border shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200 text-left select-none ${
+                    secInfo.isConcurrent
+                      ? "border-amber-500/40 shadow-amber-950/70"
+                      : "border-red-500/40 shadow-red-950/70"
+                  }`}>
                     {/* Kart Başlığı */}
-                    <div className="flex items-center gap-3 pb-3 border-b border-red-500/20 mb-3">
-                      <div className="w-10 h-10 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0 shadow-lg shadow-red-950/50">
+                    <div className={`flex items-center gap-3 pb-3 border-b mb-3 ${
+                      secInfo.isConcurrent ? "border-amber-500/20" : "border-red-500/20"
+                    }`}>
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                        secInfo.isConcurrent
+                          ? "bg-amber-500/20 border border-amber-500/40 text-amber-400 shadow-amber-950/50"
+                          : "bg-red-500/20 border border-red-500/40 text-red-400 shadow-red-950/50"
+                      }`}>
                         <ShieldAlert className="w-5 h-5 animate-pulse" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border ${
+                            secInfo.isConcurrent
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                              : "bg-red-500/20 text-red-300 border-red-500/30"
+                          }`}>
                             Aura Tehdit Kalkanı
                           </span>
-                          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                          <span className={`w-2 h-2 rounded-full animate-ping ${
+                            secInfo.isConcurrent ? "bg-amber-500" : "bg-red-500"
+                          }`} />
                         </div>
                         <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight mt-0.5 truncate">
-                          {secInfo.isFailedPassword ? "Şüpheli Giriş Engellendi" : "Yetkisiz Giriş Teşebbüsü"}
+                          {secInfo.isConcurrent
+                            ? "Eşzamanlı Çoklu Oturum"
+                            : secInfo.isFailedPassword
+                            ? "Şüpheli Giriş Engellendi"
+                            : "Yetkisiz Giriş Teşebbüsü"}
                         </h4>
                       </div>
                     </div>
@@ -893,9 +914,13 @@ export default function StoryViewerModal() {
 
                       <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
                         <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
-                          <Globe className="w-3.5 h-3.5 text-red-400" /> Gerçek IP:
+                          <Globe className={`w-3.5 h-3.5 ${secInfo.isConcurrent ? "text-amber-400" : "text-red-400"}`} /> {secInfo.isConcurrent ? "Yeni IP:" : "Gerçek IP:"}
                         </span>
-                        <span className="font-mono font-bold text-red-300 text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+                        <span className={`font-mono font-bold text-[11px] px-1.5 py-0.5 rounded border ${
+                          secInfo.isConcurrent
+                            ? "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                            : "text-red-300 bg-red-500/10 border-red-500/20"
+                        }`}>
                           {secInfo.ip || "—"}
                         </span>
                       </div>
@@ -929,18 +954,26 @@ export default function StoryViewerModal() {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-red-950/30 border border-red-500/20 gap-2">
-                        <span className="text-[11px] text-red-300 flex items-center gap-1.5 shrink-0">
+                      <div className={`flex items-center justify-between p-2 rounded-xl border gap-2 ${
+                        secInfo.isConcurrent
+                          ? "bg-amber-950/30 border-amber-500/20"
+                          : "bg-red-950/30 border-red-500/20"
+                      }`}>
+                        <span className={`text-[11px] flex items-center gap-1.5 shrink-0 ${
+                          secInfo.isConcurrent ? "text-amber-300" : "text-red-300"
+                        }`}>
                           <span>🛡️</span> Sistem Aksiyonu:
                         </span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                          Engellendi & Kaydedildi
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          secInfo.isConcurrent ? "text-amber-400" : "text-emerald-400"
+                        }`}>
+                          {secInfo.isConcurrent ? "İkinci Cihaz Doğrulandı" : "Engellendi & Kaydedildi"}
                         </span>
                       </div>
                     </div>
 
                     {/* Alt Kalkan Bilgilendirmesi */}
-                    <div className="mt-3 pt-2 border-t border-red-500/15 text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
+                    <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span>Aura Tehdit Kalkanı 7/24 Devrede</span>
                     </div>

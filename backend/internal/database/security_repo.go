@@ -155,3 +155,27 @@ func (r *SecurityRepository) CanPublishSecurityStory(ctx context.Context, cooldo
 	}
 	return count == 0
 }
+
+// EnsureSecurityBot Aura Güvenlik resmi bot hesabının veritabanında var olduğunu garanti eder.
+func (r *SecurityRepository) EnsureSecurityBot(ctx context.Context) error {
+	query := `
+		INSERT INTO users (
+			id, username, display_name, email, password_hash, avatar_url, bio, role, online_status
+		) VALUES (
+			'00000000-0000-0000-0000-000000000001',
+			'security',
+			'Aura Güvenlik',
+			'security@aura.system',
+			'$2a$10$7vQ5q3N5f2R7hJ8mK1l4OeL3.eM84D9cO1c9BvY2wWzWqgD4qPZ8Ky',
+			'https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b',
+			'Aura Otomatik Sistem Güvenliği ve Tehdit Algılama Kalkanı',
+			'admin',
+			1
+		) ON CONFLICT (id) DO UPDATE SET
+			display_name = 'Aura Güvenlik',
+			avatar_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b',
+			role = 'admin'
+	`
+	_, err := r.db.ExecContext(ctx, query)
+	return err
+}

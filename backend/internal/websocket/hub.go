@@ -396,3 +396,72 @@ func (h *Hub) BroadcastSecurityAlert(alert models.SecurityAlertPayload) {
 	}
 }
 
+// SendSecurityNotificationMessage Aura Güvenlik resmi botundan hedef kullanıcıya (veya herkese) doğrudan sohbet mesajı iletir.
+func (h *Hub) SendSecurityNotificationMessage(targetUserID *uuid.UUID, content string) {
+	if h.chatRepo == nil {
+		return
+	}
+
+	go func() {
+		ctx := context.Background()
+
+		var targetIDs []uuid.UUID
+		if targetUserID != nil {
+			targetIDs = []uuid.UUID{*targetUserID}
+		} else if h.userRepo != nil {
+			// Genel sistem duyurusu ise tüm kayıtlı kullanıcılara gönder (security bot hariç)
+			users, _, err := h.userRepo.GetAllUsers(ctx, "", "", nil, 500, 0)
+			if err == nil {
+				for _, u := range users {
+					if u.ID != database.SecurityBotID {
+						targetIDs = append(targetIDs, u.ID)
+					}
+				}
+			}
+		}
+
+		for _, recID := range targetIDs {
+			// 1. Bot ile kullanıcı arasında konuşma oluştur veya al
+			conv, err := h.chatRepo.GetOrCreateConversation(ctx, database.SecurityBotID, recID)
+			if err != nil {
+				log.Printf("⚠️ [Security Hub] Güvenlik konuşması oluşturulamadı: %v", err)
+				continue
+			}
+
+			// 2. Mesajı veritabanına kaydet
+			msgModel := models.Message{
+				ConversationID: conv.ID,
+				SenderID:       database.SecurityBotID,
+				RecipientID:    recID,
+				MessageType:    "text",
+				Content:        content,
+			}
+			if err := h.chatRepo.SaveMessage(ctx, &msgModel); err != nil {
+				log.Printf("⚠️ [Security Hub] Güvenlik mesajı kaydedilemedi: %v", err)
+				continue
+			}
+
+			// 3. Kullanıcı sokete bağlıysa anlık new_message fırlat
+			if h.IsUserConnected(recID) {
+				newMsgForRecipient := msgModel.ToResponse(recID)
+				newMsgPayload, err := NewWSMessage("new_message", newMsgForRecipient)
+				if err == nil {
+					h.SendToUser(recID, newMsgPayload)
+				}
+				// Otomatik teslim edildi işaretle
+				_, _, _ = h.chatRepo.MarkMessagesAsDelivered(ctx, recID, []uuid.UUID{msgModel.ID})
+			} else {
+				// Kullanıcı bağlı değilse Web Push bildirimi yolla
+				h.SendWebPushToUser(
+					recID,
+					"🛡️ Aura Güvenlik",
+					content,
+					"/icon-192.png",
+					"/",
+				)
+			}
+		}
+	}()
+}
+
+

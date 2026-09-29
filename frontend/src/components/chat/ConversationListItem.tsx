@@ -244,9 +244,20 @@ export default function ConversationListItem({
           <div className="flex-1 min-w-0">
             {/* Üst Satır: İsim + (Hover'da Sil Butonu / Son Görülme) */}
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-semibold text-white truncate">
-                {conversation.other_user.display_name}
-              </span>
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-sm font-semibold text-white truncate">
+                  {conversation.other_user.display_name}
+                </span>
+                {(conversation.other_user.username === "security" ||
+                  conversation.other_user.id === "00000000-0000-0000-0000-000000000001") && (
+                  <span
+                    title="Resmi Aura Güvenlik Sistemi"
+                    className="inline-flex items-center gap-0.5 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0"
+                  >
+                    🛡️ BOT
+                  </span>
+                )}
+              </div>
 
               <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                 {/* Masaüstünde kartın üzerine gelince beliren zarif Sil butonu */}
