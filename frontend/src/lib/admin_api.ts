@@ -162,6 +162,25 @@ export interface AdminAccessLog {
   created_at: string;
 }
 
+export interface AdminSecurityLog {
+  id: string;
+  event_type: string;
+  attempted_username: string;
+  ip_address: string;
+  user_agent: string;
+  device_info: string;
+  details: string;
+  severity: string;
+  created_at: string;
+}
+
+export interface AdminSecurityStats {
+  total_logs: number;
+  last_24h_logs: number;
+  unique_ips: number;
+  top_target_username: string;
+}
+
 export const adminApi = {
   getSettings: async (): Promise<SystemSettings> => {
     const res = await api.get<SystemSettings>("/admin/settings");
@@ -226,6 +245,22 @@ export const adminApi = {
     const res = await api.get<AdminAccessLog[]>("/admin/access-logs", {
       params: { limit },
     });
+    return res.data;
+  },
+
+  getSecurityLogs: async (limit: number = 50, eventType?: string): Promise<AdminSecurityLog[]> => {
+    const res = await api.get<AdminSecurityLog[]>("/admin/security/logs", {
+      params: { limit, event_type: eventType },
+    });
+    return res.data;
+  },
+
+  clearSecurityLogs: async (): Promise<void> => {
+    await api.delete("/admin/security/logs");
+  },
+
+  getSecurityStats: async (): Promise<AdminSecurityStats> => {
+    const res = await api.get<AdminSecurityStats>("/admin/security/stats");
     return res.data;
   },
 };

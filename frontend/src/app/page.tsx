@@ -48,6 +48,7 @@ import {
   Smile,
   UserPlus,
   ShieldCheck,
+  ShieldAlert,
   Sparkles,
   Phone,
   Video,
@@ -160,6 +161,16 @@ export default function HomePage() {
   const [isDeletingActive, setIsDeletingActive] = useState(false);
   const [confirmCallType, setConfirmCallType] = useState<"audio" | "video" | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<"users" | "security_logs" | undefined>(undefined);
+  const [securityAlert, setSecurityAlert] = useState<{
+    id?: string;
+    event_type?: string;
+    username?: string;
+    ip_address?: string;
+    user_agent?: string;
+    details?: string;
+    severity?: string;
+  } | null>(null);
   const [previewMedia, setPreviewMedia] = useState<{
     url: string;
     type: "image" | "video";
@@ -214,6 +225,26 @@ export default function HomePage() {
       if (timer) clearTimeout(timer);
     };
   }, [isConnected]);
+
+  // Canlı Güvenlik Alarmı Bildirimi (WebSocket'ten gelen aura:security_alert)
+  useEffect(() => {
+    let alertTimer: NodeJS.Timeout | null = null;
+    const handleSecurityAlert = (e: any) => {
+      if (e?.detail) {
+        setSecurityAlert(e.detail);
+        if (alertTimer) clearTimeout(alertTimer);
+        alertTimer = setTimeout(() => {
+          setSecurityAlert(null);
+        }, 12000); // 12 saniye sonra otomatik kapanır
+      }
+    };
+
+    window.addEventListener("aura:security_alert", handleSecurityAlert);
+    return () => {
+      window.removeEventListener("aura:security_alert", handleSecurityAlert);
+      if (alertTimer) clearTimeout(alertTimer);
+    };
+  }, []);
 
   // Android Sistem Geri Tuşu & Tarayıcı Geri Gezinme Yönetimi
   const { handleBackToChatList, showExitToast } = useBackNavigation({
@@ -1494,6 +1525,47 @@ export default function HomePage() {
           visibility: isPrivacyCurtainActive ? "hidden" : "visible",
         }}
       >
+        {/* Gerçek Zamanlı Güvenlik Alarmı / Yetkisiz Giriş Bildirim Çubuğu */}
+        {securityAlert && (
+          <div className="bg-gradient-to-r from-red-950/95 via-rose-900/90 to-red-950/95 border-b border-red-500/40 px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-white backdrop-blur-md z-40 transition-all shrink-0 animate-in slide-in-from-top-2 duration-300 shadow-lg shadow-red-950/40">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
+              <div className="truncate flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                <span className="font-bold text-red-300 flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                  Güvenlik Uyarısı:
+                </span>
+                <span className="text-slate-200 truncate">
+                  {securityAlert.event_type === "unknown_user_login"
+                    ? "Kayıtsız hesapla giriş denendi!"
+                    : "Şüpheli oturum denemesi!"}{" "}
+                  (Kullanıcı: <b className="text-white font-mono">@{securityAlert.username || "bilinmeyen"}</b> • IP: <span className="font-mono text-red-200">{securityAlert.ip_address}</span>)
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
+              {user?.role === "admin" && (
+                <button
+                  onClick={() => {
+                    setAdminInitialTab("security_logs");
+                    setIsAdminPanelOpen(true);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-red-500/25 hover:bg-red-500/40 text-red-100 font-bold border border-red-500/40 transition cursor-pointer text-[11px] whitespace-nowrap"
+                >
+                  Kayıtları Gör
+                </button>
+              )}
+              <button
+                onClick={() => setSecurityAlert(null)}
+                className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                title="Kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Çevrimdışı / Yeniden Bağlanma Bildirim Çubuğu (5 saniyeden uzun süren kesintilerde Outbox Durumu ile) */}
         {!isConnected && showOfflineBanner && (
           <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 flex items-center justify-between text-xs text-amber-300 backdrop-blur-md z-40 transition-all shrink-0">
@@ -2983,7 +3055,11 @@ export default function HomePage() {
       {/* Yönetim Paneli Modalı (Aura Admin) */}
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
-        onClose={() => setIsAdminPanelOpen(false)}
+        onClose={() => {
+          setIsAdminPanelOpen(false);
+          setAdminInitialTab(undefined);
+        }}
+        initialTab={adminInitialTab}
       />
 
       {/* 24 Saatlik Hikaye / Durum Modalları (WhatsApp & Instagram Tarzı) */}

@@ -6,6 +6,8 @@ import {
   SystemSettings,
   AdminStatsResponse,
   AdminAccessLog,
+  AdminSecurityLog,
+  AdminSecurityStats,
   DetailedHealthResponse,
   StorageBreakdownResponse,
   ActiveCallTelemetry,
@@ -46,15 +48,19 @@ import {
   ChevronRight,
   ExternalLink,
   Send,
+  Eye,
+  Filter,
 } from "lucide-react";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: TabType;
 }
 
 type TabType =
   | "users"
+  | "security_logs"
   | "theme"
   | "general"
   | "chat"
@@ -199,8 +205,9 @@ export const THEME_PRESETS = [
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   isOpen,
   onClose,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>("users");
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || "users");
   const [isLoading, setIsLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
@@ -234,6 +241,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [activeCalls, setActiveCalls] = useState<ActiveCallTelemetry[]>([]);
   const [accessLogs, setAccessLogs] = useState<AdminAccessLog[]>([]);
 
+  // Security Audit Logs state
+  const [securityLogs, setSecurityLogs] = useState<AdminSecurityLog[]>([]);
+  const [securityStats, setSecurityStats] = useState<AdminSecurityStats | null>(null);
+  const [isSecurityLogsLoading, setIsSecurityLogsLoading] = useState(false);
+  const [securityEventTypeFilter, setSecurityEventTypeFilter] = useState("all");
+
   // Theme customizer state
   const [accentColor, setAccentColor] = useState("#6366F1");
   const [cardBgColor, setCardBgColor] = useState("#11141E");
@@ -249,6 +262,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       ? getContrastTextColor(outgoingBubble)
       : outgoingText;
 
+  // Handle initialTab changes when opening
+  useEffect(() => {
+    if (initialTab && isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
+
   // Load initial tab data
   useEffect(() => {
     if (!isOpen) return;
@@ -258,7 +278,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     if (activeTab === "stats") loadStats();
     if (activeTab === "calls") loadCallsData();
     if (activeTab === "logs") loadLogs();
-  }, [isOpen, activeTab]);
+    if (activeTab === "security_logs") loadSecurityLogs();
+    // Pre-fetch security stats for tab badge
+    adminApi.getSecurityStats().then(setSecurityStats).catch(() => {});
+  }, [isOpen, activeTab, securityEventTypeFilter]);
 
   const handleApplyPreset = (preset: (typeof THEME_PRESETS)[0]) => {
     setAccentColor(preset.color);
@@ -409,6 +432,42 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       console.error("Günlükler alınamadı", e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadSecurityLogs = async () => {
+    setIsSecurityLogsLoading(true);
+    try {
+      const filter = securityEventTypeFilter === "all" ? undefined : securityEventTypeFilter;
+      const [logs, statsData] = await Promise.all([
+        adminApi.getSecurityLogs(100, filter),
+        adminApi.getSecurityStats(),
+      ]);
+      setSecurityLogs(logs || []);
+      setSecurityStats(statsData || null);
+    } catch (e) {
+      console.error("Güvenlik kayıtları alınamadı", e);
+    } finally {
+      setIsSecurityLogsLoading(false);
+    }
+  };
+
+  const handleClearSecurityLogs = async () => {
+    if (!window.confirm("Tüm güvenlik ihlali ve kayıtlarını temizlemek istediğinize emin misiniz?")) return;
+    try {
+      await adminApi.clearSecurityLogs();
+      setSecurityLogs([]);
+      if (securityStats) {
+        setSecurityStats({
+          ...securityStats,
+          total_logs: 0,
+          last_24h_logs: 0,
+        });
+      }
+      setSaveSuccess("Güvenlik kayıtları temizlendi.");
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (e) {
+      console.error("Güvenlik kayıtları temizlenemedi", e);
     }
   };
 
@@ -577,7 +636,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const NAV_ITEMS = [
     { id: "users", label: `Kullanıcılar (${totalUsers})`, icon: Users },
-    { id: "security", label: "Güvenlik & Ekran Kilidi", icon: Lock, badge: "Yeni" },
+    {
+      id: "security_logs",
+      label: "Güvenlik Günlükleri",
+      icon: ShieldAlert,
+      badge: securityStats && securityStats.last_24h_logs > 0 ? `${securityStats.last_24h_logs} yeni` : undefined,
+    },
+    { id: "security", label: "Güvenlik & Ekran Kilidi", icon: Lock },
     { id: "theme", label: "Tema & Renkler", icon: Palette },
     { id: "general", label: "Genel & Markalama", icon: Globe },
     { id: "chat", label: "Sohbet & Medya", icon: MessageSquare },
@@ -838,6 +903,215 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         Kriterlere uygun kullanıcı bulunamadı.
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: GÜVENLİK GÜNLÜKLERİ & YETKİSİZ GİRİŞ İHLALLERİ */}
+              {activeTab === "security_logs" && (
+                <div className="space-y-5 animate-in fade-in duration-200">
+                  {/* Başlık ve Butonlar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#12151D] border border-[#222631] rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                        <ShieldAlert className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>Güvenlik Günlükleri & Yetkisiz Girişler</span>
+                          {securityStats && securityStats.last_24h_logs > 0 && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30">
+                              {securityStats.last_24h_logs} Yeni Olay
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Kayıtsız hesaplarla yapılan giriş denemeleri, şüpheli IP adresleri ve güvenlik botu kayıtları
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={loadSecurityLogs}
+                        disabled={isSecurityLogsLoading}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[#181B24] border border-[#292D38] rounded-xl text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSecurityLogsLoading ? "animate-spin" : ""}`} />
+                        <span>Yenile</span>
+                      </button>
+                      <button
+                        onClick={handleClearSecurityLogs}
+                        disabled={securityLogs.length === 0}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-red-500/15 border border-red-500/30 hover:bg-red-500/25 rounded-xl text-xs text-red-300 hover:text-red-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Temizle</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Özet İstatistik Kartları */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3.5 bg-[#12151D] border border-[#222631] rounded-2xl flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="text-[11px] font-semibold uppercase">Toplam Olay</span>
+                        <ShieldAlert className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-xl font-bold text-white font-mono">
+                          {securityStats?.total_logs ?? securityLogs.length}
+                        </div>
+                        <span className="text-[10px] text-slate-500">Tüm zamanlar</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 bg-[#12151D] border border-[#222631] rounded-2xl flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="text-[11px] font-semibold uppercase">Son 24 Saat</span>
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-xl font-bold text-amber-400 font-mono">
+                          {securityStats?.last_24h_logs ?? 0}
+                        </div>
+                        <span className="text-[10px] text-slate-500">Aktif tehdit / deneme</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 bg-[#12151D] border border-[#222631] rounded-2xl flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="text-[11px] font-semibold uppercase">Farklı IP Sayısı</span>
+                        <Globe className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-xl font-bold text-blue-400 font-mono">
+                          {securityStats?.unique_ips ?? 0}
+                        </div>
+                        <span className="text-[10px] text-slate-500">Kaynak adresi</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 bg-[#12151D] border border-[#222631] rounded-2xl flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="text-[11px] font-semibold uppercase">En Çok Hedeflenen</span>
+                        <Lock className="w-4 h-4 text-purple-400" />
+                      </div>
+                      <div className="mt-2 truncate">
+                        <div className="text-sm font-bold text-purple-300 font-mono truncate">
+                          {securityStats?.top_target_username ? `@${securityStats.top_target_username}` : "—"}
+                        </div>
+                        <span className="text-[10px] text-slate-500">Hedef hesap</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Güvenlik Botu Bilgilendirme Kutusu */}
+                  <div className="p-3.5 bg-gradient-to-r from-red-950/30 to-amber-950/20 border border-red-500/20 rounded-2xl flex items-start gap-3">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-slate-300 leading-relaxed">
+                      <b className="text-white font-medium">Aura Otomatik Güvenlik Botu (@security): </b>
+                      Kayıtlı olmayan kullanıcı adları ile giriş denendiğinde veya şüpheli oturum isteklerinde tüm çevrimiçi kullanıcılara anlık alarm iletilir ve durum akışında güvenlik uyarısı hikayesi otomatik olarak yayınlanır (15 dk koruma limiti).
+                    </div>
+                  </div>
+
+                  {/* Filtre Barı */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-xs text-slate-400">Olay Türü:</span>
+                      <select
+                        value={securityEventTypeFilter}
+                        onChange={(e) => {
+                          setSecurityEventTypeFilter(e.target.value);
+                        }}
+                        className="bg-[#141720] border border-[#252936] rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-red-500/50 cursor-pointer"
+                      >
+                        <option value="all">Tüm Güvenlik Olayları</option>
+                        <option value="unknown_user_login">Kayıtsız Kullanıcı Girişi</option>
+                        <option value="failed_password_login">Hatalı Şifre Denemesi</option>
+                        <option value="rate_limit_exceeded">Hız Sınırı Aşımı</option>
+                      </select>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Gösterilen: {securityLogs.length} kayıt
+                    </span>
+                  </div>
+
+                  {/* Kayıtlar Tablosu */}
+                  <div className="border border-[#222631] rounded-2xl overflow-hidden bg-[#10131A]">
+                    <div className="overflow-x-auto -mx-1 sm:mx-0">
+                      <table className="w-full text-left text-xs min-w-[620px]">
+                        <thead className="bg-[#141720] border-b border-[#222631] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                          <tr>
+                            <th className="py-2.5 px-3 sm:px-3.5">Olay Türü</th>
+                            <th className="py-2.5 px-3 sm:px-3.5">Hedef Kullanıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5">IP Adresi</th>
+                            <th className="py-2.5 px-3 sm:px-3.5">Cihaz / Tarayıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5">Şiddet</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 text-right">Tarih</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#1D212B]">
+                          {securityLogs.map((log) => {
+                            const isUnknownUser = log.event_type === "unknown_user_login";
+                            return (
+                              <tr key={log.id} className="hover:bg-[#151922] transition-colors">
+                                <td className="py-2.5 px-3 sm:px-3.5 font-semibold">
+                                  {isUnknownUser ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 text-red-400 border border-red-500/30 text-[10px]">
+                                      <ShieldAlert className="w-3 h-3" /> Kayıtsız Kullanıcı
+                                    </span>
+                                  ) : log.event_type === "failed_password_login" ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px]">
+                                      <Lock className="w-3 h-3" /> Hatalı Şifre
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px]">
+                                      <AlertTriangle className="w-3 h-3" /> {log.event_type}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-3.5 font-mono font-bold text-white">
+                                  @{log.attempted_username || "—"}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-3.5 font-mono text-red-300">
+                                  {log.ip_address}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-3.5 text-slate-300 truncate max-w-[160px] sm:max-w-[200px]" title={log.device_info || log.user_agent}>
+                                  {log.device_info || log.user_agent || "Bilinmeyen Cihaz"}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-3.5">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                      log.severity === "critical"
+                                        ? "bg-red-600/30 text-red-300 border border-red-500/40"
+                                        : log.severity === "high"
+                                        ? "bg-orange-500/20 text-orange-300 border border-orange-500/30"
+                                        : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                                    }`}
+                                  >
+                                    {log.severity}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-3.5 text-right text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                                  {new Date(log.created_at).toLocaleString("tr-TR")}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {securityLogs.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="py-10 text-center text-slate-500 text-xs">
+                                <div className="flex flex-col items-center gap-2">
+                                  <CheckCircle2 className="w-7 h-7 text-emerald-500/50" />
+                                  <span>Kayıtlı herhangi bir güvenlik ihlali veya yetkisiz giriş bulunamadı.</span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}

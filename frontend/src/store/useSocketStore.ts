@@ -377,6 +377,26 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               break;
             }
 
+            case "security_alert": {
+              soundEffects.playReceived();
+              const payload = data.payload;
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new CustomEvent("aura:security_alert", { detail: payload })
+                );
+              }
+              notificationManager.notify(
+                `🚨 Güvenlik Uyarısı: ${payload?.username || "Bilinmeyen"}`,
+                `Yetkisiz/şüpheli giriş denemesi (${payload?.ip_address || "Bilinmeyen IP"})`
+              );
+              notificationManager.flashTitle(1);
+              // Güvenlik botu hikaye paylaştıysa hikayeleri hemen güncelle
+              import("./useStoryStore").then(({ useStoryStore }) => {
+                useStoryStore.getState().loadStories();
+              });
+              break;
+            }
+
             case "incoming_call":
               soundEffects.startRingtone();
               import("./useCallStore").then(({ useCallStore }) => {

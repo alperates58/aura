@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"regexp"
@@ -42,6 +43,8 @@ type AuthHandler struct {
 	hub             *auraws.Hub
 	accessRepo      *database.AccessRepository
 	settingsRepo    *database.SettingsRepository
+	securityRepo    *database.SecurityRepository
+	storyRepo       *database.StoryRepository
 }
 
 func NewAuthHandler(
@@ -51,6 +54,8 @@ func NewAuthHandler(
 	hub *auraws.Hub,
 	accessRepo *database.AccessRepository,
 	settingsRepo *database.SettingsRepository,
+	securityRepo *database.SecurityRepository,
+	storyRepo *database.StoryRepository,
 ) *AuthHandler {
 	return &AuthHandler{
 		cfg:             cfg,
@@ -59,6 +64,8 @@ func NewAuthHandler(
 		hub:             hub,
 		accessRepo:      accessRepo,
 		settingsRepo:    settingsRepo,
+		securityRepo:    securityRepo,
+		storyRepo:       storyRepo,
 	}
 }
 
@@ -231,6 +238,75 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 }
 
+func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLogin string) {
+	ip := c.IP()
+	ua := c.Get("User-Agent")
+	deviceInfo := database.ParseUserAgent(ua)
+	ctx := context.Background()
+
+	// 1. Veritabanına Güvenlik Olayını Kaydet
+	if h.securityRepo != nil {
+		_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, attemptedLogin, ip, ua, deviceInfo, map[string]interface{}{
+			"path":   c.Path(),
+			"method": c.Method(),
+		})
+	}
+
+	// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla
+	if h.hub != nil {
+		alertMsg := fmt.Sprintf("⚠️ Bilinmeyen kullanıcı (@%s) ile yetkisiz giriş denemesi tespit edildi!", attemptedLogin)
+		if eventType == "failed_password_attempt" {
+			alertMsg = fmt.Sprintf("⚠️ Kayıtlı kullanıcı (@%s) için hatalı şifre denemesi tespit edildi!", attemptedLogin)
+		}
+
+		h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+			EventType:      eventType,
+			AttemptedLogin: attemptedLogin,
+			IPAddress:      ip,
+			DeviceInfo:     deviceInfo,
+			Message:        alertMsg,
+			CreatedAt:      time.Now(),
+		})
+	}
+
+	// 3. Otomatik "Aura Güvenlik" Hikayesi Yayınla (15 dakikada en fazla 1 kez spam korumalı)
+	if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 15*time.Minute) {
+		nowStr := time.Now().Format("15:04:05")
+		caption := fmt.Sprintf(
+			"🛡️ GÜVENLİK ALARMI\n\n⚠️ Bilinmeyen Kullanıcı Giriş Teşebbüsü!\n👤 Denenen: @%s\n🌐 IP: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\n\nAura Tehdit Kalkanı devrede.",
+			attemptedLogin, ip, deviceInfo, nowStr,
+		)
+		if eventType == "failed_password_attempt" {
+			caption = fmt.Sprintf(
+				"🛡️ GÜVENLİK ALARMI\n\n⚠️ Şüpheli Giriş Engellendi!\n👤 Kullanıcı: @%s (Hatalı Şifre)\n🌐 IP: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\n\nAura Tehdit Kalkanı devrede.",
+				attemptedLogin, ip, deviceInfo, nowStr,
+			)
+		}
+
+		securityStory := models.Story{
+			UserID:          database.SecurityBotID,
+			MediaType:       "text",
+			BackgroundColor: "from-rose-950 via-slate-900 to-black",
+			Caption:         caption,
+			DurationSeconds: 10,
+			Audience:        "everyone",
+			ExpiresAt:       time.Now().Add(24 * time.Hour),
+		}
+
+		if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil {
+			if h.hub != nil {
+				h.hub.BroadcastStoryNotification(
+					database.SecurityBotID,
+					"Aura Güvenlik",
+					"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+					securityStory.Caption,
+					"everyone",
+				)
+			}
+		}
+	}
+}
+
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -248,12 +324,14 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	user, err := h.userRepo.GetUserByLogin(c.Context(), req.Login)
 	if err != nil || user == nil {
+		h.handleSecurityBreach(c, "unknown_user_attempt", req.Login)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Kullanıcı adı veya şifre hatalı.",
 		})
 	}
 
 	if !middleware.CheckPasswordHash(req.Password, user.PasswordHash) {
+		h.handleSecurityBreach(c, "failed_password_attempt", user.Username)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Kullanıcı adı veya şifre hatalı.",
 		})

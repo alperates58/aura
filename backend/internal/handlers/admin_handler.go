@@ -23,6 +23,7 @@ type AdminHandler struct {
 	userRepo       *database.UserRepository
 	settingsRepo   *database.SettingsRepository
 	logRepo        *database.AccessRepository
+	securityRepo   *database.SecurityRepository
 	callRepo       *database.CallRepository
 	storageService *storage.StorageService
 	livekitService *livekit.LiveKitService
@@ -35,6 +36,7 @@ func NewAdminHandler(
 	userRepo *database.UserRepository,
 	settingsRepo *database.SettingsRepository,
 	logRepo *database.AccessRepository,
+	securityRepo *database.SecurityRepository,
 	callRepo *database.CallRepository,
 	storageService *storage.StorageService,
 	livekitService *livekit.LiveKitService,
@@ -45,6 +47,7 @@ func NewAdminHandler(
 		userRepo:       userRepo,
 		settingsRepo:   settingsRepo,
 		logRepo:        logRepo,
+		securityRepo:   securityRepo,
 		callRepo:       callRepo,
 		storageService: storageService,
 		livekitService: livekitService,
@@ -289,6 +292,52 @@ func (h *AdminHandler) GetAccessLogs(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(logs)
+}
+
+// 7b. Güvenlik İhlali ve Şüpheli Giriş Günlükleri
+func (h *AdminHandler) GetSecurityLogs(c *fiber.Ctx) error {
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	if h.securityRepo == nil {
+		return c.JSON([]interface{}{})
+	}
+
+	logs, err := h.securityRepo.GetSecurityLogs(c.Context(), limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Güvenlik kayıtları alınamadı"})
+	}
+
+	return c.JSON(logs)
+}
+
+// 7c. Güvenlik Günlüklerini Temizle
+func (h *AdminHandler) ClearSecurityLogs(c *fiber.Ctx) error {
+	if h.securityRepo == nil {
+		return c.JSON(fiber.Map{"success": true})
+	}
+
+	if err := h.securityRepo.ClearSecurityLogs(c.Context()); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Güvenlik kayıtları temizlenemedi"})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Güvenlik kayıtları başarıyla temizlendi"})
+}
+
+// 7d. Güvenlik İstatistikleri
+func (h *AdminHandler) GetSecurityStats(c *fiber.Ctx) error {
+	if h.securityRepo == nil {
+		return c.JSON(fiber.Map{})
+	}
+
+	stats, err := h.securityRepo.GetSecurityStats(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Güvenlik istatistikleri alınamadı"})
+	}
+
+	return c.JSON(stats)
 }
 
 // 8. Ayrıntılı Sistem Sağlığı ve Gecikme Metrikleri (Health-Detailed)

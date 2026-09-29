@@ -117,16 +117,19 @@ func main() {
 	// Preview Servisi
 	previewService := preview.NewPreviewService(rdb)
 
+	// Repositories
+	storyRepo := database.NewStoryRepository(db)
+	securityRepo := database.NewSecurityRepository(db)
+
 	// 7. Handlers
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo)
+	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)
 	userHandler := handlers.NewUserHandler(userRepo, storageService, presenceService, accessRepo)
 	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)
 	callHandler := handlers.NewCallHandler(callRepo, chatRepo, userRepo, livekitService, hub, rdb, settingsRepo)
 	wsHandler := handlers.NewWSHandler(cfg, hub)
 	pushHandler := handlers.NewPushHandler(pushRepo, vapidService, userRepo)
-	adminHandler := handlers.NewAdminHandler(userRepo, settingsRepo, accessRepo, callRepo, storageService, livekitService, rdb, hub)
-	storyRepo := database.NewStoryRepository(db)
+	adminHandler := handlers.NewAdminHandler(userRepo, settingsRepo, accessRepo, securityRepo, callRepo, storageService, livekitService, rdb, hub)
 	storyHandler := handlers.NewStoryHandler(storyRepo, userRepo, storageService, hub)
 
 	// 8. Fiber Web Uygulaması
@@ -305,6 +308,9 @@ func main() {
 	admin.Get("/storage-breakdown", adminHandler.GetStorageBreakdown)
 	admin.Get("/active-calls", adminHandler.GetActiveCalls)
 	admin.Get("/access-logs", adminHandler.GetAccessLogs)
+	admin.Get("/security/logs", adminHandler.GetSecurityLogs)
+	admin.Delete("/security/logs", adminHandler.ClearSecurityLogs)
+	admin.Get("/security/stats", adminHandler.GetSecurityStats)
 
 	// Graceful Shutdown
 	go func() {

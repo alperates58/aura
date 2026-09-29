@@ -384,3 +384,15 @@ func (h *Hub) GetActiveUsersCount() int {
 	return len(h.userClients)
 }
 
+func (h *Hub) BroadcastSecurityAlert(alert models.SecurityAlertPayload) {
+	payload := map[string]interface{}{
+		"action":  "security_alert",
+		"payload": alert,
+	}
+	jsonBytes, err := json.Marshal(payload)
+	if err == nil {
+		h.BroadcastToAll(jsonBytes)
+		log.Printf("🛡️ [Security Hub] Güvenlik uyarısı yayınlandı: %s (IP: %s)", alert.AttemptedLogin, alert.IPAddress)
+	}
+}
+
