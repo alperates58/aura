@@ -189,11 +189,11 @@ services:
       - 'traefik.enable=true'
       - 'traefik.http.middlewares.aura-redirect-https.redirectscheme.scheme=https'
       - 'traefik.http.middlewares.aura-redirect-https.redirectscheme.permanent=true'
-      - 'traefik.http.routers.aura-frontend-http.rule=${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}'
+      - 'traefik.http.routers.aura-frontend-http.rule=${TRAEFIK_FRONTEND_RULE:-Host(`zodiacrf.com`) && (Path(`/b`) || PathPrefix(`/b/`))}'
       - 'traefik.http.routers.aura-frontend-http.entrypoints=http'
       - 'traefik.http.routers.aura-frontend-http.middlewares=aura-redirect-https,crowdsec@file'
       # 1. Catch-all HTTPS Router (Statik assetler, _rsc, fetch/xhr, favicon, manifest için - Basic Auth challenge üretmez)
-      - 'traefik.http.routers.aura-frontend.rule=${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}'
+      - 'traefik.http.routers.aura-frontend.rule=${TRAEFIK_FRONTEND_RULE:-Host(`zodiacrf.com`) && (Path(`/b`) || PathPrefix(`/b/`))}'
       - 'traefik.http.routers.aura-frontend.entrypoints=https'
       - 'traefik.http.routers.aura-frontend.tls=true'
       - 'traefik.http.routers.aura-frontend.tls.certresolver=letsencrypt'
@@ -201,7 +201,7 @@ services:
       - 'traefik.http.routers.aura-frontend.priority=${TRAEFIK_FRONTEND_PRIORITY:-50}'
       - 'traefik.http.routers.aura-frontend.service=aura-frontend'
       # 2. Document/Navigation HTTPS Router (Yalnızca gerçek HTML GET navigation istekleri için - Basic Auth + CrowdSec)
-      - 'traefik.http.routers.aura-frontend-doc.rule=${TRAEFIK_FRONTEND_DOCUMENT_RULE:-(${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}) && Method(`GET`) && HeaderRegexp(`Accept`, `text/html`)}'
+      - 'traefik.http.routers.aura-frontend-doc.rule=${TRAEFIK_FRONTEND_DOCUMENT_RULE:-(${TRAEFIK_FRONTEND_RULE:-Host(`zodiacrf.com`) && (Path(`/b`) || PathPrefix(`/b/`))}) && Method(`GET`) && HeaderRegexp(`Accept`, `text/html`)}'
       - 'traefik.http.routers.aura-frontend-doc.entrypoints=https'
       - 'traefik.http.routers.aura-frontend-doc.tls=true'
       - 'traefik.http.routers.aura-frontend-doc.tls.certresolver=letsencrypt'
