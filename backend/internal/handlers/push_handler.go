@@ -1,12 +1,12 @@
-package handlers
+﻿package handlers
 
 import (
 	"context"
 	"encoding/json"
 
-	"fisilti/internal/database"
-	"fisilti/internal/models"
-	"fisilti/internal/push"
+	"aura/internal/database"
+	"aura/internal/models"
+	"aura/internal/push"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )

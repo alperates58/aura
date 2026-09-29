@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"fmt"
@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"fisilti/internal/config"
-	"fisilti/internal/database"
-	"fisilti/internal/middleware"
-	"fisilti/internal/models"
-	fisiltiredis "fisilti/internal/redis"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/config"
+	"aura/internal/database"
+	"aura/internal/middleware"
+	"aura/internal/models"
+	auraredis "aura/internal/redis"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -38,8 +38,8 @@ func isStrongPassword(pass string) bool {
 type AuthHandler struct {
 	cfg             config.Config
 	userRepo        *database.UserRepository
-	presenceService *fisiltiredis.PresenceService
-	hub             *fisiltiws.Hub
+	presenceService *auraredis.PresenceService
+	hub             *auraws.Hub
 	accessRepo      *database.AccessRepository
 	settingsRepo    *database.SettingsRepository
 }
@@ -47,8 +47,8 @@ type AuthHandler struct {
 func NewAuthHandler(
 	cfg config.Config,
 	userRepo *database.UserRepository,
-	presenceService *fisiltiredis.PresenceService,
-	hub *fisiltiws.Hub,
+	presenceService *auraredis.PresenceService,
+	hub *auraws.Hub,
 	accessRepo *database.AccessRepository,
 	settingsRepo *database.SettingsRepository,
 ) *AuthHandler {

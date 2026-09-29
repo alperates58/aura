@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"fisilti/internal/database"
-	"fisilti/internal/livekit"
-	"fisilti/internal/middleware"
-	"fisilti/internal/storage"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/database"
+	"aura/internal/livekit"
+	"aura/internal/middleware"
+	"aura/internal/storage"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -27,7 +27,7 @@ type AdminHandler struct {
 	storageService *storage.StorageService
 	livekitService *livekit.LiveKitService
 	redisClient    *redis.Client
-	hub            *fisiltiws.Hub
+	hub            *auraws.Hub
 	startTime      time.Time
 }
 
@@ -39,7 +39,7 @@ func NewAdminHandler(
 	storageService *storage.StorageService,
 	livekitService *livekit.LiveKitService,
 	redisClient *redis.Client,
-	hub *fisiltiws.Hub,
+	hub *auraws.Hub,
 ) *AdminHandler {
 	return &AdminHandler{
 		userRepo:       userRepo,
@@ -120,7 +120,7 @@ func (h *AdminHandler) UpdateSetting(c *fiber.Ctx) error {
 	}
 
 	if h.hub != nil {
-		payload, _ := fisiltiws.NewWSMessage("system_settings_updated", fiber.Map{
+		payload, _ := auraws.NewWSMessage("system_settings_updated", fiber.Map{
 			"key":   req.Key,
 			"value": req.Value,
 		})

@@ -1,10 +1,10 @@
-package websocket
+﻿package websocket
 
 import (
 	"encoding/json"
 	"time"
 
-	"fisilti/internal/models"
+	"aura/internal/models"
 	"github.com/google/uuid"
 )
 

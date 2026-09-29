@@ -1,11 +1,11 @@
-package push
+﻿package push
 
 import (
 	"encoding/json"
 	"log"
 	"os"
 
-	"fisilti/internal/database"
+	"aura/internal/database"
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
 

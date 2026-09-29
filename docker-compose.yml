@@ -2,18 +2,18 @@ services:
   # 1. PostgreSQL 16 Veritabanı
   postgres:
     image: postgres:16-alpine
-    container_name: fisilti-postgres
+    container_name: aura-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-fisilti_user}
+      POSTGRES_USER: ${POSTGRES_USER:-aura_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-fisilti}
+      POSTGRES_DB: ${POSTGRES_DB:-aura}
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fisilti_user} -d ${POSTGRES_DB:-fisilti}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aura_user} -d ${POSTGRES_DB:-aura}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,7 +21,7 @@ services:
   # 2. Redis 7 Önbellek, Presence & Pub/Sub
   redis:
     image: redis:7-alpine
-    container_name: fisilti-redis
+    container_name: aura-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -37,12 +37,12 @@ services:
   # 3. MinIO S3 Nesne Depolama Servisi
   minio:
     image: quay.io/minio/minio:latest
-    container_name: fisilti-minio
+    container_name: aura-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-fisilti_admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fisilti_minio_secret_2026}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aura_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aura_minio_secret_2026}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -57,9 +57,11 @@ services:
   # 4. LiveKit SFU WebRTC Sunucusu (Self-Hosted)
   livekit:
     image: livekit/livekit-server:latest
-    container_name: fisilti-livekit
+    container_name: aura-livekit
     restart: unless-stopped
     command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     ports:
       - "7880:7880"
       - "7881:7881/udp"
@@ -70,12 +72,12 @@ services:
       redis:
         condition: service_healthy
 
-  # 6. Go Backend (API & WebSocket Hub)
+  # 5. Go Backend (API & WebSocket Hub)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: fisilti-backend
+    container_name: aura-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -89,12 +91,12 @@ services:
       minio:
         condition: service_healthy
 
-  # 7. Next.js 15 Frontend
+  # 6. Next.js 15 Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: fisilti-frontend
+    container_name: aura-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3002}:3000"
@@ -108,5 +110,8 @@ services:
 
 volumes:
   pg_data:
+    name: aura_pg_data
   redis_data:
+    name: aura_redis_data
   minio_data:
+    name: aura_minio_data

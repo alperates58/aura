@@ -1,4 +1,4 @@
-package database
+﻿package database
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"fisilti/internal/models"
+	"aura/internal/models"
 )
 
 type SettingsRepository struct {

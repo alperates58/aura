@@ -70,7 +70,7 @@ export default function StoryViewerModal() {
 
   // Modalı güvenli kapat (Tarayıcı geçmişiyle senkronize)
   const handleSafeClose = useCallback(() => {
-    if (typeof window !== "undefined" && (window.history.state?.aura_story_viewer || window.history.state?.fisilti_story_viewer)) {
+    if (typeof window !== "undefined" && window.history.state?.aura_story_viewer) {
       window.history.back();
     } else {
       closeViewer();

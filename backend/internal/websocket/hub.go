@@ -1,4 +1,4 @@
-package websocket
+﻿package websocket
 
 import (
 	"context"
@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"fisilti/internal/database"
-	"fisilti/internal/models"
-	"fisilti/internal/push"
-	fisiltiredis "fisilti/internal/redis"
+	"aura/internal/database"
+	"aura/internal/models"
+	"aura/internal/push"
+	auraredis "aura/internal/redis"
 	"github.com/google/uuid"
 )
 
@@ -26,8 +26,8 @@ type Hub struct {
 	userRepo        *database.UserRepository
 	pushRepo        *database.PushRepository
 	vapidService    *push.VAPIDService
-	presenceService *fisiltiredis.PresenceService
-	typingService   *fisiltiredis.TypingService
+	presenceService *auraredis.PresenceService
+	typingService   *auraredis.TypingService
 	settingsRepo    *database.SettingsRepository
 }
 
@@ -36,8 +36,8 @@ func NewHub(
 	userRepo *database.UserRepository,
 	pushRepo *database.PushRepository,
 	vapidService *push.VAPIDService,
-	presenceService *fisiltiredis.PresenceService,
-	typingService *fisiltiredis.TypingService,
+	presenceService *auraredis.PresenceService,
+	typingService *auraredis.TypingService,
 	settingsRepo *database.SettingsRepository,
 ) *Hub {
 	return &Hub{

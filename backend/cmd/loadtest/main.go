@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"fisilti/internal/middleware"
+	"aura/internal/middleware"
 	"github.com/fasthttp/websocket"
 	"github.com/google/uuid"
 )
@@ -31,7 +31,7 @@ func main() {
 	}
 
 	fmt.Println("==================================================")
-	fmt.Printf("🚀 Fısıltı Yüksek Eşzamanlılık & Yük Testi\n")
+	fmt.Printf("🚀 Aura Yüksek Eşzamanlılık & Yük Testi\n")
 	fmt.Printf("🎯 Hedef: %s\n", *targetURL)
 	fmt.Printf("👥 Eşzamanlı İstemci Sayısı: %d\n", *concurrency)
 	fmt.Printf("⏱️ Süre: %v\n", *duration)

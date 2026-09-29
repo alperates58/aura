@@ -1,13 +1,13 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
 	"strings"
 
-	"fisilti/internal/database"
-	"fisilti/internal/models"
-	fisiltiredis "fisilti/internal/redis"
-	"fisilti/internal/storage"
+	"aura/internal/database"
+	"aura/internal/models"
+	auraredis "aura/internal/redis"
+	"aura/internal/storage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -15,14 +15,14 @@ import (
 type UserHandler struct {
 	userRepo        *database.UserRepository
 	storage         *storage.StorageService
-	presenceService *fisiltiredis.PresenceService
+	presenceService *auraredis.PresenceService
 	accessRepo      *database.AccessRepository
 }
 
 func NewUserHandler(
 	userRepo *database.UserRepository,
 	storage *storage.StorageService,
-	presenceService *fisiltiredis.PresenceService,
+	presenceService *auraredis.PresenceService,
 	accessRepo *database.AccessRepository,
 ) *UserHandler {
 	return &UserHandler{

@@ -519,7 +519,7 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
         playlistIndex: playlist_index || 0,
         tracks: existingSession && existingSession.playlistId === playlist_id ? existingSession.tracks : [],
         title: title || (isPl ? "Çalma Listesi" : "YouTube Parçası"),
-        artist: artist || "Fısıltı Dinle",
+        artist: artist || "Aura Dinle",
         thumbnail: thumbnail || (youtube_id ? `https://img.youtube.com/vi/${youtube_id}/hqdefault.jpg` : ""),
         startedByName: started_by_name || "Diğer Kullanıcı",
         startedById: started_by_id || "",

@@ -31,7 +31,7 @@ let reconnectTimer: NodeJS.Timeout | null = null;
 let reconnectAttempts = 0;
 let isListenersRegistered = false;
 
-const OUTBOX_STORAGE_KEY = "fisilti_outbox";
+const OUTBOX_STORAGE_KEY = "aura_outbox";
 
 function loadOutbox(): QueuedAction[] {
   if (typeof window === "undefined") return [];

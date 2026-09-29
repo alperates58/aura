@@ -48,8 +48,8 @@ func LoadConfig() Config {
 
 	minioEndpoint := getEnv("MINIO_ENDPOINT", "minio:9000")
 	minioPublicURL := getEnv("MINIO_PUBLIC_URL", "http://localhost:9000")
-	minioUser := getEnv("MINIO_ROOT_USER", "fisilti_admin")
-	minioPass := getEnv("MINIO_ROOT_PASSWORD", "fisilti_minio_secret_2026")
+	minioUser := getEnv("MINIO_ROOT_USER", "aura_admin")
+	minioPass := getEnv("MINIO_ROOT_PASSWORD", "aura_minio_secret_2026")
 	minioUseSSL, _ := strconv.ParseBool(getEnv("MINIO_USE_SSL", "false"))
 
 	minioBucketAvatars := getEnv("MINIO_BUCKET_AVATARS", "avatars")

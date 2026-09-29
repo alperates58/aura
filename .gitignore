@@ -3,6 +3,8 @@
 .env.local
 .env.*.local
 *.env
+*backup*.sql
+
 
 # Operating System Files
 .DS_Store

@@ -9,18 +9,18 @@ import (
 	"syscall"
 	"time"
 
-	"fisilti/internal/config"
-	"fisilti/internal/cron"
-	"fisilti/internal/database"
-	"fisilti/internal/handlers"
-	"fisilti/internal/livekit"
-	"fisilti/internal/middleware"
-	"fisilti/internal/preview"
-	"fisilti/internal/push"
-	fisiltiredis "fisilti/internal/redis"
-	"fisilti/internal/storage"
-	"fisilti/internal/transcoder"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/config"
+	"aura/internal/cron"
+	"aura/internal/database"
+	"aura/internal/handlers"
+	"aura/internal/livekit"
+	"aura/internal/middleware"
+	"aura/internal/preview"
+	"aura/internal/push"
+	auraredis "aura/internal/redis"
+	"aura/internal/storage"
+	"aura/internal/transcoder"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -92,8 +92,8 @@ func main() {
 	}()
 
 	// 4. Redis Servisleri
-	presenceService := fisiltiredis.NewPresenceService(rdb)
-	typingService := fisiltiredis.NewTypingService(rdb)
+	presenceService := auraredis.NewPresenceService(rdb)
+	typingService := auraredis.NewTypingService(rdb)
 
 	// 5. Repositories
 	userRepo := database.NewUserRepository(db)
@@ -110,7 +110,7 @@ func main() {
 	livekitService := livekit.NewLiveKitService(cfg.LiveKitAPIKey, cfg.LiveKitAPISecret, cfg.LiveKitPublicURL)
 
 	// 6. WebSocket Hub Motoru
-	hub := fisiltiws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo)
+	hub := auraws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo)
 	go hub.Run()
 	log.Println("⚡ [WS Hub] Gerçek zamanlı WebSocket Hub motoru başlatıldı.")
 
@@ -317,7 +317,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("🛑 Fısıltı Backend kapatılıyor...")
+	log.Println("🛑 Aura Backend kapatılıyor...")
 	_ = app.Shutdown()
 	log.Println("👋 Sunucu güvenli bir şekilde kapatıldı.")
 }

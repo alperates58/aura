@@ -1,14 +1,14 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"fisilti/internal/database"
-	"fisilti/internal/livekit"
-	"fisilti/internal/models"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/database"
+	"aura/internal/livekit"
+	"aura/internal/models"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -19,7 +19,7 @@ type CallHandler struct {
 	chatRepo       *database.ChatRepository
 	userRepo       *database.UserRepository
 	livekitService *livekit.LiveKitService
-	hub            *fisiltiws.Hub
+	hub            *auraws.Hub
 	redisClient    *redis.Client
 	settingsRepo   *database.SettingsRepository
 }
@@ -29,7 +29,7 @@ func NewCallHandler(
 	chatRepo *database.ChatRepository,
 	userRepo *database.UserRepository,
 	livekitService *livekit.LiveKitService,
-	hub *fisiltiws.Hub,
+	hub *auraws.Hub,
 	redisClient *redis.Client,
 	settingsRepo *database.SettingsRepository,
 ) *CallHandler {
@@ -162,7 +162,7 @@ func (h *CallHandler) InitiateCall(c *fiber.Ctx) error {
 	}
 
 	// 8. WebSocket ile Alıcıya incoming_call Sinyali Bas
-	incomingPayload, _ := fisiltiws.NewWSMessage("incoming_call", fiber.Map{
+	incomingPayload, _ := auraws.NewWSMessage("incoming_call", fiber.Map{
 		"call_id":         callLog.ID,
 		"conversation_id": req.ConversationID,
 		"caller": fiber.Map{
@@ -218,7 +218,7 @@ func (h *CallHandler) AcceptCall(c *fiber.Ctx) error {
 		h.redisClient.Expire(c.Context(), fmt.Sprintf("in_call:%s", callerID.String()), 2*time.Hour)
 
 		// Arayana kabul sinyali gönder
-		acceptedPayload, _ := fisiltiws.NewWSMessage("call_answered", fiber.Map{
+		acceptedPayload, _ := auraws.NewWSMessage("call_answered", fiber.Map{
 			"call_id": req.CallID,
 		})
 		h.hub.SendToUser(callerID, acceptedPayload)
@@ -269,7 +269,7 @@ func (h *CallHandler) RejectCall(c *fiber.Ctx) error {
 		}
 		h.redisClient.Del(c.Context(), fmt.Sprintf("in_call:%s", otherID.String()))
 
-		rejectedPayload, _ := fisiltiws.NewWSMessage("call_rejected", fiber.Map{
+		rejectedPayload, _ := auraws.NewWSMessage("call_rejected", fiber.Map{
 			"call_id": req.CallID,
 			"reason":  reason,
 		})
@@ -346,7 +346,7 @@ func (h *CallHandler) EndCall(c *fiber.Ctx) error {
 		}
 		h.redisClient.Del(c.Context(), fmt.Sprintf("in_call:%s", otherID.String()))
 
-		endPayload, _ := fisiltiws.NewWSMessage("call_ended", fiber.Map{
+		endPayload, _ := auraws.NewWSMessage("call_ended", fiber.Map{
 			"call_id":          req.CallID,
 			"duration_seconds": req.DurationSeconds,
 		})

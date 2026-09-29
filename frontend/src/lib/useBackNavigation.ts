@@ -45,7 +45,7 @@ export function useBackNavigation(options: BackNavigationOptions) {
     if (typeof window === "undefined") return;
 
     try {
-      if (!window.history.state || (window.history.state.aura !== "home" && window.history.state.fisilti !== "home")) {
+      if (!window.history.state || window.history.state.aura !== "home") {
         window.history.replaceState({ aura: "root" }, "");
         window.history.pushState({ aura: "home" }, "");
       }
@@ -74,7 +74,7 @@ export function useBackNavigation(options: BackNavigationOptions) {
     } else {
       if (isChatPushedRef.current) {
         isChatPushedRef.current = false;
-        if (window.history.state?.aura === "chat" || window.history.state?.fisilti === "chat") {
+        if (window.history.state?.aura === "chat") {
           window.history.back();
         }
       }

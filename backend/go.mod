@@ -1,4 +1,4 @@
-module fisilti
+module aura
 
 go 1.23.0
 

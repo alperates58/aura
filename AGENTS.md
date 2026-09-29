@@ -1,14 +1,14 @@
-# Fısıltı (Fisilti) - Yeni Nesil Gerçek Zamanlı Özel Sohbet Platformu
+﻿# Aura - Yeni Nesil Gerçek Zamanlı Özel Sohbet Platformu
 ## Sistem Mimarisi, Protokol Spesifikasyonu ve Geliştirici Kılavuzu (AGENTS.md)
 
 > **BU BELGE HAKKINDA:**  
-> Bu doküman, **Fısıltı** projesinin tüm mimari kararlarını, veritabanı şemalarını, WebSocket protokollerini, self-hosted WebRTC sinyalleşmesini, Coolify/Docker dağıtım kurallarını ve Grupo Chat v3.15'ten türetilen arayüz tasarım sistemini içeren **ana sistem spesifikasyonudur**. Yeni bir sohbete başlayan veya projeyi devralan herhangi bir yapay zeka ajanı veya yazılım mühendisi, başka hiçbir harici kaynağa ihtiyaç duymadan bu dokümandaki yönergelerle projeyi eksiksiz inşa edebilmelidir.
+> Bu doküman, **Aura** projesinin tüm mimari kararlarını, veritabanı şemalarını, WebSocket protokollerini, self-hosted WebRTC sinyalleşmesini, Coolify/Docker dağıtım kurallarını ve Grupo Chat v3.15'ten türetilen arayüz tasarım sistemini içeren **ana sistem spesifikasyonudur**. Yeni bir sohbete başlayan veya projeyi devralan herhangi bir yapay zeka ajanı veya yazılım mühendisi, başka hiçbir harici kaynağa ihtiyaç duymadan bu dokümandaki yönergelerle projeyi eksiksiz inşa edebilmelidir.
 
 ---
 
 ## 1. PROJE VİZYONU VE TEMEL PRENSİPLER
 
-**Fısıltı**, WhatsApp'ın bilinen ve sevilen mikro durumlarını (gönderilme, cihaza teslim edilme ve okunma saatleri) birebir sunan, yüksek eşzamanlılık (high-concurrency) için **Go (Golang)** ile yazılan, sesli ve görüntülü görüşmeleri harici bulutlara (Agora/Twilio vb.) bağımlı kalmadan **kendi sunucumuzdaki LiveKit SFU** üzerinden yürüten modern bir birebir (1-on-1) özel mesajlaşma platformudur.
+**Aura**, WhatsApp'ın bilinen ve sevilen mikro durumlarını (gönderilme, cihaza teslim edilme ve okunma saatleri) birebir sunan, yüksek eşzamanlılık (high-concurrency) için **Go (Golang)** ile yazılan, sesli ve görüntülü görüşmeleri harici bulutlara (Agora/Twilio vb.) bağımlı kalmadan **kendi sunucumuzdaki LiveKit SFU** üzerinden yürüten modern bir birebir (1-on-1) özel mesajlaşma platformudur.
 
 ### Temel Mühendislik İlkeleri:
 1. **Sıfır Dış Bağımlılık (100% Self-Hosted):** Agora, Twilio, Pusher veya Firebase gibi ücretli/harici API'ler kullanılmaz. WebRTC (LiveKit SFU), Nesne Depolama (MinIO S3), Önbellek (Redis) ve Veritabanı (PostgreSQL) kendi sunucumuzda Docker üzerinde barınır.
@@ -54,10 +54,10 @@
 
 ## 3. PROJE DİZİN YAPISI (MONOREPO)
 
-Proje `fisilti` kök dizininde modern bir monorepo yapısında organize edilmiştir:
+Proje `Aura` kök dizininde modern bir monorepo yapısında organize edilmiştir:
 
 ```
-fisilti/
+Aura/
 ├── docker-compose.yml             # Yerel test ortamı (6 servis: Go, Next, PG, Redis, MinIO, LiveKit)
 ├── docker-compose.prod.yml        # Coolify / Üretim ortamı (Traefik / Caddy SSL etiketleriyle)
 ├── Makefile                       # Geliştirme kısayolları (make dev, make build, make migrate)
@@ -342,7 +342,7 @@ Agora veya Twilio'ya kuruş ödemeden, kendi sunucumuzdaki **LiveKit SFU** ile 1
      udp_port: 7881
      use_external_ip: true
    keys:
-     API_KEY_FISILTI: "SECRET_KEY_SUPER_SECURE_FISILTI_2026"
+     API_KEY_Aura: "SECRET_KEY_SUPER_SECURE_Aura_2026"
    ```
 2. **Token Üretimi (Go Backend):**
    Arama başladığında Go backend `github.com/livekit/server-sdk-go` kullanarak iki taraf için de benzersiz `RoomName` (örn. `call_convUUID_time`) üzerinden bir JWT Room Token üretir:

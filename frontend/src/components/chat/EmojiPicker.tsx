@@ -448,7 +448,7 @@ const EMOJI_DATABASE: EmojiItem[] = [
   { emoji: "🏴‍☠️", name: "Korsan Bayrağı", category: "flags", tags: ["korsan", "pirate flag"] },
 ];
 
-const RECENT_EMOJIS_KEY = "fisilti_recent_emojis";
+const RECENT_EMOJIS_KEY = "aura_recent_emojis";
 
 interface EmojiPickerProps {
   isOpen: boolean;
@@ -887,7 +887,7 @@ export default function EmojiPicker({
             </div>
           ) : (
             <div className="flex items-center gap-2 text-slate-400 text-[11px]">
-              <span className="text-amber-400 font-bold">✨ Fısıltı</span>
+              <span className="text-amber-400 font-bold">✨ Aura</span>
               <span>Bir emojiye tıklayarak mesaja ekleyin</span>
             </div>
           )}

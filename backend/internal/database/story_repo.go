@@ -1,4 +1,4 @@
-package database
+﻿package database
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"fisilti/internal/models"
+	"aura/internal/models"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )

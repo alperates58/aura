@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"fisilti/internal/database"
-	"fisilti/internal/middleware"
-	"fisilti/internal/preview"
-	"fisilti/internal/storage"
-	"fisilti/internal/transcoder"
+	"aura/internal/database"
+	"aura/internal/middleware"
+	"aura/internal/preview"
+	"aura/internal/storage"
+	"aura/internal/transcoder"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"

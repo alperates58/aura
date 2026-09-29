@@ -1,5 +1,4 @@
--- ====================================================================
--- FISILTI - PostgreSQL 16 Başlangıç Şeması (001_init_schema.sql)
+-- AURA - PostgreSQL 16 Başlangıç Şeması (001_init_schema.sql)
 -- ====================================================================
 
 -- UUID fonksiyonları için pgcrypto eklentisi

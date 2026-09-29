@@ -1,25 +1,25 @@
-services:
+﻿services:
   # 1. PostgreSQL 16
   postgres:
     image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-fisilti_user}
+      POSTGRES_USER: ${POSTGRES_USER:-aura_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-fisilti}
+      POSTGRES_DB: ${POSTGRES_DB:-aura}
     volumes:
       - type: bind
         source: ${POSTGRES_DATA_PATH}
         target: /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fisilti_user} -d ${POSTGRES_DB:-fisilti}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aura_user} -d ${POSTGRES_DB:-aura}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      fisilti-network:
+      aura-network:
         aliases:
-          - ${POSTGRES_HOST:-fisilti-postgres}
+          - ${POSTGRES_HOST:-aura-postgres}
 
   # 2. Redis 7
   redis:
@@ -38,9 +38,9 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      fisilti-network:
+      aura-network:
         aliases:
-          - ${REDIS_HOST:-fisilti-redis}
+          - ${REDIS_HOST:-aura-redis}
 
   # 3. MinIO S3 Depolama
   minio:
@@ -55,24 +55,24 @@ services:
         source: ${MINIO_DATA_PATH}
         target: /data
     networks:
-      fisilti-network:
+      aura-network:
         aliases:
-          - ${MINIO_HOST:-fisilti-minio}
+          - ${MINIO_HOST:-aura-minio}
       coolify:
     labels:
       - 'traefik.enable=${TRAEFIK_ENABLE_S3:-true}'
-      - 'traefik.http.middlewares.fisilti-s3-strip.stripprefix.prefixes=${TRAEFIK_S3_STRIP_PREFIX:-}'
-      - 'traefik.http.middlewares.fisilti-s3-noauth.headers.customrequestheaders.Authorization='
-      - 'traefik.http.routers.fisilti-s3-http.rule=${TRAEFIK_S3_RULE:-Host(`s3.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-s3-http.entrypoints=http'
-      - 'traefik.http.routers.fisilti-s3-http.middlewares=fisilti-redirect-https,crowdsec@file'
-      - 'traefik.http.routers.fisilti-s3.rule=${TRAEFIK_S3_RULE:-Host(`s3.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-s3.entrypoints=https'
-      - 'traefik.http.routers.fisilti-s3.tls=true'
-      - 'traefik.http.routers.fisilti-s3.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-s3.middlewares=fisilti-s3-noauth,${TRAEFIK_S3_MIDDLEWARES:-crowdsec@file}'
-      - 'traefik.http.routers.fisilti-s3.priority=${TRAEFIK_S3_PRIORITY:-120}'
-      - 'traefik.http.services.fisilti-s3.loadbalancer.server.port=9000'
+      - 'traefik.http.middlewares.aura-s3-strip.stripprefix.prefixes=${TRAEFIK_S3_STRIP_PREFIX:-}'
+      - 'traefik.http.middlewares.aura-s3-noauth.headers.customrequestheaders.Authorization='
+      - 'traefik.http.routers.aura-s3-http.rule=${TRAEFIK_S3_RULE:-Host(`s3.aura.app`)}'
+      - 'traefik.http.routers.aura-s3-http.entrypoints=http'
+      - 'traefik.http.routers.aura-s3-http.middlewares=aura-redirect-https,crowdsec@file'
+      - 'traefik.http.routers.aura-s3.rule=${TRAEFIK_S3_RULE:-Host(`s3.aura.app`)}'
+      - 'traefik.http.routers.aura-s3.entrypoints=https'
+      - 'traefik.http.routers.aura-s3.tls=true'
+      - 'traefik.http.routers.aura-s3.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-s3.middlewares=aura-s3-noauth,${TRAEFIK_S3_MIDDLEWARES:-crowdsec@file}'
+      - 'traefik.http.routers.aura-s3.priority=${TRAEFIK_S3_PRIORITY:-120}'
+      - 'traefik.http.services.aura-s3.loadbalancer.server.port=9000'
 
   # 4. LiveKit WebRTC SFU
   livekit:
@@ -80,47 +80,47 @@ services:
       context: livekit
       dockerfile: Dockerfile
     restart: always
-    command: --config /etc/livekit.yaml --redis-host ${REDIS_ADDR:-${REDIS_HOST:-fisilti-redis}:6379}
+    command: --config /etc/livekit.yaml --redis-host ${REDIS_ADDR:-${REDIS_HOST:-aura-redis}:6379}
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
-      REDIS_HOST: "${REDIS_ADDR:-${REDIS_HOST:-fisilti-redis}:6379}"
+      REDIS_HOST: "${REDIS_ADDR:-${REDIS_HOST:-aura-redis}:6379}"
     ports:
       - "7881:7881/udp"
       - "7881:7881/tcp"
     depends_on:
       - redis
     networks:
-      fisilti-network:
+      aura-network:
         aliases:
-          - ${LIVEKIT_HOST:-fisilti-livekit}
+          - ${LIVEKIT_HOST:-aura-livekit}
       coolify:
     labels:
       - 'traefik.enable=true'
       # 1. Dedicated Subdomain Router (Eğer livekit.domain DNS kaydı varsa)
-      - 'traefik.http.routers.fisilti-livekit-http.rule=${TRAEFIK_LIVEKIT_RULE:-Host(`livekit.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-livekit-http.entrypoints=http'
-      - 'traefik.http.routers.fisilti-livekit-http.middlewares=fisilti-redirect-https,crowdsec@file'
-      - 'traefik.http.routers.fisilti-livekit.rule=${TRAEFIK_LIVEKIT_RULE:-Host(`livekit.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-livekit.entrypoints=https'
-      - 'traefik.http.routers.fisilti-livekit.tls=true'
-      - 'traefik.http.routers.fisilti-livekit.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-livekit.middlewares=crowdsec@file'
-      - 'traefik.http.routers.fisilti-livekit.service=fisilti-livekit'
+      - 'traefik.http.routers.aura-livekit-http.rule=${TRAEFIK_LIVEKIT_RULE:-Host(`livekit.aura.app`)}'
+      - 'traefik.http.routers.aura-livekit-http.entrypoints=http'
+      - 'traefik.http.routers.aura-livekit-http.middlewares=aura-redirect-https,crowdsec@file'
+      - 'traefik.http.routers.aura-livekit.rule=${TRAEFIK_LIVEKIT_RULE:-Host(`livekit.aura.app`)}'
+      - 'traefik.http.routers.aura-livekit.entrypoints=https'
+      - 'traefik.http.routers.aura-livekit.tls=true'
+      - 'traefik.http.routers.aura-livekit.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-livekit.middlewares=crowdsec@file'
+      - 'traefik.http.routers.aura-livekit.service=aura-livekit'
 
       # 2. Same-Domain Path Router (Tek domain kurulumları için /rtc ve /livekit WebRTC sinyalleşmesi)
-      - 'traefik.http.middlewares.fisilti-livekit-strip.stripprefix.prefixes=/livekit'
-      - 'traefik.http.routers.fisilti-livekit-path-http.rule=${TRAEFIK_LIVEKIT_PATH_RULE:-(Host(`${DOMAIN:-fisilti.app}`) && (PathPrefix(`/rtc`) || PathPrefix(`/livekit`)))}'
-      - 'traefik.http.routers.fisilti-livekit-path-http.entrypoints=http'
-      - 'traefik.http.routers.fisilti-livekit-path-http.middlewares=fisilti-redirect-https,crowdsec@file'
-      - 'traefik.http.routers.fisilti-livekit-path.rule=${TRAEFIK_LIVEKIT_PATH_RULE:-(Host(`${DOMAIN:-fisilti.app}`) && (PathPrefix(`/rtc`) || PathPrefix(`/livekit`)))}'
-      - 'traefik.http.routers.fisilti-livekit-path.entrypoints=https'
-      - 'traefik.http.routers.fisilti-livekit-path.tls=true'
-      - 'traefik.http.routers.fisilti-livekit-path.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-livekit-path.middlewares=fisilti-livekit-strip,crowdsec@file'
-      - 'traefik.http.routers.fisilti-livekit-path.priority=${TRAEFIK_LIVEKIT_PATH_PRIORITY:-150}'
-      - 'traefik.http.routers.fisilti-livekit-path.service=fisilti-livekit'
-      - 'traefik.http.services.fisilti-livekit.loadbalancer.server.port=7880'
+      - 'traefik.http.middlewares.aura-livekit-strip.stripprefix.prefixes=/livekit'
+      - 'traefik.http.routers.aura-livekit-path-http.rule=${TRAEFIK_LIVEKIT_PATH_RULE:-(Host(`${DOMAIN:-aura.app}`) && (PathPrefix(`/rtc`) || PathPrefix(`/livekit`)))}'
+      - 'traefik.http.routers.aura-livekit-path-http.entrypoints=http'
+      - 'traefik.http.routers.aura-livekit-path-http.middlewares=aura-redirect-https,crowdsec@file'
+      - 'traefik.http.routers.aura-livekit-path.rule=${TRAEFIK_LIVEKIT_PATH_RULE:-(Host(`${DOMAIN:-aura.app}`) && (PathPrefix(`/rtc`) || PathPrefix(`/livekit`)))}'
+      - 'traefik.http.routers.aura-livekit-path.entrypoints=https'
+      - 'traefik.http.routers.aura-livekit-path.tls=true'
+      - 'traefik.http.routers.aura-livekit-path.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-livekit-path.middlewares=aura-livekit-strip,crowdsec@file'
+      - 'traefik.http.routers.aura-livekit-path.priority=${TRAEFIK_LIVEKIT_PATH_PRIORITY:-150}'
+      - 'traefik.http.routers.aura-livekit-path.service=aura-livekit'
+      - 'traefik.http.services.aura-livekit.loadbalancer.server.port=7880'
 
   # 5. Go Backend Servisi
   backend:
@@ -146,21 +146,21 @@ services:
       - redis
       - minio
     networks:
-      - fisilti-network
+      - aura-network
       - coolify
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.middlewares.fisilti-backend-strip.stripprefix.prefixes=${TRAEFIK_BACKEND_STRIP_PREFIX:-}'
-      - 'traefik.http.routers.fisilti-backend-http.rule=${TRAEFIK_BACKEND_RULE:-Host(`api.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-backend-http.entrypoints=http'
-      - 'traefik.http.routers.fisilti-backend-http.middlewares=fisilti-redirect-https,crowdsec@file'
-      - 'traefik.http.routers.fisilti-backend.rule=${TRAEFIK_BACKEND_RULE:-Host(`api.fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-backend.entrypoints=https'
-      - 'traefik.http.routers.fisilti-backend.tls=true'
-      - 'traefik.http.routers.fisilti-backend.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-backend.middlewares=${TRAEFIK_BACKEND_MIDDLEWARES:-crowdsec@file}'
-      - 'traefik.http.routers.fisilti-backend.priority=${TRAEFIK_BACKEND_PRIORITY:-100}'
-      - 'traefik.http.services.fisilti-backend.loadbalancer.server.port=${BACKEND_PORT:-8080}'
+      - 'traefik.http.middlewares.aura-backend-strip.stripprefix.prefixes=${TRAEFIK_BACKEND_STRIP_PREFIX:-}'
+      - 'traefik.http.routers.aura-backend-http.rule=${TRAEFIK_BACKEND_RULE:-Host(`api.aura.app`)}'
+      - 'traefik.http.routers.aura-backend-http.entrypoints=http'
+      - 'traefik.http.routers.aura-backend-http.middlewares=aura-redirect-https,crowdsec@file'
+      - 'traefik.http.routers.aura-backend.rule=${TRAEFIK_BACKEND_RULE:-Host(`api.aura.app`)}'
+      - 'traefik.http.routers.aura-backend.entrypoints=https'
+      - 'traefik.http.routers.aura-backend.tls=true'
+      - 'traefik.http.routers.aura-backend.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-backend.middlewares=${TRAEFIK_BACKEND_MIDDLEWARES:-crowdsec@file}'
+      - 'traefik.http.routers.aura-backend.priority=${TRAEFIK_BACKEND_PRIORITY:-100}'
+      - 'traefik.http.services.aura-backend.loadbalancer.server.port=${BACKEND_PORT:-8080}'
 
   # 6. Next.js Frontend
   frontend:
@@ -182,35 +182,35 @@ services:
     depends_on:
       - backend
     networks:
-      - fisilti-network
+      - aura-network
       - coolify
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.middlewares.fisilti-redirect-https.redirectscheme.scheme=https'
-      - 'traefik.http.middlewares.fisilti-redirect-https.redirectscheme.permanent=true'
-      - 'traefik.http.routers.fisilti-frontend-http.rule=${TRAEFIK_FRONTEND_RULE:-Host(`fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-frontend-http.entrypoints=http'
-      - 'traefik.http.routers.fisilti-frontend-http.middlewares=fisilti-redirect-https,crowdsec@file'
+      - 'traefik.http.middlewares.aura-redirect-https.redirectscheme.scheme=https'
+      - 'traefik.http.middlewares.aura-redirect-https.redirectscheme.permanent=true'
+      - 'traefik.http.routers.aura-frontend-http.rule=${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}'
+      - 'traefik.http.routers.aura-frontend-http.entrypoints=http'
+      - 'traefik.http.routers.aura-frontend-http.middlewares=aura-redirect-https,crowdsec@file'
       # 1. Catch-all HTTPS Router (Statik assetler, _rsc, fetch/xhr, favicon, manifest için - Basic Auth challenge üretmez)
-      - 'traefik.http.routers.fisilti-frontend.rule=${TRAEFIK_FRONTEND_RULE:-Host(`fisilti.app`)}'
-      - 'traefik.http.routers.fisilti-frontend.entrypoints=https'
-      - 'traefik.http.routers.fisilti-frontend.tls=true'
-      - 'traefik.http.routers.fisilti-frontend.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-frontend.middlewares=${TRAEFIK_FRONTEND_MIDDLEWARES:-crowdsec@file}'
-      - 'traefik.http.routers.fisilti-frontend.priority=${TRAEFIK_FRONTEND_PRIORITY:-50}'
-      - 'traefik.http.routers.fisilti-frontend.service=fisilti-frontend'
+      - 'traefik.http.routers.aura-frontend.rule=${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}'
+      - 'traefik.http.routers.aura-frontend.entrypoints=https'
+      - 'traefik.http.routers.aura-frontend.tls=true'
+      - 'traefik.http.routers.aura-frontend.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-frontend.middlewares=${TRAEFIK_FRONTEND_MIDDLEWARES:-crowdsec@file}'
+      - 'traefik.http.routers.aura-frontend.priority=${TRAEFIK_FRONTEND_PRIORITY:-50}'
+      - 'traefik.http.routers.aura-frontend.service=aura-frontend'
       # 2. Document/Navigation HTTPS Router (Yalnızca gerçek HTML GET navigation istekleri için - Basic Auth + CrowdSec)
-      - 'traefik.http.routers.fisilti-frontend-doc.rule=${TRAEFIK_FRONTEND_DOCUMENT_RULE:-(${TRAEFIK_FRONTEND_RULE:-Host(`fisilti.app`)}) && Method(`GET`) && HeaderRegexp(`Accept`, `text/html`)}'
-      - 'traefik.http.routers.fisilti-frontend-doc.entrypoints=https'
-      - 'traefik.http.routers.fisilti-frontend-doc.tls=true'
-      - 'traefik.http.routers.fisilti-frontend-doc.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.fisilti-frontend-doc.middlewares=${TRAEFIK_FRONTEND_DOCUMENT_MIDDLEWARES:-${TRAEFIK_FRONTEND_MIDDLEWARES:-crowdsec@file}}'
-      - 'traefik.http.routers.fisilti-frontend-doc.priority=${TRAEFIK_FRONTEND_DOCUMENT_PRIORITY:-60}'
-      - 'traefik.http.routers.fisilti-frontend-doc.service=fisilti-frontend'
-      - 'traefik.http.services.fisilti-frontend.loadbalancer.server.port=${FRONTEND_PORT:-3000}'
+      - 'traefik.http.routers.aura-frontend-doc.rule=${TRAEFIK_FRONTEND_DOCUMENT_RULE:-(${TRAEFIK_FRONTEND_RULE:-Host(`aura.app`)}) && Method(`GET`) && HeaderRegexp(`Accept`, `text/html`)}'
+      - 'traefik.http.routers.aura-frontend-doc.entrypoints=https'
+      - 'traefik.http.routers.aura-frontend-doc.tls=true'
+      - 'traefik.http.routers.aura-frontend-doc.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.aura-frontend-doc.middlewares=${TRAEFIK_FRONTEND_DOCUMENT_MIDDLEWARES:-${TRAEFIK_FRONTEND_MIDDLEWARES:-crowdsec@file}}'
+      - 'traefik.http.routers.aura-frontend-doc.priority=${TRAEFIK_FRONTEND_DOCUMENT_PRIORITY:-60}'
+      - 'traefik.http.routers.aura-frontend-doc.service=aura-frontend'
+      - 'traefik.http.services.aura-frontend.loadbalancer.server.port=${FRONTEND_PORT:-3000}'
 
 networks:
-  fisilti-network:
+  aura-network:
     driver: bridge
   coolify:
     external: true

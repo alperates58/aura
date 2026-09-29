@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"fisilti/internal/database"
-	"fisilti/internal/models"
-	"fisilti/internal/storage"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/database"
+	"aura/internal/models"
+	"aura/internal/storage"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -21,10 +21,10 @@ type StoryHandler struct {
 	storyRepo *database.StoryRepository
 	userRepo  *database.UserRepository
 	storage   *storage.StorageService
-	hub       *fisiltiws.Hub
+	hub       *auraws.Hub
 }
 
-func NewStoryHandler(storyRepo *database.StoryRepository, userRepo *database.UserRepository, storage *storage.StorageService, hub *fisiltiws.Hub) *StoryHandler {
+func NewStoryHandler(storyRepo *database.StoryRepository, userRepo *database.UserRepository, storage *storage.StorageService, hub *auraws.Hub) *StoryHandler {
 	return &StoryHandler{
 		storyRepo: storyRepo,
 		userRepo:  userRepo,

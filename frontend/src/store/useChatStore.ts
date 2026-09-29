@@ -242,7 +242,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         let outboxPending: Message[] = [];
         try {
           if (typeof window !== "undefined") {
-            const rawOutbox = localStorage.getItem("fisilti_outbox");
+            const rawOutbox = localStorage.getItem("aura_outbox");
             if (rawOutbox) {
               const outboxItems = JSON.parse(rawOutbox);
               outboxPending = outboxItems

@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"fisilti/internal/preview"
+	"aura/internal/preview"
 	"github.com/gofiber/fiber/v2"
 )
 

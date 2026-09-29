@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"context"
@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"fisilti/internal/database"
-	"fisilti/internal/models"
-	fisiltiredis "fisilti/internal/redis"
-	"fisilti/internal/storage"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/database"
+	"aura/internal/models"
+	auraredis "aura/internal/redis"
+	"aura/internal/storage"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -19,18 +19,18 @@ import (
 type ChatHandler struct {
 	chatRepo        *database.ChatRepository
 	userRepo        *database.UserRepository
-	presenceService *fisiltiredis.PresenceService
+	presenceService *auraredis.PresenceService
 	storage         *storage.StorageService
-	hub             *fisiltiws.Hub
+	hub             *auraws.Hub
 	settingsRepo    *database.SettingsRepository
 }
 
 func NewChatHandler(
 	chatRepo *database.ChatRepository,
 	userRepo *database.UserRepository,
-	presenceService *fisiltiredis.PresenceService,
+	presenceService *auraredis.PresenceService,
 	storage *storage.StorageService,
-	hub *fisiltiws.Hub,
+	hub *auraws.Hub,
 	settingsRepo *database.SettingsRepository,
 ) *ChatHandler {
 	return &ChatHandler{
@@ -205,7 +205,7 @@ func (h *ChatHandler) EditMessage(c *fiber.Ctx) error {
 	// WebSocket ile karşı tarafa mesaj düzenleme bildirimi bas
 	msg, _ := h.chatRepo.GetMessageByID(c.Context(), msgID)
 	if msg != nil {
-		editPayload, _ := fisiltiws.NewWSMessage("message_edited", fiber.Map{
+		editPayload, _ := auraws.NewWSMessage("message_edited", fiber.Map{
 			"message_id": msgID,
 			"content":    req.Content,
 		})
@@ -246,7 +246,7 @@ func (h *ChatHandler) DeleteMessage(c *fiber.Ctx) error {
 		}
 
 		// WebSocket ile iki tarafa da anında silindi bildirimi bas
-		delPayload, _ := fisiltiws.NewWSMessage("message_deleted", fiber.Map{
+		delPayload, _ := auraws.NewWSMessage("message_deleted", fiber.Map{
 			"message_id":         msgID,
 			"conversation_id":    deletedMsg.ConversationID,
 			"is_deleted_for_all": true,
@@ -309,7 +309,7 @@ func (h *ChatHandler) DeleteMessagesBatch(c *fiber.Ctx) error {
 	conv, _ := h.chatRepo.GetConversationByID(c.Context(), req.ConversationID)
 
 	if len(deletedIDs) > 0 {
-		delPayload, _ := fisiltiws.NewWSMessage("messages_batch_deleted", fiber.Map{
+		delPayload, _ := auraws.NewWSMessage("messages_batch_deleted", fiber.Map{
 			"conversation_id":    req.ConversationID,
 			"message_ids":        deletedIDs,
 			"is_deleted_for_all": req.ForAll,
@@ -354,7 +354,7 @@ func (h *ChatHandler) ToggleReaction(c *fiber.Ctx) error {
 
 	msg, _ := h.chatRepo.GetMessageByID(c.Context(), msgID)
 	if msg != nil {
-		rxPayload, _ := fisiltiws.NewWSMessage("message_reaction", fiber.Map{
+		rxPayload, _ := auraws.NewWSMessage("message_reaction", fiber.Map{
 			"message_id": msgID,
 			"reactions":  reactions,
 		})
@@ -457,12 +457,12 @@ func (h *ChatHandler) CreateMessage(c *fiber.Ctx) error {
 		recipientOnline := h.hub.IsUserConnected(recipientID)
 		if recipientOnline {
 			newMsgForRecipient := msgModel.ToResponse(recipientID)
-			newMsgPayload, _ := fisiltiws.NewWSMessage("new_message", newMsgForRecipient)
+			newMsgPayload, _ := auraws.NewWSMessage("new_message", newMsgForRecipient)
 			h.hub.SendToUser(recipientID, newMsgPayload)
 
 			deliveredIDs, deliveredAt, _ := h.chatRepo.MarkMessagesAsDelivered(c.Context(), recipientID, []uuid.UUID{msgModel.ID})
 			if len(deliveredIDs) > 0 {
-				deliveredPayload, _ := fisiltiws.NewWSMessage("message_delivered", fisiltiws.MessageDeliveredPayload{
+				deliveredPayload, _ := auraws.NewWSMessage("message_delivered", auraws.MessageDeliveredPayload{
 					MessageIDs:  deliveredIDs,
 					DeliveredAt: deliveredAt,
 				})
@@ -509,7 +509,7 @@ func (h *ChatHandler) BlockConversation(c *fiber.Ctx) error {
 		if conv.UserOneID != userID {
 			otherID = conv.UserOneID
 		}
-		blockPayload, _ := fisiltiws.NewWSMessage("conversation_blocked", fiber.Map{
+		blockPayload, _ := auraws.NewWSMessage("conversation_blocked", fiber.Map{
 			"conversation_id": convID,
 			"blocked_by":      userID,
 			"is_blocked":      true,
@@ -539,7 +539,7 @@ func (h *ChatHandler) UnblockConversation(c *fiber.Ctx) error {
 		if conv.UserOneID != userID {
 			otherID = conv.UserOneID
 		}
-		unblockPayload, _ := fisiltiws.NewWSMessage("conversation_unblocked", fiber.Map{
+		unblockPayload, _ := auraws.NewWSMessage("conversation_unblocked", fiber.Map{
 			"conversation_id": convID,
 			"is_blocked":      false,
 		})

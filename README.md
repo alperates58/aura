@@ -1,4 +1,4 @@
-# Fısıltı (Fisilti)
+# Aura
 
 > **Yeni Nesil Gerçek Zamanlı Özel Sohbet Platformu**  
 > WhatsApp tarzı mikro durum takibi (`sent_at`, `delivered_at`, `read_at`), self-hosted WebRTC sesli/görüntülü arama (LiveKit SFU) ve Grupo Chat v3.15'in modernleştirilmiş 3 sütunlu tasarımına sahip yüksek performanslı 1-e-1 sohbet platformu.
@@ -6,7 +6,7 @@
 ---
 
 ## 🚀 Teknoloji Yığını
-- **Backend:** Go 1.23+ (Fiber / Chi + nhooyr/websocket)
+- **Backend:** Go 1.23+ (Fiber + WebSocket)
 - **Ana Veritabanı:** PostgreSQL 16
 - **Önbellek & Pub/Sub:** Redis 7 (In-Memory)
 - **Medya Depolama:** MinIO (Self-Hosted S3)

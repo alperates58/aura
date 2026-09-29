@@ -1,4 +1,4 @@
-package websocket
+﻿package websocket
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"fisilti/internal/models"
+	"aura/internal/models"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/google/uuid"
 )

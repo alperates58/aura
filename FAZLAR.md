@@ -1,6 +1,6 @@
-# Fısıltı - Proje Geliştirme Fazları ve Görev Rehberi (FAZLAR.md)
+﻿# Aura - Proje Geliştirme Fazları ve Görev Rehberi (FAZLAR.md)
 
-Bu doküman, **Fısıltı (Fisilti)** projesinin sıfırdan prodüksiyona (Coolify & Docker) kadar tüm geliştirme adımlarını, faz bazında detaylı görev listelerini, oluşturulacak kesin dosya yollarını ve test kriterlerini tanımlar.
+Bu doküman, **Aura** projesinin sıfırdan prodüksiyona (Coolify & Docker) kadar tüm geliştirme adımlarını, faz bazında detaylı görev listelerini, oluşturulacak kesin dosya yollarını ve test kriterlerini tanımlar.
 
 ---
 
@@ -9,7 +9,7 @@ Bu doküman, **Fısıltı (Fisilti)** projesinin sıfırdan prodüksiyona (Cooli
 
 ### Alt Görevler:
 1. **Dizin ve Git Hazırlığı:**
-   - Proje dizininin oluşturulması (`C:\Users\alper\Desktop\fisilti`)
+   - Proje dizininin oluşturulması (`C:\Users\alper\Desktop\Aura`)
    - Git reposunun ilklendirilmesi (`git init`)
    - `.gitignore` (Go derleme çıktıları, `.env`, node_modules, `.next`, MinIO/PG data klasörleri)
    - `.env.example` dosyasının tüm servisler için eksiksiz hazırlanması
@@ -35,7 +35,7 @@ Bu doküman, **Fısıltı (Fisilti)** projesinin sıfırdan prodüksiyona (Cooli
 
 ### Oluşturulacak Dosyalar:
 ```
-fisilti/
+Aura/
 ├── docker-compose.yml
 ├── docker-compose.prod.yml
 ├── .env.example
@@ -58,7 +58,7 @@ fisilti/
 ### Doğrulama ve Test:
 - `docker compose up -d` komutunun çalıştırılması.
 - `docker compose ps` ile tüm 6 servisin `healthy` veya `running` olduğunun doğrulanması.
-- `docker exec -it fisilti-postgres psql -U postgres -d fisilti -c "\dt"` ile 4 tablonun oluştuğunun teyit edilmesi.
+- `docker exec -it Aura-postgres psql -U postgres -d Aura -c "\dt"` ile 4 tablonun oluştuğunun teyit edilmesi.
 
 ---
 
@@ -286,7 +286,7 @@ frontend/src/components/call/
    - Güvenlik başlıkları: CSP (Content Security Policy), X-Frame-Options: DENY, HSTS
 3. **Sesli ve Görsel Bildirimler:**
    - Web Audio API ile yumuşak mesaj bildirim sesleri (`message_sent.mp3`, `message_received.mp3`)
-   - Sekme arka plandayken gelen mesajlarda tarayıcı sekme başlığının yanıp sönmesi (`(1) Yeni Mesaj - Fısıltı`)
+   - Sekme arka plandayken gelen mesajlarda tarayıcı sekme başlığının yanıp sönmesi (`(1) Yeni Mesaj - Aura`)
    - Web Push Notifications API (Kullanıcı izin verirse tarayıcı kapalıyken bile masaüstü/telefon bildirimi alma)
 4. **Otomatik Kaybolan Mesajlar (Disappearing Messages):**
    - Sohbet ayarlarından süreli mesaj aktif edildiğinde (Örn: 24 saat), süresi dolan mesajların Go arka plan worker'ı (cron goroutine) ile otomatik temizlenmesi.
@@ -350,7 +350,7 @@ frontend/
 ├── public/sw.js
 └── tailwind.config.ts
 
-fisilti/
+Aura/
 └── docker-compose.prod.yml
 ```
 

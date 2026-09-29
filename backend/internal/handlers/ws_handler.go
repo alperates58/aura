@@ -1,12 +1,12 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/url"
 	"strings"
 
-	"fisilti/internal/config"
-	"fisilti/internal/middleware"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/config"
+	"aura/internal/middleware"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -14,10 +14,10 @@ import (
 
 type WSHandler struct {
 	cfg config.Config
-	hub *fisiltiws.Hub
+	hub *auraws.Hub
 }
 
-func NewWSHandler(cfg config.Config, hub *fisiltiws.Hub) *WSHandler {
+func NewWSHandler(cfg config.Config, hub *auraws.Hub) *WSHandler {
 	return &WSHandler{
 		cfg: cfg,
 		hub: hub,
@@ -132,7 +132,7 @@ func (h *WSHandler) HandleConnection() fiber.Handler {
 		userID := conn.Locals("user_id").(uuid.UUID)
 		username := conn.Locals("username").(string)
 
-		client := fisiltiws.NewClient(h.hub, conn, userID, username)
+		client := auraws.NewClient(h.hub, conn, userID, username)
 		h.hub.RegisterClient(client)
 
 		go client.WritePump()

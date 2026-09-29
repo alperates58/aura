@@ -1,4 +1,4 @@
-package cron
+﻿package cron
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"fisilti/internal/storage"
-	fisiltiws "fisilti/internal/websocket"
+	"aura/internal/storage"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -15,10 +15,10 @@ import (
 type ExpiredMessagesCleaner struct {
 	db      *sql.DB
 	storage *storage.StorageService
-	hub     *fisiltiws.Hub
+	hub     *auraws.Hub
 }
 
-func NewExpiredMessagesCleaner(db *sql.DB, storage *storage.StorageService, hub *fisiltiws.Hub) *ExpiredMessagesCleaner {
+func NewExpiredMessagesCleaner(db *sql.DB, storage *storage.StorageService, hub *auraws.Hub) *ExpiredMessagesCleaner {
 	return &ExpiredMessagesCleaner{
 		db:      db,
 		storage: storage,
@@ -90,7 +90,7 @@ func (c *ExpiredMessagesCleaner) cleanupExpiredMessages(ctx context.Context) {
 		_, _ = c.db.ExecContext(ctx, "DELETE FROM messages WHERE id = $1", item.ID)
 
 		// WebSocket ile istemcilere silindi bildir
-		delPayload, _ := fisiltiws.NewWSMessage("message_deleted", fiber.Map{
+		delPayload, _ := auraws.NewWSMessage("message_deleted", fiber.Map{
 			"message_id":         item.ID,
 			"conversation_id":    item.ConversationID,
 			"is_deleted_for_all": false,
