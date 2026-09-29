@@ -1,4 +1,32 @@
 import axios from "axios";
+ 
+export const getBasePath = (): string => {
+  if (typeof window === "undefined") {
+    let bp = (process.env.NEXT_PUBLIC_BASE_PATH || "").trim();
+    if (bp && !bp.startsWith("/")) bp = "/" + bp;
+    return bp.replace(/\/+$/, "");
+  }
+
+  // 1. Ortam değişkeninden tanımlıysa
+  let bp = (process.env.NEXT_PUBLIC_BASE_PATH || "").trim();
+  if (bp) {
+    if (!bp.startsWith("/")) bp = "/" + bp;
+    return bp.replace(/\/+$/, "");
+  }
+
+  // 2. Dinamik tarayıcı URL yolundan alt dizin tespiti (Örn: /b/login veya /b -> /b)
+  const match = window.location.pathname.match(/^(\/[a-zA-Z0-9_-]+)/);
+  if (match && !["/login", "/register", "/chat", "/settings", "/api", "/ws"].includes(match[1])) {
+    return match[1].replace(/\/+$/, "");
+  }
+
+  return "";
+};
+
+export const getLoginUrl = (): string => {
+  const bp = getBasePath();
+  return bp ? `${bp}/login` : "/login";
+};
 
 export const getApiBaseUrl = () => {
   if (typeof window !== "undefined") {
@@ -28,18 +56,7 @@ export const getApiBaseUrl = () => {
     }
 
     // Subpath tespiti (Örn: /b)
-    let basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-    if (!basePath) {
-      const match = window.location.pathname.match(/^(\/[a-zA-Z0-9_-]+)/);
-      if (match && !["/login", "/register", "/chat", "/settings", "/api"].includes(match[1])) {
-        basePath = match[1];
-      }
-    }
-    basePath = basePath.replace(/\/+$/, "");
-    if (basePath && !basePath.startsWith("/")) {
-      basePath = "/" + basePath;
-    }
-
+    const basePath = getBasePath();
     return `${window.location.origin}${basePath}/api/v1`;
   }
 
@@ -149,9 +166,15 @@ api.interceptors.response.use(
         await api.post("/auth/refresh");
         return api(originalRequest);
       } catch (refreshError: any) {
-        // Oturum başka bir cihazdan düşürülmüşse kullanıcıyı çıkışa zorla
-        if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
-          window.location.href = "/login";
+        // Oturum başka bir cihazdan düşürülmüşse veya süresi dolmuşsa çıkışa yönlendir.
+        // DİKKAT: /auth/me (ilk sayfa oturum denetimi) çağrısında sert sayfa yönlendirmesi
+        // yapma; useAuthStore / page.tsx içindeki Next.js router.replace("/login") yönetsin!
+        if (
+          typeof window !== "undefined" &&
+          !window.location.pathname.includes("/login") &&
+          !originalRequest.url?.includes("/auth/me")
+        ) {
+          window.location.href = getLoginUrl();
         }
         return Promise.reject(refreshError);
       }

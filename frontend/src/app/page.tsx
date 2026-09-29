@@ -36,7 +36,7 @@ import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
 import { compressImage, validateVideo } from "@/lib/compression";
-import { api, resolveMediaUrl, getApiBaseUrl } from "@/lib/api";
+import { api, resolveMediaUrl, getApiBaseUrl, getBasePath, getLoginUrl } from "@/lib/api";
 import { formatLastSeen } from "@/lib/utils";
 import { notificationManager } from "@/lib/notifications";
 import { subscribeUserToPush, getPushSubscription } from "@/lib/push_notifications";
@@ -426,7 +426,14 @@ export default function HomePage() {
   useEffect(() => {
     checkAuth().then((authed) => {
       if (!authed) {
-        router.replace("/login");
+        const bp = getBasePath();
+        if (process.env.NEXT_PUBLIC_BASE_PATH) {
+          router.replace("/login");
+        } else if (bp) {
+          window.location.replace(`${bp}/login`);
+        } else {
+          router.replace("/login");
+        }
       }
     });
 
@@ -1462,7 +1469,14 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     await logout();
-    router.push("/login");
+    const bp = getBasePath();
+    if (process.env.NEXT_PUBLIC_BASE_PATH) {
+      router.push("/login");
+    } else if (bp) {
+      window.location.href = `${bp}/login`;
+    } else {
+      router.push("/login");
+    }
   };
 
   if (isRedirecting || isLoading || !isAuthenticated) {

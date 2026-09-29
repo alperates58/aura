@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { api } from "@/lib/api";
+import { api, getBasePath } from "@/lib/api";
 import {
   X,
   User,
@@ -301,7 +301,14 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
   const handleLogout = async () => {
     onClose();
     await logout();
-    router.push("/login");
+    const bp = getBasePath();
+    if (process.env.NEXT_PUBLIC_BASE_PATH) {
+      router.push("/login");
+    } else if (bp) {
+      window.location.href = `${bp}/login`;
+    } else {
+      router.push("/login");
+    }
   };
 
   return (

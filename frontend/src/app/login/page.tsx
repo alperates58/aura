@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { Lock, User as UserIcon, AlertCircle, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { getBasePath } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,7 +39,14 @@ export default function LoginPage() {
         window.location.replace(target);
         return;
       }
-      router.push("/");
+      const bp = getBasePath();
+      if (process.env.NEXT_PUBLIC_BASE_PATH) {
+        router.push("/");
+      } else if (bp) {
+        window.location.href = `${bp}/`;
+      } else {
+        router.push("/");
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || "Giriş yapılırken bir hata oluştu.";
       setError(msg);

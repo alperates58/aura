@@ -4,7 +4,7 @@ import { useAuthStore } from "./useAuthStore";
 import { soundEffects } from "@/lib/sounds";
 import { notificationManager } from "@/lib/notifications";
 import { triggerReactionConfetti } from "@/lib/confetti";
-import { getOrCreateSessionId } from "@/lib/api";
+import { getOrCreateSessionId, getBasePath, getLoginUrl } from "@/lib/api";
 
 interface QueuedAction {
   id: string;
@@ -111,18 +111,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         if (wsUrl && !wsUrl.includes("localhost") && !wsUrl.includes("127.0.0.1")) {
           // Var olan geçerli wsUrl'i kullan
         } else {
-          let basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-          if (!basePath) {
-            const match = window.location.pathname.match(/^(\/[a-zA-Z0-9_-]+)/);
-            if (match && !["/login", "/register", "/chat", "/settings", "/api"].includes(match[1])) {
-              basePath = match[1];
-            }
-          }
-          basePath = basePath.replace(/\/+$/, "");
-          if (basePath && !basePath.startsWith("/")) {
-            basePath = "/" + basePath;
-          }
-
+          const basePath = getBasePath();
           const port = window.location.port ? `:${window.location.port}` : "";
           wsUrl = `${proto}//${host}${port}${basePath}/ws`;
         }
@@ -416,7 +405,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               useAuthStore.getState().logout();
               if (typeof window !== "undefined") {
                 alert("Bu cihazdaki oturumunuz başka bir cihazdan uzaktan kapatıldı.");
-                window.location.href = "/login";
+                window.location.href = getLoginUrl();
               }
               break;
             }
