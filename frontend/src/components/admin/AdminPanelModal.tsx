@@ -50,6 +50,7 @@ import {
   Send,
   Eye,
   Filter,
+  MapPin,
 } from "lucide-react";
 
 interface AdminPanelModalProps {
@@ -1053,7 +1054,24 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         </thead>
                         <tbody className="divide-y divide-[#1D212B]">
                           {securityLogs.map((log) => {
-                            const isUnknownUser = log.event_type === "unknown_user_login";
+                            const isUnknownUser = log.event_type === "unknown_user_login" || log.event_type === "unknown_user_attempt";
+                            const isFailedPassword = log.event_type === "failed_password_login" || log.event_type === "failed_password_attempt";
+
+                            let location = "";
+                            if (log.details) {
+                              if (typeof log.details === "object" && (log.details as any).location) {
+                                location = (log.details as any).location;
+                              } else if (typeof log.details === "string") {
+                                try {
+                                  const parsed = JSON.parse(log.details);
+                                  location = parsed.location || "";
+                                } catch {}
+                              }
+                            }
+
+                            const severity = log.severity || (isUnknownUser ? "critical" : "high");
+                            const attemptedUser = log.attempted_username || log.attempted_login || "—";
+
                             return (
                               <tr key={log.id} className="hover:bg-[#151922] transition-colors">
                                 <td className="py-2.5 px-3 sm:px-3.5 font-semibold">
@@ -1061,7 +1079,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 text-red-400 border border-red-500/30 text-[10px]">
                                       <ShieldAlert className="w-3 h-3" /> Kayıtsız Kullanıcı
                                     </span>
-                                  ) : log.event_type === "failed_password_login" ? (
+                                  ) : isFailedPassword ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px]">
                                       <Lock className="w-3 h-3" /> Hatalı Şifre
                                     </span>
@@ -1072,10 +1090,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   )}
                                 </td>
                                 <td className="py-2.5 px-3 sm:px-3.5 font-mono font-bold text-white">
-                                  @{log.attempted_username || "—"}
+                                  @{attemptedUser}
                                 </td>
-                                <td className="py-2.5 px-3 sm:px-3.5 font-mono text-red-300">
-                                  {log.ip_address}
+                                <td className="py-2.5 px-3 sm:px-3.5">
+                                  <div className="font-mono text-red-300 text-xs font-semibold">{log.ip_address}</div>
+                                  {location ? (
+                                    <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5" title={location}>
+                                      <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span className="truncate max-w-[150px]">{location}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] text-slate-500">Konum Yok</div>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-3 sm:px-3.5 text-slate-300 truncate max-w-[160px] sm:max-w-[200px]" title={log.device_info || log.user_agent}>
                                   {log.device_info || log.user_agent || "Bilinmeyen Cihaz"}
@@ -1083,14 +1109,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 <td className="py-2.5 px-3 sm:px-3.5">
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                      log.severity === "critical"
+                                      severity === "critical"
                                         ? "bg-red-600/30 text-red-300 border border-red-500/40"
-                                        : log.severity === "high"
+                                        : severity === "high"
                                         ? "bg-orange-500/20 text-orange-300 border border-orange-500/30"
                                         : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
                                     }`}
                                   >
-                                    {log.severity}
+                                    {severity}
                                   </span>
                                 </td>
                                 <td className="py-2.5 px-3 sm:px-3.5 text-right text-slate-400 whitespace-nowrap font-mono text-[11px]">

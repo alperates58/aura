@@ -165,12 +165,13 @@ export interface AdminAccessLog {
 export interface AdminSecurityLog {
   id: string;
   event_type: string;
-  attempted_username: string;
+  attempted_username?: string;
+  attempted_login?: string;
   ip_address: string;
   user_agent: string;
   device_info: string;
-  details: string;
-  severity: string;
+  details?: string | { location?: string; path?: string; method?: string; [key: string]: any };
+  severity?: string;
   created_at: string;
 }
 

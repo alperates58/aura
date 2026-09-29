@@ -18,6 +18,12 @@ import {
   Share2,
   Heart,
   Bookmark,
+  ShieldAlert,
+  Globe,
+  Lock,
+  MapPin,
+  Smartphone,
+  Clock,
 } from "lucide-react";
 import { formatStoryTime } from "@/lib/utils";
 import { api, resolveMediaUrl } from "@/lib/api";
@@ -28,6 +34,41 @@ import {
   getTextStyleClasses,
   getTextSizeClasses,
 } from "./StoryCreatorModal";
+
+const parseSecurityStory = (caption?: string) => {
+  if (!caption) return null;
+  const lines = caption.split("\n");
+  let targetUser = "";
+  let ip = "";
+  let location = "";
+  let device = "";
+  let time = "";
+  const isFailedPassword = caption.includes("Hatalı Şifre") || caption.includes("Şüpheli Giriş") || caption.includes("Şüpheli Oturum");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.includes("Denenen:") || trimmed.includes("Kullanıcı:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) targetUser = parts.slice(1).join(":").trim();
+    } else if (trimmed.includes("IP:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) ip = parts.slice(1).join(":").trim();
+    } else if (trimmed.includes("Konum:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) location = parts.slice(1).join(":").trim();
+    } else if (trimmed.includes("Cihaz:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) device = parts.slice(1).join(":").trim();
+    } else if (trimmed.includes("Zaman:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) time = parts.slice(1).join(":").trim();
+    }
+  }
+
+  if (!targetUser && !ip) return null;
+
+  return { targetUser, ip, location, device, time, isFailedPassword };
+};
 
 export default function StoryViewerModal() {
   const { user } = useAuthStore();
@@ -801,23 +842,117 @@ export default function StoryViewerModal() {
           )}
 
           {/* Metin veya Ses Hikayesi (Renkli Gradient Arka Plan) */}
-          {(currentStory.media_type === "text" || currentStory.media_type === "audio" || (!resolvedMediaUrl && currentStory.caption)) && (
-            <div
-              className={`w-full h-full bg-gradient-to-br ${
-                currentStory.background_color || "from-pink-900 to-slate-950"
-              } flex flex-col items-center justify-center p-8 text-center`}
-            >
-              {currentStory.media_type === "audio" && (
-                <div className="w-24 h-24 rounded-full bg-black/40 border-2 border-pink-500/60 flex items-center justify-center mb-6 shadow-2xl animate-spin duration-7000">
-                  <Music2 className="w-10 h-10 text-pink-400" />
-                </div>
-              )}
+          {(currentStory.media_type === "text" || currentStory.media_type === "audio" || (!resolvedMediaUrl && currentStory.caption)) && (() => {
+            const isSecurityStory =
+              Boolean(currentStory.caption?.includes("GÜVENLİK ALARMI")) ||
+              activeViewerGroup?.user?.username === "security";
+            const secInfo = isSecurityStory ? parseSecurityStory(currentStory.caption) : null;
 
-              <p className="text-xl sm:text-2xl font-bold text-white drop-shadow-lg leading-relaxed max-w-sm">
-                {currentStory.caption}
-              </p>
-            </div>
-          )}
+            return (
+              <div
+                className={`w-full h-full bg-gradient-to-br ${
+                  currentStory.background_color || (isSecurityStory ? "from-red-950 via-slate-950 to-black" : "from-pink-900 to-slate-950")
+                } flex flex-col items-center justify-center p-4 sm:p-8 text-center`}
+              >
+                {currentStory.media_type === "audio" && (
+                  <div className="w-24 h-24 rounded-full bg-black/40 border-2 border-pink-500/60 flex items-center justify-center mb-6 shadow-2xl animate-spin duration-7000">
+                    <Music2 className="w-10 h-10 text-pink-400" />
+                  </div>
+                )}
+
+                {secInfo ? (
+                  <div className="w-full max-w-[340px] sm:max-w-sm mx-auto p-4 sm:p-5 rounded-3xl bg-slate-950/90 border border-red-500/40 shadow-2xl shadow-red-950/70 backdrop-blur-xl animate-in zoom-in-95 duration-200 text-left select-none">
+                    {/* Kart Başlığı */}
+                    <div className="flex items-center gap-3 pb-3 border-b border-red-500/20 mb-3">
+                      <div className="w-10 h-10 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0 shadow-lg shadow-red-950/50">
+                        <ShieldAlert className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            Aura Tehdit Kalkanı
+                          </span>
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                        </div>
+                        <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight mt-0.5 truncate">
+                          {secInfo.isFailedPassword ? "Şüpheli Giriş Engellendi" : "Yetkisiz Giriş Teşebbüsü"}
+                        </h4>
+                      </div>
+                    </div>
+
+                    {/* Detay Tablosu */}
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                          <Lock className="w-3.5 h-3.5 text-purple-400" /> Hedef Hesap:
+                        </span>
+                        <span className="font-mono font-bold text-white text-[11px] truncate">
+                          {secInfo.targetUser || "@bilinmeyen"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                          <Globe className="w-3.5 h-3.5 text-red-400" /> Gerçek IP:
+                        </span>
+                        <span className="font-mono font-bold text-red-300 text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+                          {secInfo.ip || "—"}
+                        </span>
+                      </div>
+
+                      {secInfo.location && (
+                        <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                          <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-400" /> Konum:
+                          </span>
+                          <span className="font-medium text-emerald-300 text-[11px] truncate max-w-[170px] text-right">
+                            {secInfo.location}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                          <Smartphone className="w-3.5 h-3.5 text-blue-400" /> Cihaz / Tarayıcı:
+                        </span>
+                        <span className="text-slate-300 text-[11px] truncate max-w-[170px] text-right" title={secInfo.device}>
+                          {secInfo.device || "Bilinmeyen Cihaz"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" /> Tespit Saati:
+                        </span>
+                        <span className="font-mono text-slate-300 text-[11px]">
+                          {secInfo.time || "Şimdi"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-red-950/30 border border-red-500/20 gap-2">
+                        <span className="text-[11px] text-red-300 flex items-center gap-1.5 shrink-0">
+                          <span>🛡️</span> Sistem Aksiyonu:
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                          Engellendi & Kaydedildi
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Alt Kalkan Bilgilendirmesi */}
+                    <div className="mt-3 pt-2 border-t border-red-500/15 text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Aura Tehdit Kalkanı 7/24 Devrede</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xl sm:text-2xl font-bold text-white drop-shadow-lg leading-relaxed max-w-sm">
+                    {currentStory.caption}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* SÜRÜKLENMİŞ ÇIKARTMALAR (Metin Yazıları, Emojiler) */}
           {Array.isArray(currentStory.stickers) &&

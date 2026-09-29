@@ -167,6 +167,7 @@ export default function HomePage() {
     event_type?: string;
     username?: string;
     ip_address?: string;
+    location?: string;
     user_agent?: string;
     details?: string;
     severity?: string;
@@ -1539,7 +1540,7 @@ export default function HomePage() {
                   {securityAlert.event_type === "unknown_user_login"
                     ? "Kayıtsız hesapla giriş denendi!"
                     : "Şüpheli oturum denemesi!"}{" "}
-                  (Kullanıcı: <b className="text-white font-mono">@{securityAlert.username || "bilinmeyen"}</b> • IP: <span className="font-mono text-red-200">{securityAlert.ip_address}</span>)
+                  (Kullanıcı: <b className="text-white font-mono">@{securityAlert.username || "bilinmeyen"}</b> • IP: <span className="font-mono text-red-200">{securityAlert.ip_address}</span>{securityAlert.location ? ` • 📍 ${securityAlert.location}` : ""})
                 </span>
               </div>
             </div>

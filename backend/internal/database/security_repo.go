@@ -102,6 +102,12 @@ func (r *SecurityRepository) GetSecurityLogs(ctx context.Context, limit int) ([]
 			return nil, err
 		}
 		l.Details = rawDetails
+		l.AttemptedUsername = l.AttemptedLogin
+		if l.EventType == "unknown_user_attempt" || l.EventType == "unknown_user_login" {
+			l.Severity = "critical"
+		} else {
+			l.Severity = "high"
+		}
 		logs = append(logs, l)
 	}
 
