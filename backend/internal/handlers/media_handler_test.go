@@ -1,10 +1,9 @@
-﻿package handlers
+package handlers
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
