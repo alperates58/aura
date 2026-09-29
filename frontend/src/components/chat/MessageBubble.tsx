@@ -492,7 +492,7 @@ export default function MessageBubble({
         className={`relative flex items-end gap-1.5 ${
           isEditing
             ? "w-full max-w-[96%] sm:max-w-[85%] md:max-w-[75%] min-w-[280px]"
-            : "max-w-[85%] sm:max-w-[70%] md:max-w-[60%] min-w-0"
+            : "max-w-[92%] sm:max-w-[80%] md:max-w-[75%] lg:max-w-[65%] min-w-fit"
         } ${
           message.is_mine ? "flex-row-reverse" : "flex-row"
         }`}
@@ -548,8 +548,8 @@ export default function MessageBubble({
               ? "var(--outgoing-text, #ffffff)"
               : "var(--incoming-text, #f8fafc)",
           }}
-          className={`relative px-4 py-2.5 rounded-2xl shadow-md text-sm transition-shadow duration-300 select-none ${
-            isEditing ? "w-full min-w-[280px]" : "max-w-full min-w-0"
+          className={`relative px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl shadow-md text-sm transition-shadow duration-300 select-none ${
+            isEditing ? "w-full min-w-[280px]" : "max-w-full min-w-[80px]"
           } overflow-hidden break-words ${
             isSelected
               ? "ring-2 ring-indigo-500 shadow-indigo-500/20 shadow-lg scale-[1.01]"
@@ -883,59 +883,80 @@ export default function MessageBubble({
             </form>
           ) : (
             message.content && (
-              <div>
+              <div className="flex flex-wrap items-end justify-between gap-x-2.5 gap-y-0.5 min-w-0">
                 {message.content.startsWith("📸 [Hikaye") ? (
                   (() => {
                     const lines = message.content.split("\n");
                     const headerLine = lines[0];
                     const bodyText = lines.slice(1).join("\n");
                     return (
-                      <>
+                      <div className="w-full min-w-0">
                         <div className="mb-2 p-2 rounded-xl bg-black/20 border-l-2 border-pink-500 text-[11px] backdrop-blur-xs">
                           <span className="font-semibold text-pink-400">
                             {headerLine}
                           </span>
                         </div>
                         {bodyText && (
-                          <p className="whitespace-pre-wrap break-words leading-relaxed">
+                          <div className="whitespace-pre-wrap break-words leading-relaxed">
                             {renderFormattedContent(bodyText)}
-                          </p>
+                          </div>
                         )}
-                      </>
+                      </div>
                     );
                   })()
                 ) : (
-                  <p className="whitespace-pre-wrap break-words leading-relaxed">
+                  <div className="whitespace-pre-wrap break-words leading-relaxed min-w-0 flex-1">
                     {renderFormattedContent(message.content)}
-                  </p>
+                  </div>
                 )}
+
+                {/* Zaman, Düzenlendi Etiketi, Yıldız ve WhatsApp Tikleri (Metin İçi) */}
+                <div
+                  style={{
+                    color: message.is_mine
+                      ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                      : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+                  }}
+                  className="flex items-center justify-end gap-1 text-[11px] ml-auto select-none flex-shrink-0 self-end pb-0.5"
+                >
+                  {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
+                  {message.is_edited && !message.is_deleted_for_all && (
+                    <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
+                  )}
+                  <span>{formattedTime}</span>
+                  {renderTicks()}
+                </div>
               </div>
             )
           )}
 
-          {/* Zaman, Düzenlendi Etiketi, Yıldız ve WhatsApp Tikleri */}
-          <div
-            style={{
-              color: message.is_mine
-                ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
-                : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
-            }}
-            className="flex items-center justify-end gap-1 mt-1 text-[11px] float-right ml-3 select-none flex-shrink-0"
-          >
-            {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
-            {message.is_edited && !message.is_deleted_for_all && (
-              <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
-            )}
-            <span>{formattedTime}</span>
-            {renderTicks()}
-          </div>
+          {/* Medya, Ses, Dosya, Arama Kaydı gibi içerikler için alt sağ zaman damgası */}
+          {(!message.content || isCallLog || isEditing) && (
+            <div
+              style={{
+                color: message.is_mine
+                  ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                  : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+              }}
+              className="flex items-center justify-end gap-1 mt-1 text-[11px] ml-auto select-none flex-shrink-0"
+            >
+              {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
+              {message.is_edited && !message.is_deleted_for_all && (
+                <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
+              )}
+              <span>{formattedTime}</span>
+              {renderTicks()}
+            </div>
+          )}
         </div>
 
         {/* Hover / Tıklama Eylem Butonları */}
         {!message.is_deleted_for_all && !isSelectionMode && (
           <div
-            className={`flex items-center gap-0.5 transition-opacity ${
-              showMenu || showReactions ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            className={`hidden sm:flex items-center gap-0.5 transition-all duration-150 flex-shrink-0 ${
+              showMenu || showReactions
+                ? "opacity-100 scale-100 pointer-events-auto"
+                : "opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
             }`}
           >
             {/* Tepki Ver */}

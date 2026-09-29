@@ -41,16 +41,27 @@ export default function SideNavigation({
   onOpenAdmin,
   onLogout,
 }: Props) {
-  // Sidebar varsayılan olarak açık (genişletilmiş)
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  // Sidebar varsayılan olarak geniş ekranda (>= 1200px) açık, daha dar ekranlarda ikon modunda (68px)
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("aura_sidebar_expanded");
-    if (saved !== null) {
-      setIsExpanded(saved === "true");
-    } else {
-      setIsExpanded(true);
-    }
+    const handleResize = () => {
+      // 1200px altındaki ekranlarda veya pencere sağa/sola yaslandığında otomatik daralt
+      if (window.innerWidth < 1200) {
+        setIsExpanded(false);
+      } else {
+        const saved = localStorage.getItem("aura_sidebar_expanded");
+        if (saved !== null) {
+          setIsExpanded(saved === "true");
+        } else {
+          setIsExpanded(true);
+        }
+      }
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const toggleSidebar = () => {

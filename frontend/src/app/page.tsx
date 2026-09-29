@@ -1536,11 +1536,11 @@ export default function HomePage() {
         onLogout={handleLogout}
       />
 
-      {/* 2. SÜTUN: Sohbet / Rehber / Yıldızlı Listesi (AsideList - 340px) */}
+      {/* 2. SÜTUN: Sohbet / Rehber / Yıldızlı Listesi (AsideList - 280px/320px/340px) */}
       <aside
         className={`${
           activeConversationId ? "hidden md:flex" : "flex w-full"
-        } md:w-[340px] bg-grupo-dark-card border-r border-grupo-dark-border flex-col z-10 flex-shrink-0 h-full`}
+        } md:w-[280px] lg:w-[320px] xl:w-[340px] bg-grupo-dark-card border-r border-grupo-dark-border flex-col z-10 flex-shrink-0 h-full`}
       >
         {/* Kullanıcı Profili Üst Barı (Mobilde görünür) */}
         <div className="p-3.5 sm:p-4 border-b border-grupo-dark-border flex items-center justify-between">
@@ -2338,7 +2338,7 @@ export default function HomePage() {
                   }
                 }
               }}
-              className="flex-1 min-h-0 p-3 sm:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
+              className="flex-1 min-h-0 p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
               style={{ scrollBehavior: "auto", overflowAnchor: "none" }}
             >
               {loadingOlderMessages && (
