@@ -140,16 +140,22 @@ func (r *SecurityRepository) GetSecurityStats(ctx context.Context) (*models.Secu
 	return stats, nil
 }
 
-// CanPublishSecurityStory aynı IP veya genel olarak güvenlik hikayesi için spam koruması sağlar (ör. son cooldown süresinde paylaşılmış mı)
+// CanPublishSecurityStory her güvenlik olayının hikaye paylaşmasına izin verir; yalnızca milisaniyelik çift tıklama/network yarışlarını önlemek için en fazla 2 saniyelik mikro-tampon uygular.
 func (r *SecurityRepository) CanPublishSecurityStory(ctx context.Context, cooldown time.Duration) bool {
+	seconds := int(cooldown.Seconds())
+	if seconds > 2 {
+		seconds = 2 // Güvenlik hikayelerini engelleme, yalnızca çift tıklama yarışını önle
+	}
+	if seconds <= 0 {
+		return true
+	}
 	query := `
 		SELECT COUNT(*)
 		FROM stories
 		WHERE user_id = $1 AND created_at > NOW() - ($2 || ' seconds')::INTERVAL
 	`
 	var count int
-	cooldownSeconds := int(cooldown.Seconds())
-	err := r.db.QueryRowContext(ctx, query, SecurityBotID, cooldownSeconds).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, SecurityBotID, seconds).Scan(&count)
 	if err != nil {
 		return true
 	}

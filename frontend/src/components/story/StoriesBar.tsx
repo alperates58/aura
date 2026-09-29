@@ -21,7 +21,14 @@ export default function StoriesBar() {
 
   // Kendi hikaye grubumuz var mı?
   const ownGroup = storyGroups.find((g) => g.user.id === user?.id);
-  const otherGroups = storyGroups.filter((g) => g.user.id !== user?.id);
+  // Aura Güvenlik hikayesini tespit et ve her zaman en başa yerleştir
+  const securityGroup = storyGroups.find((g) => g.user.id === "00000000-0000-0000-0000-000000000001");
+  const otherGroups = [
+    ...(securityGroup && securityGroup.user.id !== user?.id ? [securityGroup] : []),
+    ...storyGroups.filter(
+      (g) => g.user.id !== user?.id && g.user.id !== "00000000-0000-0000-0000-000000000001"
+    ),
+  ];
 
   return (
     <div className="border-b border-grupo-dark-border bg-grupo-dark-card/50 px-3.5 py-2.5">
@@ -77,8 +84,9 @@ export default function StoriesBar() {
           </span>
         </div>
 
-        {/* 2. DİĞER KULLANICILARIN HİKAYELERİ */}
+        {/* 2. DİĞER KULLANICILARIN VE GÜVENLİK BOTUNUN HİKAYELERİ */}
         {otherGroups.map((group) => {
+          const isSecurityBot = group.user.id === "00000000-0000-0000-0000-000000000001";
           const hasUnviewed = group.has_unviewed;
           const isCloseFriends = group.has_close_friends;
           return (
@@ -90,7 +98,11 @@ export default function StoriesBar() {
               <div className="relative">
                 <div
                   className={`w-14 h-14 rounded-full flex items-center justify-center p-0.5 transition-transform group-hover:scale-105 ${
-                    hasUnviewed
+                    isSecurityBot
+                      ? hasUnviewed
+                        ? "bg-gradient-to-tr from-rose-600 via-amber-500 to-red-600 ring-2 ring-rose-500/50 shadow-lg shadow-rose-950/50 animate-pulse"
+                        : "border-2 border-rose-500/70"
+                      : hasUnviewed
                       ? isCloseFriends
                         ? "bg-gradient-to-tr from-emerald-500 via-green-400 to-teal-400 ring-2 ring-emerald-500/30 animate-in fade-in"
                         : "bg-gradient-to-tr from-pink-500 via-rose-500 to-amber-400 animate-in fade-in"
@@ -113,8 +125,18 @@ export default function StoriesBar() {
                   </div>
                 </div>
 
+                {/* Güvenlik Kalkanı Rozeti */}
+                {isSecurityBot && (
+                  <div
+                    title="Aura Güvenlik Bildirimi"
+                    className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-black border-2 border-slate-950 shadow-md animate-bounce duration-1000"
+                  >
+                    🛡️
+                  </div>
+                )}
+
                 {/* Yakın Arkadaşlar Yeşil Yıldız Rozeti */}
-                {isCloseFriends && (
+                {!isSecurityBot && isCloseFriends && (
                   <div
                     title="Yakın Arkadaşlar Hikayesi"
                     className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black border-2 border-slate-950 shadow-md"
@@ -126,14 +148,16 @@ export default function StoriesBar() {
 
               <span
                 className={`text-[11px] max-w-[62px] truncate transition-colors ${
-                  hasUnviewed
+                  isSecurityBot
+                    ? "font-bold text-rose-400"
+                    : hasUnviewed
                     ? isCloseFriends
                       ? "font-semibold text-emerald-400"
                       : "font-semibold text-white"
                     : "font-normal text-slate-400"
                 }`}
               >
-                {group.user.display_name.split(" ")[0]}
+                {isSecurityBot ? "Güvenlik" : group.user.display_name.split(" ")[0]}
               </span>
             </button>
           );

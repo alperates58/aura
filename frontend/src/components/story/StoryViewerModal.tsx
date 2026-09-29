@@ -43,18 +43,21 @@ const parseSecurityStory = (caption?: string) => {
   let location = "";
   let device = "";
   let time = "";
+  const isPanic = caption.includes("Panik Kodu") || caption.includes("ACİL DURUM") || caption.includes("Zorlama");
+  const isImpossibleTravel = caption.includes("İmkansız Seyahat");
+  const isBruteForce = caption.includes("Kaba Kuvvet");
   const isFailedPassword = caption.includes("Hatalı Şifre") || caption.includes("Şüpheli Giriş");
   const isConcurrent = caption.includes("Çoklu Oturum") || caption.includes("ikinci oturum") || caption.includes("ikinci cihaz");
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.includes("Denenen:") || trimmed.includes("Kullanıcı:")) {
+    if (trimmed.includes("Denenen:") || trimmed.includes("Kullanıcı:") || trimmed.includes("Hedef Kullanıcı:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) targetUser = parts.slice(1).join(":").trim();
-    } else if (trimmed.includes("IP:") || trimmed.includes("Yeni IP:")) {
+    } else if (trimmed.includes("IP:") || trimmed.includes("Yeni IP:") || trimmed.includes("Engellenen IP:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) ip = parts.slice(1).join(":").trim();
-    } else if (trimmed.includes("Konum:")) {
+    } else if (trimmed.includes("Konum:") || trimmed.includes("Yeni Konum:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) location = parts.slice(1).join(":").trim();
     } else if (trimmed.includes("Cihaz:") || trimmed.includes("Yeni Cihaz:")) {
@@ -68,7 +71,7 @@ const parseSecurityStory = (caption?: string) => {
 
   if (!targetUser && !ip) return null;
 
-  return { targetUser, ip, location, device, time, isFailedPassword, isConcurrent };
+  return { targetUser, ip, location, device, time, isFailedPassword, isConcurrent, isPanic, isImpossibleTravel, isBruteForce };
 };
 
 export default function StoryViewerModal() {
@@ -863,16 +866,24 @@ export default function StoryViewerModal() {
 
                 {secInfo ? (
                   <div className={`w-full max-w-[340px] sm:max-w-sm mx-auto p-4 sm:p-5 rounded-3xl bg-slate-950/90 border shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200 text-left select-none ${
-                    secInfo.isConcurrent
+                    secInfo.isPanic
+                      ? "border-rose-500/50 shadow-rose-950/80"
+                      : secInfo.isConcurrent
                       ? "border-amber-500/40 shadow-amber-950/70"
                       : "border-red-500/40 shadow-red-950/70"
                   }`}>
                     {/* Kart Başlığı */}
                     <div className={`flex items-center gap-3 pb-3 border-b mb-3 ${
-                      secInfo.isConcurrent ? "border-amber-500/20" : "border-red-500/20"
+                      secInfo.isPanic
+                        ? "border-rose-500/30"
+                        : secInfo.isConcurrent
+                        ? "border-amber-500/20"
+                        : "border-red-500/20"
                     }`}>
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
-                        secInfo.isConcurrent
+                        secInfo.isPanic
+                          ? "bg-rose-500/30 border border-rose-500/50 text-rose-400 shadow-rose-950/70"
+                          : secInfo.isConcurrent
                           ? "bg-amber-500/20 border border-amber-500/40 text-amber-400 shadow-amber-950/50"
                           : "bg-red-500/20 border border-red-500/40 text-red-400 shadow-red-950/50"
                       }`}>
@@ -881,22 +892,30 @@ export default function StoryViewerModal() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border ${
-                            secInfo.isConcurrent
+                            secInfo.isPanic
+                              ? "bg-rose-500/30 text-rose-200 border-rose-500/40"
+                              : secInfo.isConcurrent
                               ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
                               : "bg-red-500/20 text-red-300 border-red-500/30"
                           }`}>
-                            Aura Tehdit Kalkanı
+                            {secInfo.isPanic ? "Acil Durum Protokolü" : "Aura Tehdit Kalkanı"}
                           </span>
                           <span className={`w-2 h-2 rounded-full animate-ping ${
-                            secInfo.isConcurrent ? "bg-amber-500" : "bg-red-500"
+                            secInfo.isPanic ? "bg-rose-500" : secInfo.isConcurrent ? "bg-amber-500" : "bg-red-500"
                           }`} />
                         </div>
                         <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight mt-0.5 truncate">
-                          {secInfo.isConcurrent
-                            ? "Eşzamanlı Çoklu Oturum"
+                          {secInfo.isPanic
+                            ? "🚨 Panik / Zorlama Kodu Tetiklendi"
+                            : secInfo.isImpossibleTravel
+                            ? "✈️ İmkansız Seyahat Tespiti"
+                            : secInfo.isBruteForce
+                            ? "🚫 Kaba Kuvvet Karantinası"
+                            : secInfo.isConcurrent
+                            ? "⚠️ Eşzamanlı Çoklu Oturum"
                             : secInfo.isFailedPassword
-                            ? "Şüpheli Giriş Engellendi"
-                            : "Yetkisiz Giriş Teşebbüsü"}
+                            ? "🛡️ Şüpheli Giriş Engellendi"
+                            : "🛡️ Yetkisiz Giriş Teşebbüsü"}
                         </h4>
                       </div>
                     </div>
@@ -955,19 +974,37 @@ export default function StoryViewerModal() {
                       </div>
 
                       <div className={`flex items-center justify-between p-2 rounded-xl border gap-2 ${
-                        secInfo.isConcurrent
+                        secInfo.isPanic
+                          ? "bg-rose-950/40 border-rose-500/30"
+                          : secInfo.isConcurrent
                           ? "bg-amber-950/30 border-amber-500/20"
                           : "bg-red-950/30 border-red-500/20"
                       }`}>
                         <span className={`text-[11px] flex items-center gap-1.5 shrink-0 ${
-                          secInfo.isConcurrent ? "text-amber-300" : "text-red-300"
+                          secInfo.isPanic ? "text-rose-300" : secInfo.isConcurrent ? "text-amber-300" : "text-red-300"
                         }`}>
                           <span>🛡️</span> Sistem Aksiyonu:
                         </span>
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                          secInfo.isConcurrent ? "text-amber-400" : "text-emerald-400"
+                          secInfo.isPanic
+                            ? "text-rose-300"
+                            : secInfo.isImpossibleTravel
+                            ? "text-purple-300"
+                            : secInfo.isBruteForce
+                            ? "text-red-400"
+                            : secInfo.isConcurrent
+                            ? "text-amber-400"
+                            : "text-emerald-400"
                         }`}>
-                          {secInfo.isConcurrent ? "İkinci Cihaz Doğrulandı" : "Engellendi & Kaydedildi"}
+                          {secInfo.isPanic
+                            ? "Sahte Oturuma Yönlendirildi"
+                            : secInfo.isImpossibleTravel
+                            ? "Fiziksel Limit Uyarısı"
+                            : secInfo.isBruteForce
+                            ? "IP 1 Saat Karantinada"
+                            : secInfo.isConcurrent
+                            ? "İkinci Cihaz Doğrulandı"
+                            : "Engellendi & Kaydedildi"}
                         </span>
                       </div>
                     </div>

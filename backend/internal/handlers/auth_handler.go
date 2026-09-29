@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -412,7 +413,7 @@ func (h *AuthHandler) recordFailedAttempt(ip string) {
 					CreatedAt:      time.Now(),
 				})
 			}
-			if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 10*time.Minute) {
+			if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 				nowStr := time.Now().Format("15:04:05")
 				caption := fmt.Sprintf(
 					"🛡️ GÜVENLİK ALARMI ⚠️\nKaba Kuvvet Saldırısı Engellendi!\n🌐 Engellenen IP: %s\n📍 Konum: %s\n⏰ Zaman: %s\nIP adresi 1 saat süreyle karantinaya alındı.",
@@ -559,7 +560,7 @@ func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.Us
 		}
 
 		// 3. Hikaye Paylaş
-		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 10*time.Minute) {
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			caption := fmt.Sprintf(
 				"🛡️ GÜVENLİK ALARMI ⚠️\nİmkansız Seyahat Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Yeni Konum: %s\n🗺️ Önceki: %s\n⚡ Hız: %.0f km/s\n⏰ Zaman: %s\nFiziksel seyahat limitleri aşıldı.",
 				user.Username, currentIP, curLoc, prevLoc, speedKmH, nowStr,
@@ -636,8 +637,8 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 			})
 		}
 
-		// 3. Otomatik "Aura Güvenlik" Hikayesi Yayınla (15 dakikada en fazla 1 kez spam korumalı)
-		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 15*time.Minute) {
+		// 3. Otomatik "Aura Güvenlik" Hikayesi Yayınla
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			nowStr := time.Now().Format("15:04:05")
 			caption := fmt.Sprintf(
 				"🛡️ GÜVENLİK ALARMI ⚠️\nYetkisiz Giriş Teşebbüsü!\n👤 Denenen: @%s\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nAura Tehdit Kalkanı devrede.",
@@ -737,7 +738,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 		}
 
 		// 3. Hikaye Paylaş (Aura Güvenlik)
-		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 5*time.Minute) {
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			caption := fmt.Sprintf(
 				"🛡️ GÜVENLİK ALARMI ⚠️\nÇoklu Oturum Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Konum: %s\n📱 Yeni Cihaz: %s\n⏰ Zaman: %s\nAynı anda iki oturum açıldı (ikinci cihaz).",
 				user.Username, newIP, location, newDeviceInfo, nowStr,
@@ -763,6 +764,8 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 						"everyone",
 					)
 				}
+			} else {
+				log.Printf("❌ [Security Story Error] Çoklu oturum hikayesi eklenemedi: %v", err)
 			}
 		}
 
@@ -775,6 +778,81 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
 		}
 	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess)
+}
+
+func (h *AuthHandler) handlePanicBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo, redirectURL string) {
+	go func(user *models.User, ip, ua, deviceInfo, redirect string) {
+		ctx := context.Background()
+		location := ResolveIPLocation(ip)
+		eventType := "panic_mode_triggered"
+		nowStr := time.Now().Format("15:04:05")
+
+		// 1. Veritabanına Acil Durum / Güvenlik Olayını Kaydet
+		if h.securityRepo != nil {
+			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, user.Username, ip, ua, deviceInfo, map[string]interface{}{
+				"location":     location,
+				"redirect_url": redirect,
+				"severity":     "critical",
+				"note":         "Zorlama / Panik Kodu ile giriş yapıldı! Acil durum protokolü devrede.",
+			})
+		}
+
+		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla (banner)
+		if h.hub != nil {
+			alertMsg := fmt.Sprintf("🚨 ACİL DURUM: @%s için Zorlama / Panik Kodu tetiklendi! Güvenlik protokolü devrede.", user.Username)
+			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+				EventType:      eventType,
+				AttemptedLogin: user.Username,
+				IPAddress:      ip,
+				Location:       location,
+				DeviceInfo:     deviceInfo,
+				Message:        alertMsg,
+				Severity:       "critical",
+				CreatedAt:      time.Now(),
+			})
+		}
+
+		// 3. Aura Güvenlik Hikayesi Paylaş (Herkese Açık)
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
+			caption := fmt.Sprintf(
+				"🚨 ACİL DURUM PROTOKOLÜ ⚠️\nZorlama / Panik Kodu Tetiklendi!\n👤 Kullanıcı: @%s\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nPanik şifresi devreye sokuldu. Sistem sahte oturuma yönlendirildi.",
+				user.Username, ip, location, deviceInfo, nowStr,
+			)
+
+			securityStory := models.Story{
+				UserID:          database.SecurityBotID,
+				MediaType:       "text",
+				BackgroundColor: "from-red-950 via-rose-950 to-black",
+				Caption:         caption,
+				DurationSeconds: 10,
+				Audience:        "everyone",
+				ExpiresAt:       time.Now().Add(24 * time.Hour),
+			}
+
+			if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil {
+				if h.hub != nil {
+					h.hub.BroadcastStoryNotification(
+						database.SecurityBotID,
+						"Aura Güvenlik",
+						"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+						securityStory.Caption,
+						"everyone",
+					)
+				}
+			} else {
+				log.Printf("❌ [Security Story Error] Panik durumu hikayesi eklenemedi: %v", err)
+			}
+		}
+
+		// 4. Aura Güvenlik Botundan Kullanıcıya Sohbet Mesajı
+		if h.hub != nil {
+			chatMsg := fmt.Sprintf(
+				"🚨 **AURA ACİL DURUM PROTOKOLÜ: PANİK KODU AKTİF**\n\nHesabınızda önceden tanımlanan **Zorlama / Panik Şifresi** ile giriş yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n🔗 **Yönlendirme:** %s\n\nSistem tüm gizli sohbetleri gizledi veya sahte yönlendirmeyi başlattı. Verileriniz koruma altındadır.",
+				ip, location, deviceInfo, nowStr, redirect,
+			)
+			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+		}
+	}(user, currentIP, currentUA, currentDeviceInfo, redirectURL)
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -828,7 +906,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	if user == nil {
 		h.recordFailedAttempt(realIP)
-		h.handleSecurityBreach(c, "unknown_user_attempt", req.Login)
+		eventType := "unknown_user_attempt"
+		if normalUser != nil {
+			eventType = "failed_password_attempt"
+		}
+		h.handleSecurityBreach(c, eventType, req.Login)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Kullanıcı adı veya şifre hatalı.",
 		})
@@ -883,7 +965,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		isAlreadyOnline = h.hub.IsUserConnected(user.ID)
 	}
 
-	if !isPanic && (isAlreadyOnline || (lastAccess != nil && time.Since(lastAccess.CreatedAt) < 30*time.Minute && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo))) {
+	isConcurrent := isAlreadyOnline || (lastAccess != nil && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo) && time.Since(lastAccess.CreatedAt) < 24*time.Hour)
+	if !isPanic && isConcurrent {
 		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
 	}
 
@@ -909,6 +992,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		if redirectURL == "" {
 			redirectURL = "https://www.google.com"
 		}
+		h.handlePanicBreach(c, user, currentIP, currentUA, currentDeviceInfo, redirectURL)
 	}
 
 	return c.JSON(models.AuthResponse{
