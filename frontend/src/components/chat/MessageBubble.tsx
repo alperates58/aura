@@ -910,7 +910,7 @@ export default function MessageBubble({
             </form>
           ) : (
             message.content && (
-              <div className="flex flex-wrap items-end justify-between gap-x-2.5 gap-y-0.5 min-w-0">
+              <div className="relative">
                 {message.content.startsWith("📸 [Hikaye") ? (
                   (() => {
                     const lines = message.content.split("\n");
@@ -926,33 +926,62 @@ export default function MessageBubble({
                         {bodyText && (
                           <div className="whitespace-pre-wrap break-words leading-relaxed">
                             {renderFormattedContent(bodyText)}
+                            <span
+                              style={{
+                                color: message.is_mine
+                                  ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                                  : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] float-right ml-2.5 mt-1 select-none flex-shrink-0"
+                            >
+                              {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
+                              {message.is_edited && !message.is_deleted_for_all && (
+                                <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
+                              )}
+                              <span>{formattedTime}</span>
+                              {renderTicks()}
+                            </span>
+                            <div className="clear-both" />
+                          </div>
+                        )}
+                        {!bodyText && (
+                          <div
+                            style={{
+                              color: message.is_mine
+                                ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                                : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+                            }}
+                            className="flex items-center justify-end gap-1 mt-1 text-[11px] ml-auto select-none flex-shrink-0"
+                          >
+                            <span>{formattedTime}</span>
+                            {renderTicks()}
                           </div>
                         )}
                       </div>
                     );
                   })()
                 ) : (
-                  <div className="whitespace-pre-wrap break-words leading-relaxed min-w-0 flex-1">
+                  <div className="whitespace-pre-wrap break-words leading-relaxed">
                     {renderFormattedContent(message.content)}
+                    {/* WhatsApp Tarzı Metin Sonu / Sağ Alt Zaman Damgası */}
+                    <span
+                      style={{
+                        color: message.is_mine
+                          ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                          : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] float-right ml-2.5 mt-1 select-none flex-shrink-0"
+                    >
+                      {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
+                      {message.is_edited && !message.is_deleted_for_all && (
+                        <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
+                      )}
+                      <span>{formattedTime}</span>
+                      {renderTicks()}
+                    </span>
+                    <div className="clear-both" />
                   </div>
                 )}
-
-                {/* Zaman, Düzenlendi Etiketi, Yıldız ve WhatsApp Tikleri (Metin İçi) */}
-                <div
-                  style={{
-                    color: message.is_mine
-                      ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
-                      : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
-                  }}
-                  className="flex items-center justify-end gap-1 text-[11px] ml-auto select-none flex-shrink-0 self-end pb-0.5"
-                >
-                  {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
-                  {message.is_edited && !message.is_deleted_for_all && (
-                    <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
-                  )}
-                  <span>{formattedTime}</span>
-                  {renderTicks()}
-                </div>
               </div>
             )
           )}
