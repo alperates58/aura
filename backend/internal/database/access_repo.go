@@ -18,14 +18,14 @@ func NewAccessRepository(db *sql.DB) *AccessRepository {
 	return &AccessRepository{db: db}
 }
 
-func (r *AccessRepository) LogAccess(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string) error {
+func (r *AccessRepository) LogAccess(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string, lat, lon float64, city, country string) error {
 	deviceInfo := ParseUserAgent(userAgent)
 
 	query := `
-		INSERT INTO access_logs (user_id, ip_address, user_agent, device_info, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO access_logs (user_id, ip_address, user_agent, device_info, latitude, longitude, city, country, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
 	`
-	_, err := r.db.ExecContext(ctx, query, userID, ipAddress, userAgent, deviceInfo)
+	_, err := r.db.ExecContext(ctx, query, userID, ipAddress, userAgent, deviceInfo, lat, lon, city, country)
 	return err
 }
 
@@ -35,7 +35,7 @@ func (r *AccessRepository) GetUserAccessLogs(ctx context.Context, userID uuid.UU
 	}
 
 	query := `
-		SELECT id, user_id, ip_address, user_agent, device_info, created_at
+		SELECT id, user_id, ip_address, user_agent, device_info, COALESCE(latitude, 0), COALESCE(longitude, 0), COALESCE(city, ''), COALESCE(country, ''), created_at
 		FROM access_logs
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -51,7 +51,7 @@ func (r *AccessRepository) GetUserAccessLogs(ctx context.Context, userID uuid.UU
 	var logs []models.AccessLog
 	for rows.Next() {
 		var l models.AccessLog
-		if err := rows.Scan(&l.ID, &l.UserID, &l.IPAddress, &l.UserAgent, &l.DeviceInfo, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.UserID, &l.IPAddress, &l.UserAgent, &l.DeviceInfo, &l.Latitude, &l.Longitude, &l.City, &l.Country, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)
@@ -69,7 +69,10 @@ func (r *AccessRepository) GetAllAccessLogs(ctx context.Context, limit int) ([]m
 	}
 
 	query := `
-		SELECT a.id, a.user_id, COALESCE(u.username, ''), COALESCE(u.display_name, ''), COALESCE(u.avatar_url, ''), a.ip_address, a.user_agent, a.device_info, a.created_at
+		SELECT a.id, a.user_id, COALESCE(u.username, ''), COALESCE(u.display_name, ''), COALESCE(u.avatar_url, ''),
+		       a.ip_address, a.user_agent, a.device_info,
+		       COALESCE(a.latitude, 0), COALESCE(a.longitude, 0), COALESCE(a.city, ''), COALESCE(a.country, ''),
+		       a.created_at
 		FROM access_logs a
 		LEFT JOIN users u ON a.user_id = u.id
 		ORDER BY a.created_at DESC
@@ -85,7 +88,12 @@ func (r *AccessRepository) GetAllAccessLogs(ctx context.Context, limit int) ([]m
 	var logs []models.AccessLogWithUser
 	for rows.Next() {
 		var l models.AccessLogWithUser
-		if err := rows.Scan(&l.ID, &l.UserID, &l.Username, &l.DisplayName, &l.AvatarURL, &l.IPAddress, &l.UserAgent, &l.DeviceInfo, &l.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&l.ID, &l.UserID, &l.Username, &l.DisplayName, &l.AvatarURL,
+			&l.IPAddress, &l.UserAgent, &l.DeviceInfo,
+			&l.Latitude, &l.Longitude, &l.City, &l.Country,
+			&l.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)
@@ -96,6 +104,7 @@ func (r *AccessRepository) GetAllAccessLogs(ctx context.Context, limit int) ([]m
 	}
 	return logs, nil
 }
+
 
 func ParseUserAgent(ua string) string {
 	lower := strings.ToLower(ua)

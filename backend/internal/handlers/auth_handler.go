@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/mail"
@@ -246,11 +247,23 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 var geoCache sync.Map
 
 type GeoIPResponse struct {
-	Status      string `json:"status"`
-	Country     string `json:"country"`
-	CountryCode string `json:"countryCode"`
-	City        string `json:"city"`
+	Status      string  `json:"status"`
+	Country     string  `json:"country"`
+	CountryCode string  `json:"countryCode"`
+	City        string  `json:"city"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
 }
+
+type attemptInfo struct {
+	count     int
+	firstSeen time.Time
+}
+
+var (
+	failedAttemptsMap sync.Map // map[string]*attemptInfo
+	jailedIPsMap      sync.Map // map[string]time.Time
+)
 
 func isPrivateOrLocalIP(ipStr string) bool {
 	ip := net.ParseIP(strings.TrimSpace(ipStr))
@@ -348,6 +361,206 @@ func getCountryFlag(countryCode string) string {
 	r2 := rune(0x1F1E6 + int(code[1]-'A'))
 	return string([]rune{r1, r2})
 }
+
+func (h *AuthHandler) isIPJailed(ip string) (bool, time.Duration) {
+	if val, ok := jailedIPsMap.Load(ip); ok {
+		if until, ok := val.(time.Time); ok {
+			if time.Now().Before(until) {
+				return true, time.Until(until)
+			}
+			jailedIPsMap.Delete(ip)
+		}
+	}
+	return false, 0
+}
+
+func (h *AuthHandler) recordFailedAttempt(ip string) {
+	now := time.Now()
+	val, _ := failedAttemptsMap.LoadOrStore(ip, &attemptInfo{count: 0, firstSeen: now})
+	info := val.(*attemptInfo)
+
+	if now.Sub(info.firstSeen) > 5*time.Minute {
+		info.count = 1
+		info.firstSeen = now
+	} else {
+		info.count++
+	}
+
+	if info.count >= 5 {
+		jailUntil := now.Add(1 * time.Hour)
+		jailedIPsMap.Store(ip, jailUntil)
+		failedAttemptsMap.Delete(ip)
+
+		go func(jailedIP string) {
+			ctx := context.Background()
+			location := ResolveIPLocation(jailedIP)
+			if h.securityRepo != nil {
+				_, _ = h.securityRepo.LogSecurityEvent(ctx, "ip_brute_force_jailed", "Multiple Targets", jailedIP, "Automated Scanner", "Script / Bot", map[string]interface{}{
+					"location":      location,
+					"jail_duration": "1 hour",
+					"reason":        "5 ardışık başarısız deneme sonucu karantina",
+				})
+			}
+			if h.hub != nil {
+				h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+					EventType:      "ip_brute_force_jailed",
+					AttemptedLogin: "Sistem Koruması",
+					IPAddress:      jailedIP,
+					Location:       location,
+					Message:        fmt.Sprintf("🚫 Kaba Kuvvet Saldırısı Engellendi: %s IP adresi 1 saat karantinaya alındı!", jailedIP),
+					Severity:       "critical",
+					CreatedAt:      time.Now(),
+				})
+			}
+			if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 10*time.Minute) {
+				nowStr := time.Now().Format("15:04:05")
+				caption := fmt.Sprintf(
+					"🛡️ GÜVENLİK ALARMI ⚠️\nKaba Kuvvet Saldırısı Engellendi!\n🌐 Engellenen IP: %s\n📍 Konum: %s\n⏰ Zaman: %s\nIP adresi 1 saat süreyle karantinaya alındı.",
+					jailedIP, location, nowStr,
+				)
+				securityStory := models.Story{
+					UserID:          database.SecurityBotID,
+					MediaType:       "text",
+					BackgroundColor: "from-red-950 via-slate-900 to-black",
+					Caption:         caption,
+					DurationSeconds: 10,
+					Audience:        "everyone",
+					ExpiresAt:       time.Now().Add(24 * time.Hour),
+				}
+				if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil && h.hub != nil {
+					h.hub.BroadcastStoryNotification(
+						database.SecurityBotID,
+						"Aura Güvenlik",
+						"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+						securityStory.Caption,
+						"everyone",
+					)
+				}
+			}
+		}(ip)
+	}
+}
+
+func (h *AuthHandler) clearFailedAttempts(ip string) {
+	failedAttemptsMap.Delete(ip)
+}
+
+func ResolveIPLocationDetails(ipStr string) *GeoIPResponse {
+	ipStr = strings.TrimSpace(ipStr)
+	if ipStr == "" || isPrivateOrLocalIP(ipStr) {
+		return &GeoIPResponse{
+			Status:      "success",
+			Country:     "Türkiye",
+			CountryCode: "TR",
+			City:        "Yerel Ağ",
+			Lat:         41.0082,
+			Lon:         28.9784,
+		}
+	}
+
+	if val, ok := geoCache.Load(ipStr + ":details"); ok {
+		if geo, ok := val.(*GeoIPResponse); ok && geo != nil {
+			return geo
+		}
+	}
+
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode,city,lat,lon", url.PathEscape(ipStr)))
+	if err != nil {
+		return &GeoIPResponse{Status: "fail", Country: "Bilinmeyen", City: "Bilinmeyen"}
+	}
+	defer resp.Body.Close()
+
+	var geo GeoIPResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geo); err != nil {
+		return &GeoIPResponse{Status: "fail", Country: "Bilinmeyen", City: "Bilinmeyen"}
+	}
+
+	geoCache.Store(ipStr+":details", &geo)
+	return &geo
+}
+
+func haversineDistanceKm(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371.0 // Dünya yarıçapı km
+	dLat := (lat2 - lat1) * (math.Pi / 180.0)
+	dLon := (lon2 - lon1) * (math.Pi / 180.0)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*(math.Pi/180.0))*math.Cos(lat2*(math.Pi/180.0))*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return R * c
+}
+
+func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog, distanceKm, speedKmH float64, curLoc, prevLoc string) {
+	go func() {
+		ctx := context.Background()
+		eventType := "impossible_travel_detected"
+		nowStr := time.Now().Format("15:04:05")
+
+		// 1. Veritabanına kaydet
+		if h.securityRepo != nil {
+			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, user.Username, currentIP, currentUA, currentDeviceInfo, map[string]interface{}{
+				"distance_km":      int(distanceKm),
+				"speed_km_h":       int(speedKmH),
+				"current_location": curLoc,
+				"prev_location":    prevLoc,
+				"prev_ip":          prevAccess.IPAddress,
+				"note":             fmt.Sprintf("%.0f km mesafe %.1f saatte aşılamaz (Hız: %.0f km/s)", distanceKm, time.Since(prevAccess.CreatedAt).Hours(), speedKmH),
+			})
+		}
+
+		// 2. Canlı WS Alarm
+		if h.hub != nil {
+			alertMsg := fmt.Sprintf("✈️ İmkansız Seyahat: @%s için fiziksel sınırları aşan konum değişikliği! (Hız: %.0f km/s, %s ➔ %s)", user.Username, speedKmH, prevLoc, curLoc)
+			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+				EventType:      eventType,
+				AttemptedLogin: user.Username,
+				IPAddress:      currentIP,
+				Location:       curLoc,
+				DeviceInfo:     currentDeviceInfo,
+				Message:        alertMsg,
+				Severity:       "critical",
+				CreatedAt:      time.Now(),
+			})
+		}
+
+		// 3. Hikaye Paylaş
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 10*time.Minute) {
+			caption := fmt.Sprintf(
+				"🛡️ GÜVENLİK ALARMI ⚠️\nİmkansız Seyahat Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Yeni Konum: %s\n🗺️ Önceki: %s\n⚡ Hız: %.0f km/s\n⏰ Zaman: %s\nFiziksel seyahat limitleri aşıldı.",
+				user.Username, currentIP, curLoc, prevLoc, speedKmH, nowStr,
+			)
+			securityStory := models.Story{
+				UserID:          database.SecurityBotID,
+				MediaType:       "text",
+				BackgroundColor: "from-purple-950 via-slate-900 to-black",
+				Caption:         caption,
+				DurationSeconds: 10,
+				Audience:        "everyone",
+				ExpiresAt:       time.Now().Add(24 * time.Hour),
+			}
+			if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil && h.hub != nil {
+				h.hub.BroadcastStoryNotification(
+					database.SecurityBotID,
+					"Aura Güvenlik",
+					"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+					securityStory.Caption,
+					"everyone",
+				)
+			}
+		}
+
+		// 4. Kullanıcıya Sohbet Mesajı
+		if h.hub != nil {
+			chatMsg := fmt.Sprintf(
+				"🛡️ **AURA GÜVENLİK UYARISI: İMKANSIZ SEYAHAT**\n\nHesabınıza **fiziksel olarak imkansız** bir hız ve mesafeden giriş yapıldı!\n\n📍 **Yeni Konum:** %s (IP: %s)\n🗺️ **Önceki Konum:** %s\n⚡ **Hesaplanan Hız:** %.0f km/saat\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nBu işlem bir VPN kullanımı değilse, hesabınız başka bir ülkeden ele geçirilmiş olabilir. Güvenliğiniz için lütfen profilinizden **Tüm Diğer Oturumları Kapat** seçeneğini kullanın ve şifrenizi yenileyin.",
+				curLoc, currentIP, prevLoc, speedKmH, currentDeviceInfo, nowStr,
+			)
+			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+		}
+	}()
+}
+
 
 func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLogin string) {
 	ip := GetRealIP(c)
@@ -545,20 +758,49 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := h.userRepo.GetUserByLogin(c.Context(), req.Login)
-	if err != nil || user == nil {
+	realIP := GetRealIP(c)
+	if jailed, remaining := h.isIPJailed(realIP); jailed {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error": fmt.Sprintf("Çok fazla başarısız deneme nedeniyle IP adresiniz geçici olarak karantinaya alındı. Kalan süre: %d dakika.", int(remaining.Minutes())+1),
+		})
+	}
+
+	var user *models.User
+	isPanic := false
+
+	// 1. Normal kullanıcı adı / e-posta denetimi
+	normalUser, err := h.userRepo.GetUserByLogin(c.Context(), req.Login)
+	if err == nil && normalUser != nil {
+		if middleware.CheckPasswordHash(req.Password, normalUser.PasswordHash) {
+			user = normalUser
+			isPanic = false
+		} else if normalUser.PanicPasswordHash != "" && middleware.CheckPasswordHash(req.Password, normalUser.PanicPasswordHash) {
+			// Kendi kullanıcı adı ile panik şifresi girilirse de destekle
+			user = normalUser
+			isPanic = true
+		}
+	}
+
+	// 2. Özel "Panik E-posta / Kullanıcı Adı" (panic_login) denetimi
+	if user == nil {
+		panicUser, pErr := h.userRepo.GetUserByPanicLogin(c.Context(), req.Login)
+		if pErr == nil && panicUser != nil && panicUser.PanicPasswordHash != "" {
+			if middleware.CheckPasswordHash(req.Password, panicUser.PanicPasswordHash) {
+				user = panicUser
+				isPanic = true
+			}
+		}
+	}
+
+	if user == nil {
+		h.recordFailedAttempt(realIP)
 		h.handleSecurityBreach(c, "unknown_user_attempt", req.Login)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Kullanıcı adı veya şifre hatalı.",
 		})
 	}
 
-	if !middleware.CheckPasswordHash(req.Password, user.PasswordHash) {
-		h.handleSecurityBreach(c, "failed_password_attempt", user.Username)
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Kullanıcı adı veya şifre hatalı.",
-		})
-	}
+	h.clearFailedAttempts(realIP)
 
 	// 1. Hesap Ban Kontrolü
 	if user.IsBanned {
@@ -581,15 +823,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		}
 	}
 
-	// 3. Eşzamanlı Oturum / İkinci Cihazdan Giriş Denetimi (Örn: PC'de açıkken mobilden giriş yapıldı)
-	isAlreadyOnline := false
-	if h.presenceService != nil {
-		isAlreadyOnline = h.presenceService.IsUserOnline(c.Context(), user.ID)
-	}
-	if !isAlreadyOnline && h.hub != nil {
-		isAlreadyOnline = h.hub.IsUserConnected(user.ID)
-	}
-
 	var lastAccess *models.AccessLog
 	if h.accessRepo != nil {
 		logs, _ := h.accessRepo.GetUserAccessLogs(c.Context(), user.ID, 1)
@@ -598,20 +831,34 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		}
 	}
 
-	currentIP := GetRealIP(c)
+	currentIP := realIP
 	currentUA := c.Get("User-Agent")
 	currentDeviceInfo := database.ParseUserAgent(currentUA)
 
-	if isAlreadyOnline || (lastAccess != nil && time.Since(lastAccess.CreatedAt) < 30*time.Minute && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo)) {
+	// Geo-velocity (İmkansız Seyahat) Denetimi
+	if lastAccess != nil && !isPanic {
+		h.handleImpossibleTravelBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
+	}
+
+	// 3. Eşzamanlı Oturum / İkinci Cihazdan Giriş Denetimi
+	isAlreadyOnline := false
+	if h.presenceService != nil {
+		isAlreadyOnline = h.presenceService.IsUserOnline(c.Context(), user.ID)
+	}
+	if !isAlreadyOnline && h.hub != nil {
+		isAlreadyOnline = h.hub.IsUserConnected(user.ID)
+	}
+
+	if !isPanic && (isAlreadyOnline || (lastAccess != nil && time.Since(lastAccess.CreatedAt) < 30*time.Minute && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo))) {
 		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
 	}
 
-	accessToken, err := middleware.GenerateAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
+	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, user.TokenVersion, isPanic, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Oturum anahtarı üretilemedi."})
 	}
 
-	refreshToken, err := middleware.GenerateRefreshToken(user.ID, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays)
+	refreshToken, err := middleware.GenerateCustomRefreshToken(user.ID, user.TokenVersion, isPanic, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yenileme anahtarı üretilemedi."})
 	}
@@ -622,9 +869,19 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		_ = h.accessRepo.LogAccess(c.Context(), user.ID, currentIP, currentUA)
 	}
 
+	redirectURL := ""
+	if isPanic {
+		redirectURL = user.PanicRedirectURL
+		if redirectURL == "" {
+			redirectURL = "https://www.google.com"
+		}
+	}
+
 	return c.JSON(models.AuthResponse{
-		User:        user.ToResponse(),
-		AccessToken: accessToken,
+		User:             user.ToResponse(),
+		AccessToken:      accessToken,
+		IsPanicMode:      isPanic,
+		PanicRedirectURL: redirectURL,
 	})
 }
 
@@ -658,7 +915,15 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		})
 	}
 
-	newAccessToken, err := middleware.GenerateAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
+	// Token version validation (Remote Kill Session support)
+	if claims.TokenVersion < user.TokenVersion {
+		h.clearAuthCookies(c)
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Oturumunuz başka bir cihazdan sonlandırıldı. Lütfen tekrar giriş yapın.",
+		})
+	}
+
+	newAccessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, user.TokenVersion, claims.IsPanicMode, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yeni token üretilemedi."})
 	}
@@ -666,8 +931,9 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	h.setAuthCookies(c, newAccessToken, refreshToken)
 
 	return c.JSON(fiber.Map{
-		"access_token": newAccessToken,
-		"user":         user.ToResponse(),
+		"access_token":  newAccessToken,
+		"user":          user.ToResponse(),
+		"is_panic_mode": claims.IsPanicMode,
 	})
 }
 

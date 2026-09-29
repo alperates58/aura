@@ -50,7 +50,9 @@ func (r *UserRepository) CreateUser(ctx context.Context, u *models.User) error {
 
 func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	query := `
-		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings, created_at, updated_at
+		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings,
+		       COALESCE(panic_login, ''), COALESCE(panic_password_hash, ''), COALESCE(panic_redirect_url, 'https://www.google.com'), COALESCE(token_version, 1), COALESCE(security_number_salt, ''),
+		       created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -59,7 +61,9 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*models
 		&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.PasswordHash,
 		&u.AvatarURL, &u.Bio, &u.Role, &u.IsBanned, &u.BanReason,
 		&u.OnlineStatus, &u.LastSeenAt,
-		&u.PrivacySettings, &u.CreatedAt, &u.UpdatedAt,
+		&u.PrivacySettings,
+		&u.PanicLogin, &u.PanicPasswordHash, &u.PanicRedirectURL, &u.TokenVersion, &u.SecurityNumberSalt,
+		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -73,7 +77,9 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*models
 func (r *UserRepository) GetUserByLogin(ctx context.Context, login string) (*models.User, error) {
 	cleanLogin := strings.ToLower(strings.TrimSpace(login))
 	query := `
-		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings, created_at, updated_at
+		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings,
+		       COALESCE(panic_login, ''), COALESCE(panic_password_hash, ''), COALESCE(panic_redirect_url, 'https://www.google.com'), COALESCE(token_version, 1), COALESCE(security_number_salt, ''),
+		       created_at, updated_at
 		FROM users
 		WHERE LOWER(username) = $1 OR LOWER(email) = $1
 		LIMIT 1
@@ -83,7 +89,9 @@ func (r *UserRepository) GetUserByLogin(ctx context.Context, login string) (*mod
 		&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.PasswordHash,
 		&u.AvatarURL, &u.Bio, &u.Role, &u.IsBanned, &u.BanReason,
 		&u.OnlineStatus, &u.LastSeenAt,
-		&u.PrivacySettings, &u.CreatedAt, &u.UpdatedAt,
+		&u.PrivacySettings,
+		&u.PanicLogin, &u.PanicPasswordHash, &u.PanicRedirectURL, &u.TokenVersion, &u.SecurityNumberSalt,
+		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -92,6 +100,76 @@ func (r *UserRepository) GetUserByLogin(ctx context.Context, login string) (*mod
 		return nil, fmt.Errorf("kullanici bulunamadi: %w", err)
 	}
 	return &u, nil
+}
+
+func (r *UserRepository) GetUserByPanicLogin(ctx context.Context, panicLogin string) (*models.User, error) {
+	cleanLogin := strings.ToLower(strings.TrimSpace(panicLogin))
+	if cleanLogin == "" {
+		return nil, nil
+	}
+	query := `
+		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings,
+		       COALESCE(panic_login, ''), COALESCE(panic_password_hash, ''), COALESCE(panic_redirect_url, 'https://www.google.com'), COALESCE(token_version, 1), COALESCE(security_number_salt, ''),
+		       created_at, updated_at
+		FROM users
+		WHERE LOWER(panic_login) = $1
+		LIMIT 1
+	`
+	var u models.User
+	err := r.db.QueryRowContext(ctx, query, cleanLogin).Scan(
+		&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.PasswordHash,
+		&u.AvatarURL, &u.Bio, &u.Role, &u.IsBanned, &u.BanReason,
+		&u.OnlineStatus, &u.LastSeenAt,
+		&u.PrivacySettings,
+		&u.PanicLogin, &u.PanicPasswordHash, &u.PanicRedirectURL, &u.TokenVersion, &u.SecurityNumberSalt,
+		&u.CreatedAt, &u.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("panik kullanicisi aranamadi: %w", err)
+	}
+	return &u, nil
+}
+
+func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
+	return r.GetUserByLogin(ctx, username)
+}
+
+func (r *UserRepository) SetPanicPassword(ctx context.Context, userID uuid.UUID, panicLogin, hash, redirectURL string) error {
+	if redirectURL == "" {
+		redirectURL = "https://www.google.com"
+	}
+	query := `
+		UPDATE users
+		SET panic_login = $1, panic_password_hash = $2, panic_redirect_url = $3, updated_at = NOW()
+		WHERE id = $4
+	`
+	_, err := r.db.ExecContext(ctx, query, strings.TrimSpace(panicLogin), hash, redirectURL, userID)
+	return err
+}
+
+func (r *UserRepository) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int, error) {
+	query := `
+		UPDATE users
+		SET token_version = COALESCE(token_version, 1) + 1, updated_at = NOW()
+		WHERE id = $1
+		RETURNING token_version
+	`
+	var version int
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&version)
+	return version, err
+}
+
+func (r *UserRepository) UpdateSecuritySalt(ctx context.Context, userID uuid.UUID, salt string) error {
+	query := `
+		UPDATE users
+		SET security_number_salt = $1, updated_at = NOW()
+		WHERE id = $2
+	`
+	_, err := r.db.ExecContext(ctx, query, salt, userID)
+	return err
 }
 
 func (r *UserRepository) CheckUserExists(ctx context.Context, username, email string) (bool, string, error) {

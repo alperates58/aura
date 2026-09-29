@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	"aura/internal/database"
+	"aura/internal/middleware"
 	"aura/internal/models"
 	auraredis "aura/internal/redis"
 	"aura/internal/storage"
+	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -17,6 +19,7 @@ type UserHandler struct {
 	storage         *storage.StorageService
 	presenceService *auraredis.PresenceService
 	accessRepo      *database.AccessRepository
+	hub             *auraws.Hub
 }
 
 func NewUserHandler(
@@ -24,12 +27,14 @@ func NewUserHandler(
 	storage *storage.StorageService,
 	presenceService *auraredis.PresenceService,
 	accessRepo *database.AccessRepository,
+	hub *auraws.Hub,
 ) *UserHandler {
 	return &UserHandler{
 		userRepo:        userRepo,
 		storage:         storage,
 		presenceService: presenceService,
 		accessRepo:      accessRepo,
+		hub:             hub,
 	}
 }
 
@@ -186,3 +191,127 @@ func (h *UserHandler) GetAccessLogs(c *fiber.Ctx) error {
 
 	return c.JSON(logs)
 }
+
+func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	var req models.SetPanicPasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Geçersiz istek formatı.",
+		})
+	}
+
+	req.PanicLogin = strings.TrimSpace(req.PanicLogin)
+	req.PanicPassword = strings.TrimSpace(req.PanicPassword)
+	redirectURL := strings.TrimSpace(req.PanicRedirectURL)
+	if redirectURL == "" {
+		redirectURL = "https://www.google.com"
+	}
+
+	if req.PanicPassword == "" {
+		// Panik şifresini ve loginini kaldır
+		if err := h.userRepo.SetPanicPassword(c.Context(), userID, "", "", redirectURL); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Panik şifresi kaldırılamadı.",
+			})
+		}
+		return c.JSON(fiber.Map{
+			"message":            "Panik şifresi başarıyla devre dışı bırakıldı.",
+			"has_panic_password": false,
+			"panic_login":        "",
+		})
+	}
+
+	if req.PanicLogin == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Lütfen panik durumunda kullanılacak sahte kullanıcı adı veya e-posta belirleyin.",
+		})
+	}
+
+	if len(req.PanicPassword) < 6 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Panik şifresi en az 6 karakter olmalıdır.",
+		})
+	}
+
+	// Normal şifre veya kullanıcı adı/email ile aynı olup olmadığını denetle
+	currentUser, err := h.userRepo.GetUserByID(c.Context(), userID)
+	if err == nil && currentUser != nil {
+		if strings.EqualFold(req.PanicLogin, currentUser.Username) || strings.EqualFold(req.PanicLogin, currentUser.Email) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Panik giriş adı gerçek kullanıcı adınız veya e-postanızla aynı olamaz. Lütfen sahte bir kimlik belirleyin.",
+			})
+		}
+		if middleware.CheckPasswordHash(req.PanicPassword, currentUser.PasswordHash) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Panik şifresi ana giriş şifrenizle aynı olamaz. Lütfen farklı bir şifre belirleyin.",
+			})
+		}
+	}
+
+	// Başka bir kullanıcının bu panic_login'i kullanıp kullanmadığını denetle
+	existingUser, _ := h.userRepo.GetUserByPanicLogin(c.Context(), req.PanicLogin)
+	if existingUser != nil && existingUser.ID != userID {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Bu panik giriş adı zaten kullanımda. Lütfen başka bir ad/e-posta seçin.",
+		})
+	}
+
+	hash, err := middleware.HashPassword(req.PanicPassword)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Şifre hash'lenemedi.",
+		})
+	}
+
+	if err := h.userRepo.SetPanicPassword(c.Context(), userID, req.PanicLogin, hash, redirectURL); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Panik şifresi kaydedilemedi.",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":            "Panik girişi (kullanıcı/şifre/link) başarıyla kaydedildi.",
+		"has_panic_password": true,
+		"panic_login":        req.PanicLogin,
+		"panic_redirect_url": redirectURL,
+	})
+}
+
+func (h *UserHandler) KillSessions(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	newVer, err := h.userRepo.IncrementTokenVersion(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Oturumlar sonlandırılamadı.",
+		})
+	}
+
+	if h.hub != nil {
+		h.hub.TerminateOtherSessions(userID)
+	}
+
+	return c.JSON(fiber.Map{
+		"message":       "Tüm diğer cihaz ve oturumlar başarıyla sonlandırıldı.",
+		"token_version": newVer,
+	})
+}
+
+func (h *UserHandler) RegenerateSecurityCode(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	newSalt := uuid.New().String()
+	if err := h.userRepo.UpdateSecuritySalt(c.Context(), userID, newSalt); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Güvenlik kodu yenilenemedi.",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":              "Uçtan uca güvenlik kodunuz başarıyla yenilendi.",
+		"security_number_salt": newSalt,
+	})
+}
+

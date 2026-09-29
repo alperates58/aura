@@ -150,6 +150,31 @@ func (h *Hub) DisconnectUser(userID uuid.UUID) {
 	}
 }
 
+// TerminateOtherSessions kullanıcının tüm açık oturumlarına uyarı gönderip bağlantılarını sonlandırır.
+func (h *Hub) TerminateOtherSessions(userID uuid.UUID) {
+	h.mu.RLock()
+	clients, ok := h.userClients[userID]
+	var toClose []*Client
+	if ok && len(clients) > 0 {
+		for c := range clients {
+			toClose = append(toClose, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	termMsg, _ := NewWSMessage("session_terminated", map[string]string{
+		"message": "Bu oturum başka bir cihazdan uzaktan sonlandırıldı.",
+	})
+
+	for _, c := range toClose {
+		select {
+		case c.send <- termMsg:
+		default:
+		}
+		_ = c.conn.Close()
+	}
+}
+
 func (h *Hub) onUserOffline(userID uuid.UUID) {
 	ctx := context.Background()
 	_ = h.presenceService.SetUserOffline(ctx, userID)

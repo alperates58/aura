@@ -94,6 +94,10 @@ func (h *ChatHandler) StartConversation(c *fiber.Ctx) error {
 }
 
 func (h *ChatHandler) GetConversations(c *fiber.Ctx) error {
+	if isPanic, ok := c.Locals("is_panic_mode").(bool); ok && isPanic {
+		return c.JSON([]models.ConversationResponse{})
+	}
+
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	convs, err := h.chatRepo.GetUserConversations(c.Context(), userID)
@@ -117,6 +121,10 @@ func (h *ChatHandler) GetConversations(c *fiber.Ctx) error {
 }
 
 func (h *ChatHandler) GetMessages(c *fiber.Ctx) error {
+	if isPanic, ok := c.Locals("is_panic_mode").(bool); ok && isPanic {
+		return c.JSON([]models.MessageResponse{})
+	}
+
 	userID := c.Locals("user_id").(uuid.UUID)
 	convID, err := uuid.Parse(c.Params("id"))
 	if err != nil {

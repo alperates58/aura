@@ -32,7 +32,12 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await login(form.login.trim(), form.password);
+      const res = await login(form.login.trim(), form.password);
+      if (res?.is_panic_mode) {
+        const target = res.panic_redirect_url || "https://www.google.com";
+        window.location.replace(target);
+        return;
+      }
       router.push("/");
     } catch (err: any) {
       const msg = err.response?.data?.error || "Giriş yapılırken bir hata oluştu.";

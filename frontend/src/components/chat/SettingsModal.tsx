@@ -23,6 +23,12 @@ import {
   Volume2,
   VolumeX,
   CheckCircle,
+  Key,
+  AlertTriangle,
+  RefreshCw,
+  PowerOff,
+  ShieldAlert,
+  ExternalLink,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -42,9 +48,18 @@ interface Props {
 
 export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
   const router = useRouter();
-  const { user, updateProfile, uploadAvatar, updatePrivacy, logout } = useAuthStore();
+  const {
+    user,
+    updateProfile,
+    uploadAvatar,
+    updatePrivacy,
+    logout,
+    setPanicPassword,
+    killSessions,
+    regenerateSecurityCode,
+  } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<"profile" | "privacy" | "notifications" | "access_logs">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "privacy" | "security" | "notifications" | "access_logs">("profile");
   const [displayName, setDisplayName] = useState(user?.display_name || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [readReceipts, setReadReceipts] = useState(user?.privacy_settings?.read_receipts ?? true);
@@ -57,6 +72,27 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
     }
     return user?.privacy_settings?.sound_alerts ?? true;
   });
+
+  // Security features state (Panic password, Remote kill sessions, Security code)
+  const [panicLogin, setPanicLogin] = useState(user?.panic_login || "");
+  const [panicPassword, setPanicPasswordInput] = useState("");
+  const [panicRedirectUrl, setPanicRedirectUrl] = useState(user?.panic_redirect_url || "https://www.google.com");
+  const [hasPanicPassword, setHasPanicPassword] = useState(user?.has_panic_password || false);
+  const [isSavingPanic, setIsSavingPanic] = useState(false);
+  const [isKillingSessions, setIsKillingSessions] = useState(false);
+  const [isRegeneratingSecurity, setIsRegeneratingSecurity] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setHasPanicPassword(!!user.has_panic_password);
+      if (user.panic_login) {
+        setPanicLogin(user.panic_login);
+      }
+      if (user.panic_redirect_url) {
+        setPanicRedirectUrl(user.panic_redirect_url);
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user?.privacy_settings?.sound_alerts !== undefined) {
@@ -192,7 +228,75 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
     }
   };
 
+  const handleSavePanic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!panicLogin.trim()) {
+      alert("Lütfen panik durumunda giriş yapacağınız sahte e-posta veya kullanıcı adı belirleyin.");
+      return;
+    }
+    if (!panicPassword && !hasPanicPassword) {
+      alert("Lütfen en az 6 karakterli bir panik şifresi belirleyin.");
+      return;
+    }
+    if (panicPassword && panicPassword.length < 6) {
+      alert("Panik şifresi en az 6 karakter olmalıdır.");
+      return;
+    }
+    setIsSavingPanic(true);
+    try {
+      const res = await setPanicPassword(panicLogin.trim(), panicPassword, panicRedirectUrl);
+      setHasPanicPassword(res.has_panic_password);
+      setPanicLogin(res.panic_login || panicLogin.trim());
+      setPanicPasswordInput("");
+      showToast("Panik giriş kimliği, şifresi ve yönlendirme linki kaydedildi!");
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Panik ayarları kaydedilemedi.");
+    } finally {
+      setIsSavingPanic(false);
+    }
+  };
 
+  const handleRemovePanic = async () => {
+    if (!confirm("Panik girişini ve şifresini kaldırmak istediğinize emin misiniz?")) return;
+    setIsSavingPanic(true);
+    try {
+      await setPanicPassword("", "", panicRedirectUrl);
+      setHasPanicPassword(false);
+      setPanicLogin("");
+      setPanicPasswordInput("");
+      showToast("Panik girişi devre dışı bırakıldı.");
+    } catch (err) {
+      alert("Panik şifresi kaldırılamadı.");
+    } finally {
+      setIsSavingPanic(false);
+    }
+  };
+
+  const handleKillOtherSessions = async () => {
+    if (!confirm("Bu cihaz haricindeki tüm aktif oturumları ve bağlantıları anında sonlandırmak istiyor musunuz?")) return;
+    setIsKillingSessions(true);
+    try {
+      await killSessions();
+      showToast("Tüm diğer oturumlar ve cihazlar sonlandırıldı!");
+    } catch (err) {
+      alert("Oturumlar sonlandırılamadı.");
+    } finally {
+      setIsKillingSessions(false);
+    }
+  };
+
+  const handleRegenerateSecurity = async () => {
+    if (!confirm("Uçtan uca güvenlik kodunuzu yenilemek istiyor musunuz? Tüm sohbetlerdeki 60 haneli doğrulama kodları güncellenecektir.")) return;
+    setIsRegeneratingSecurity(true);
+    try {
+      await regenerateSecurityCode();
+      showToast("Uçtan uca güvenlik anahtarınız başarıyla yenilendi!");
+    } catch (err) {
+      alert("Güvenlik kodu yenilenemedi.");
+    } finally {
+      setIsRegeneratingSecurity(false);
+    }
+  };
 
   const handleLogout = async () => {
     onClose();
@@ -259,6 +363,19 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
           >
             <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
             <span>Gizlilik</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("security")}
+            className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap ${
+              activeTab === "security"
+                ? "border-grupo-accent text-pink-400"
+                : "border-transparent text-slate-400 hover:text-white"
+            }`}
+          >
+            <Key className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Güvenlik</span>
+            <span className="sm:hidden">Güvenlik</span>
           </button>
 
           <button
@@ -518,7 +635,167 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
             </div>
           )}
 
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              {/* Bölüm 1: Panik Şifresi & Yönlendirme Linki */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-grupo-dark-border space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>Zorlama / Panik Kodu</span>
+                        {hasPanicPassword ? (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">
+                            Devre Dışı
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Zorla şifreniz istendiğinde bu kodu girin. Girişte tüm sohbetler gizlenir ve tarayıcı derhal belirttiğiniz adrese yönlendirilir.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
+                <form onSubmit={handleSavePanic} className="space-y-3 pt-2 border-t border-white/[0.05]">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Panik Giriş E-postası / Kullanıcı Adı (Sahte Giriş Kimliği)
+                    </label>
+                    <input
+                      type="text"
+                      value={panicLogin}
+                      onChange={(e) => setPanicLogin(e.target.value)}
+                      placeholder="Örn: decoy_guest@gmail.com veya guest_account"
+                      className="w-full bg-slate-950 border border-grupo-dark-border rounded-xl py-2 px-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Zorla şifre istendiğinde gerçek kullanıcı adınızı değil, bu sahte kullanıcı adı/e-posta ve şifrenizi girin.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Panik Şifresi (Sahte Şifre)
+                    </label>
+                    <input
+                      type="password"
+                      value={panicPassword}
+                      onChange={(e) => setPanicPasswordInput(e.target.value)}
+                      placeholder={hasPanicPassword ? "Şifreyi değiştirmek için yeni şifre girin..." : "Örn: gizli-panik-kodunuz-123"}
+                      className="w-full bg-slate-950 border border-grupo-dark-border rounded-xl py-2 px-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Yönlendirilecek Güvenli Sayfa / Link
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={panicRedirectUrl}
+                        onChange={(e) => setPanicRedirectUrl(e.target.value)}
+                        placeholder="https://www.google.com"
+                        className="w-full bg-slate-950 border border-grupo-dark-border rounded-xl py-2 pl-3 pr-8 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
+                      />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Örn: https://www.google.com veya bir haber sitesi. Panik şifresi girildiğinde kişi hiçbir mesajınızı görmeden bu adrese atılır.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSavingPanic}
+                      className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isSavingPanic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>{hasPanicPassword ? "Panik Kodunu Güncelle" : "Panik Kodunu Kaydet"}</span>
+                    </button>
+
+                    {hasPanicPassword && (
+                      <button
+                        type="button"
+                        onClick={handleRemovePanic}
+                        disabled={isSavingPanic}
+                        className="px-3 py-2 rounded-xl text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      >
+                        Kodu Kaldır
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* Bölüm 2: Uzaktan Cihaz Düşürme (Remote Kill Session) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-grupo-dark-border space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center flex-shrink-0">
+                    <PowerOff className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-white">Uzaktan Tek Tıkla Cihaz Düşürme</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Bu cihaz hariç diğer tüm açık telefon, bilgisayar veya tabletlerdeki aktif oturum ve soket bağlantılarını anında sonlandırır.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleKillOtherSessions}
+                    disabled={isKillingSessions}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isKillingSessions ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <PowerOff className="w-3.5 h-3.5" />
+                    )}
+                    <span>Tüm Diğer Oturumları Kapat</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bölüm 3: Uçtan Uca Güvenlik Kodu Sıfırlama */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-grupo-dark-border space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center flex-shrink-0">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-white">Uçtan Uca Güvenlik Anahtarını Yenile</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Tüm sohbetlerinizdeki 60 haneli uçtan uca şifreleme doğrulama numaranızı yeniden oluşturur. Karşı taraf da kodun yenilendiğini görür.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleRegenerateSecurity}
+                    disabled={isRegeneratingSecurity}
+                    className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/[0.08] text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRegeneratingSecurity ? "animate-spin" : ""}`} />
+                    <span>Güvenlik Kodunu Yenile</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === "notifications" && (
             <div className="space-y-4">

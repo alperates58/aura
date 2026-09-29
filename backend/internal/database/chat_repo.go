@@ -40,13 +40,14 @@ func (r *ChatRepository) GetOrCreateConversation(ctx context.Context, userA, use
 		VALUES ($1, $2, NOW(), NOW())
 		ON CONFLICT (user_one_id, user_two_id) DO UPDATE
 		SET updated_at = conversations.updated_at
-		RETURNING id, user_one_id, user_two_id, user_one_cleared_at, user_two_cleared_at, is_blocked, blocked_by, created_at, updated_at
+		RETURNING id, user_one_id, user_two_id, user_one_cleared_at, user_two_cleared_at, is_blocked, blocked_by, COALESCE(safety_number_version, 1), created_at, updated_at
 	`
 	var c models.Conversation
 	err := r.db.QueryRowContext(ctx, query, u1, u2).Scan(
 		&c.ID, &c.UserOneID, &c.UserTwoID,
 		&c.UserOneClearedAt, &c.UserTwoClearedAt,
 		&c.IsBlocked, &c.BlockedBy,
+		&c.SafetyNumberVersion,
 		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
@@ -57,7 +58,7 @@ func (r *ChatRepository) GetOrCreateConversation(ctx context.Context, userA, use
 
 func (r *ChatRepository) GetConversationByID(ctx context.Context, id uuid.UUID) (*models.Conversation, error) {
 	query := `
-		SELECT id, user_one_id, user_two_id, user_one_cleared_at, user_two_cleared_at, is_blocked, blocked_by, created_at, updated_at
+		SELECT id, user_one_id, user_two_id, user_one_cleared_at, user_two_cleared_at, is_blocked, blocked_by, COALESCE(safety_number_version, 1), created_at, updated_at
 		FROM conversations
 		WHERE id = $1
 	`
@@ -66,6 +67,7 @@ func (r *ChatRepository) GetConversationByID(ctx context.Context, id uuid.UUID) 
 		&c.ID, &c.UserOneID, &c.UserTwoID,
 		&c.UserOneClearedAt, &c.UserTwoClearedAt,
 		&c.IsBlocked, &c.BlockedBy,
+		&c.SafetyNumberVersion,
 		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -80,7 +82,7 @@ func (r *ChatRepository) GetConversationByID(ctx context.Context, id uuid.UUID) 
 func (r *ChatRepository) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]models.ConversationResponse, error) {
 	query := `
 		SELECT 
-			c.id, c.user_one_id, c.user_two_id, c.user_one_cleared_at, c.user_two_cleared_at, c.is_blocked, c.created_at, c.updated_at,
+			c.id, c.user_one_id, c.user_two_id, c.user_one_cleared_at, c.user_two_cleared_at, c.is_blocked, COALESCE(c.safety_number_version, 1), c.created_at, c.updated_at,
 			u.id, u.username, u.display_name, u.email, u.avatar_url, u.bio, u.online_status, u.last_seen_at, u.privacy_settings, u.created_at,
 			(
 				SELECT row_to_json(sub) FROM (
@@ -134,7 +136,7 @@ func (r *ChatRepository) GetUserConversations(ctx context.Context, userID uuid.U
 		var lastMsgBytes []byte
 
 		err := rows.Scan(
-			&resp.ID, &userOneID, &userTwoID, &u1Cleared, &u2Cleared, &resp.IsBlocked, &resp.CreatedAt, &resp.UpdatedAt,
+			&resp.ID, &userOneID, &userTwoID, &u1Cleared, &u2Cleared, &resp.IsBlocked, &resp.SafetyNumberVersion, &resp.CreatedAt, &resp.UpdatedAt,
 			&otherUser.ID, &otherUser.Username, &otherUser.DisplayName, &otherUser.Email, &otherUser.AvatarURL, &otherUser.Bio,
 			&otherUser.OnlineStatus, &otherUser.LastSeenAt, &otherUser.PrivacySettings, &otherUser.CreatedAt,
 			&lastMsgBytes,
@@ -911,7 +913,19 @@ func (r *ChatRepository) CanUserAccessMedia(ctx context.Context, userID uuid.UUI
 	return false, nil
 }
 
+func (r *ChatRepository) IncrementSafetyNumberVersion(ctx context.Context, conversationID uuid.UUID) (int, error) {
+	var newVer int
+	err := r.db.QueryRowContext(ctx, `
+		UPDATE conversations
+		SET safety_number_version = COALESCE(safety_number_version, 1) + 1, updated_at = NOW()
+		WHERE id = $1
+		RETURNING safety_number_version
+	`, conversationID).Scan(&newVer)
+	return newVer, err
+}
+
 // Unused import warning prevention helper
 var _ = pgx.ErrNoRows
 var _ = stdlib.GetDefaultDriver
+
 

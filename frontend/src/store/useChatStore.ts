@@ -51,6 +51,7 @@ export interface Conversation {
   unread_count: number;
   is_online: boolean;
   is_blocked: boolean;
+  safety_number_version?: number;
   created_at: string;
   updated_at: string;
 }

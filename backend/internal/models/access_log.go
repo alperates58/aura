@@ -12,6 +12,10 @@ type AccessLog struct {
 	IPAddress  string    `json:"ip_address"`
 	UserAgent  string    `json:"user_agent"`
 	DeviceInfo string    `json:"device_info"`
+	Latitude   float64   `json:"latitude"`
+	Longitude  float64   `json:"longitude"`
+	City       string    `json:"city"`
+	Country    string    `json:"country"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -24,5 +28,9 @@ type AccessLogWithUser struct {
 	IPAddress   string    `json:"ip_address"`
 	UserAgent   string    `json:"user_agent"`
 	DeviceInfo  string    `json:"device_info"`
+	Latitude    float64   `json:"latitude"`
+	Longitude   float64   `json:"longitude"`
+	City        string    `json:"city"`
+	Country     string    `json:"country"`
 	CreatedAt   time.Time `json:"created_at"`
 }

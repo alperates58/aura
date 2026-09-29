@@ -12,9 +12,11 @@ import (
 )
 
 type JWTClaims struct {
-	UserID   uuid.UUID `json:"user_id"`
-	Username string    `json:"username"`
-	IsRefresh bool     `json:"is_refresh"`
+	UserID       uuid.UUID `json:"user_id"`
+	Username     string    `json:"username"`
+	IsRefresh    bool      `json:"is_refresh"`
+	TokenVersion int       `json:"token_version,omitempty"`
+	IsPanicMode  bool      `json:"is_panic_mode,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -29,10 +31,16 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func GenerateAccessToken(userID uuid.UUID, username string, secret string, expiryMin int) (string, error) {
+	return GenerateCustomAccessToken(userID, username, secret, expiryMin, 1, false)
+}
+
+func GenerateCustomAccessToken(userID uuid.UUID, username string, secret string, expiryMin int, tokenVersion int, isPanicMode bool) (string, error) {
 	claims := JWTClaims{
-		UserID:    userID,
-		Username:  username,
-		IsRefresh: false,
+		UserID:       userID,
+		Username:     username,
+		IsRefresh:    false,
+		TokenVersion: tokenVersion,
+		IsPanicMode:  isPanicMode,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiryMin) * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -44,9 +52,14 @@ func GenerateAccessToken(userID uuid.UUID, username string, secret string, expir
 }
 
 func GenerateRefreshToken(userID uuid.UUID, secret string, expiryDays int) (string, error) {
+	return GenerateCustomRefreshToken(userID, secret, expiryDays, 1)
+}
+
+func GenerateCustomRefreshToken(userID uuid.UUID, secret string, expiryDays int, tokenVersion int) (string, error) {
 	claims := JWTClaims{
-		UserID:    userID,
-		IsRefresh: true,
+		UserID:       userID,
+		IsRefresh:    true,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiryDays) * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -104,6 +117,8 @@ func JWTMiddleware(jwtSecret string) fiber.Handler {
 		c.Locals("user_id", claims.UserID)
 		c.Locals("userID", claims.UserID)
 		c.Locals("username", claims.Username)
+		c.Locals("token_version", claims.TokenVersion)
+		c.Locals("is_panic_mode", claims.IsPanicMode)
 		return c.Next()
 	}
 }

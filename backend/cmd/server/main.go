@@ -124,7 +124,7 @@ func main() {
 
 	// 7. Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)
-	userHandler := handlers.NewUserHandler(userRepo, storageService, presenceService, accessRepo)
+	userHandler := handlers.NewUserHandler(userRepo, storageService, presenceService, accessRepo, hub)
 	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)
 	callHandler := handlers.NewCallHandler(callRepo, chatRepo, userRepo, livekitService, hub, rdb, settingsRepo)
@@ -232,6 +232,9 @@ func main() {
 	users.Put("/profile", userHandler.UpdateProfile)
 	users.Post("/avatar", userHandler.UploadAvatar)
 	users.Patch("/privacy", userHandler.UpdatePrivacy)
+	users.Post("/panic-password", userHandler.SetPanicPassword)
+	users.Post("/kill-sessions", userHandler.KillSessions)
+	users.Post("/regenerate-security-code", userHandler.RegenerateSecurityCode)
 	users.Get("/search", userHandler.SearchUsers)
 	users.Get("/access-logs", userHandler.GetAccessLogs)
 	users.Get("/close-friends", storyHandler.GetCloseFriends)

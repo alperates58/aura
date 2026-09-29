@@ -34,6 +34,7 @@ import DoodleModal from "@/components/chat/DoodleModal";
 import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
+import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
 import { compressImage, validateVideo } from "@/lib/compression";
 import { api, resolveMediaUrl, getApiBaseUrl } from "@/lib/api";
 import { formatLastSeen } from "@/lib/utils";
@@ -71,6 +72,7 @@ import {
   ChevronDown,
   CheckSquare,
   UploadCloud,
+  Key,
 } from "lucide-react";
 
 const isSameCalendarDay = (d1: Date, d2: Date) => {
@@ -156,6 +158,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<NavTab>("chats");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showContactDrawer, setShowContactDrawer] = useState(false);
+  const [showSafetyNumberModal, setShowSafetyNumberModal] = useState(false);
   const [showActiveChatMenu, setShowActiveChatMenu] = useState(false);
   const [showActiveDeleteConfirm, setShowActiveDeleteConfirm] = useState<"delete" | "clear" | null>(null);
   const [isDeletingActive, setIsDeletingActive] = useState(false);
@@ -2185,6 +2188,16 @@ export default function HomePage() {
                       <button
                         onClick={() => {
                           setShowActiveChatMenu(false);
+                          setShowSafetyNumberModal(true);
+                        }}
+                        className="w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Key className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Güvenlik Kodu (60 Hane)</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowActiveChatMenu(false);
                           startSelectionMode();
                         }}
                         className="w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
@@ -2767,6 +2780,28 @@ export default function HomePage() {
               </div>
 
               <div>
+                <span className="text-slate-400 font-semibold block mb-1">Şifreleme & Güvenlik</span>
+                <button
+                  type="button"
+                  onClick={() => setShowSafetyNumberModal(true)}
+                  className="w-full p-3 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 flex items-center justify-between transition-colors cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                      <Key className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">Güvenlik Kodunu Doğrula</div>
+                      <div className="text-[10px] text-slate-400">60 haneli uçtan uca şifreleme kodu</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    v{activeConv.safety_number_version || 1}
+                  </span>
+                </button>
+              </div>
+
+              <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-slate-400 font-semibold">Paylaşılan Medya</span>
                   {(() => {
@@ -3062,6 +3097,21 @@ export default function HomePage() {
         }}
         initialTab={adminInitialTab}
       />
+
+      {/* Uçtan Uca Güvenlik Kodu Modalı (Safety Number Verification) */}
+      {showSafetyNumberModal && activeConv && (
+        <SafetyNumberModal
+          isOpen={showSafetyNumberModal}
+          onClose={() => setShowSafetyNumberModal(false)}
+          currentUser={user}
+          otherUser={activeConv.other_user}
+          conversation={activeConv}
+          onRegenerateCode={async () => {
+            const { regenerateSecurityCode } = useAuthStore.getState();
+            await regenerateSecurityCode();
+          }}
+        />
+      )}
 
       {/* 24 Saatlik Hikaye / Durum Modalları (WhatsApp & Instagram Tarzı) */}
       <StoryViewerModal />
