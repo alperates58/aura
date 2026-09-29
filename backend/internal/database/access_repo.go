@@ -18,7 +18,11 @@ func NewAccessRepository(db *sql.DB) *AccessRepository {
 	return &AccessRepository{db: db}
 }
 
-func (r *AccessRepository) LogAccess(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string, lat, lon float64, city, country string) error {
+func (r *AccessRepository) LogAccess(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string) error {
+	return r.LogAccessWithLocation(ctx, userID, ipAddress, userAgent, 0, 0, "", "")
+}
+
+func (r *AccessRepository) LogAccessWithLocation(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string, lat, lon float64, city, country string) error {
 	deviceInfo := ParseUserAgent(userAgent)
 
 	query := `

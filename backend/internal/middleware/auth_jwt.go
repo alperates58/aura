@@ -52,14 +52,15 @@ func GenerateCustomAccessToken(userID uuid.UUID, username string, secret string,
 }
 
 func GenerateRefreshToken(userID uuid.UUID, secret string, expiryDays int) (string, error) {
-	return GenerateCustomRefreshToken(userID, secret, expiryDays, 1)
+	return GenerateCustomRefreshToken(userID, secret, expiryDays, 1, false)
 }
 
-func GenerateCustomRefreshToken(userID uuid.UUID, secret string, expiryDays int, tokenVersion int) (string, error) {
+func GenerateCustomRefreshToken(userID uuid.UUID, secret string, expiryDays int, tokenVersion int, isPanicMode bool) (string, error) {
 	claims := JWTClaims{
 		UserID:       userID,
 		IsRefresh:    true,
 		TokenVersion: tokenVersion,
+		IsPanicMode:  isPanicMode,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiryDays) * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

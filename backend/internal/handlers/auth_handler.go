@@ -491,9 +491,43 @@ func haversineDistanceKm(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog, distanceKm, speedKmH float64, curLoc, prevLoc string) {
+func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog) {
+	if prevAccess == nil {
+		return
+	}
 	go func() {
 		ctx := context.Background()
+		curGeo := ResolveIPLocationDetails(currentIP)
+		prevGeo := ResolveIPLocationDetails(prevAccess.IPAddress)
+
+		lat1, lon1 := prevAccess.Latitude, prevAccess.Longitude
+		if lat1 == 0 && lon1 == 0 && prevGeo != nil {
+			lat1, lon1 = prevGeo.Lat, prevGeo.Lon
+		}
+
+		lat2, lon2 := 0.0, 0.0
+		if curGeo != nil {
+			lat2, lon2 = curGeo.Lat, curGeo.Lon
+		}
+
+		if (lat1 == 0 && lon1 == 0) || (lat2 == 0 && lon2 == 0) {
+			return
+		}
+
+		distanceKm := haversineDistanceKm(lat1, lon1, lat2, lon2)
+		hours := time.Since(prevAccess.CreatedAt).Hours()
+		if hours <= 0 {
+			hours = 0.01 // minimum 36 sn
+		}
+		speedKmH := distanceKm / hours
+
+		// Eşik: 300 km'den fazla mesafe ve 900 km/s üzeri hız (ve 24 saat içinde)
+		if distanceKm < 300 || speedKmH < 900 || hours > 24 {
+			return
+		}
+
+		curLoc := ResolveIPLocation(currentIP)
+		prevLoc := ResolveIPLocation(prevAccess.IPAddress)
 		eventType := "impossible_travel_detected"
 		nowStr := time.Now().Format("15:04:05")
 
@@ -505,7 +539,7 @@ func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.Us
 				"current_location": curLoc,
 				"prev_location":    prevLoc,
 				"prev_ip":          prevAccess.IPAddress,
-				"note":             fmt.Sprintf("%.0f km mesafe %.1f saatte aşılamaz (Hız: %.0f km/s)", distanceKm, time.Since(prevAccess.CreatedAt).Hours(), speedKmH),
+				"note":             fmt.Sprintf("%.0f km mesafe %.1f saatte aşılamaz (Hız: %.0f km/s)", distanceKm, hours, speedKmH),
 			})
 		}
 
@@ -740,7 +774,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 			)
 			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
 		}
-	}(user, currentIP, currentUA, currentDeviceInfo, lastAccess)
+	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess)
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -853,12 +887,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
 	}
 
-	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, user.TokenVersion, isPanic, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
+	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, isPanic)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Oturum anahtarı üretilemedi."})
 	}
 
-	refreshToken, err := middleware.GenerateCustomRefreshToken(user.ID, user.TokenVersion, isPanic, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays)
+	refreshToken, err := middleware.GenerateCustomRefreshToken(user.ID, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays, user.TokenVersion, isPanic)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yenileme anahtarı üretilemedi."})
 	}
@@ -923,7 +957,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		})
 	}
 
-	newAccessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, user.TokenVersion, claims.IsPanicMode, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin)
+	newAccessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, claims.IsPanicMode)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yeni token üretilemedi."})
 	}
