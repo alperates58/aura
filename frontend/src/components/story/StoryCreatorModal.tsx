@@ -225,28 +225,75 @@ export default function StoryCreatorModal() {
     setRecordingSeconds(0);
   };
 
+  // Kamera aktifleştiğinde video elementine akışı garanti olarak bağla
+  useEffect(() => {
+    if (isCameraActive && mediaStreamRef.current && cameraVideoRef.current) {
+      if (cameraVideoRef.current.srcObject !== mediaStreamRef.current) {
+        cameraVideoRef.current.srcObject = mediaStreamRef.current;
+      }
+      cameraVideoRef.current.play().catch((err) => {
+        console.warn("Kamera video oynatma uyarısı:", err);
+      });
+    }
+  }, [isCameraActive]);
+
   const startCamera = async (facing: "user" | "environment" = cameraFacing) => {
     stopCamera();
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: facing,
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-        },
-        audio: true,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        alert("Tarayıcınız kamera erişimini desteklemiyor veya güvenli bağlantı (HTTPS) gerekebilir.");
+        return;
+      }
+
+      let stream: MediaStream;
+      try {
+        // 1. İdeal çözünürlük ve ses (video kaydı için) dene
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: true,
+        });
+      } catch (audioOrIdealErr) {
+        console.warn("Ses veya ideal çözünürlükle kamera açılamadı, sadece kamera ile deneniyor:", audioOrIdealErr);
+        try {
+          // 2. Mikrofon yoksa veya engelliyse sadece video ile dene
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facing },
+            },
+            audio: false,
+          });
+        } catch (strictVideoErr) {
+          console.warn("facingMode ile açılamadı, genel video ile deneniyor:", strictVideoErr);
+          // 3. En temel video constraint ile dene
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
+      }
+
       mediaStreamRef.current = stream;
-      setIsCameraActive(true);
       setCameraFacing(facing);
+      setIsCameraActive(true);
+
+      // DOM'da video elementi zaten varsa doğrudan srcObject ata
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
         cameraVideoRef.current.play().catch(() => {});
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Kamera açılamadı:", err);
-      alert("Kamera ve mikrofon erişimine izin verilmedi veya cihaz desteklemiyor.");
+      const msg =
+        err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError"
+          ? "Kamera erişim izni verilmedi. Lütfen tarayıcınızın adres çubuğundaki kilit/site ayarları simgesinden kameraya izin verin."
+          : err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError"
+          ? "Cihazınızda kullanılabilir kamera bulunamadı."
+          : "Kamera açılamadı: " + (err?.message || "Bilinmeyen hata");
+      alert(msg);
     }
   };
 
@@ -258,6 +305,10 @@ export default function StoryCreatorModal() {
   const takePhotoSnapshot = () => {
     if (!cameraVideoRef.current) return;
     const video = cameraVideoRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      alert("Kamera görüntüsü henüz hazır değil, lütfen bir saniye bekleyin.");
+      return;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 1080;
     canvas.height = video.videoHeight || 1920;
@@ -283,19 +334,27 @@ export default function StoryCreatorModal() {
         }
       },
       "image/jpeg",
-      0.9
+      0.92
     );
   };
 
   const startVideoRecording = () => {
     if (!mediaStreamRef.current) return;
     recordedChunksRef.current = [];
-    const mimeTypes = [
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm",
-      "video/mp4",
-    ];
+    const hasAudio = mediaStreamRef.current.getAudioTracks().length > 0;
+    const mimeTypes = hasAudio
+      ? [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+          "video/mp4",
+        ]
+      : [
+          "video/webm;codecs=vp9",
+          "video/webm;codecs=vp8",
+          "video/webm",
+          "video/mp4",
+        ];
     let selectedMime = "";
     for (const m of mimeTypes) {
       if (MediaRecorder.isTypeSupported(m)) {
@@ -796,10 +855,19 @@ export default function StoryCreatorModal() {
             /* CANLI KAMERA VİDEO VE ÇEKİM ALANI */
             <div className="relative w-full h-full bg-black flex items-center justify-center overflow-hidden">
               <video
-                ref={cameraVideoRef}
+                ref={(el) => {
+                  cameraVideoRef.current = el;
+                  if (el && mediaStreamRef.current && el.srcObject !== mediaStreamRef.current) {
+                    el.srcObject = mediaStreamRef.current;
+                    el.play().catch((e) => console.warn("Video play hatası:", e));
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
+                onLoadedMetadata={(e) => {
+                  (e.target as HTMLVideoElement).play().catch(() => {});
+                }}
                 className={`w-full h-full object-cover ${cameraFacing === "user" ? "-scale-x-100" : ""}`}
               />
 
