@@ -24,6 +24,7 @@ import {
   MapPin,
   Smartphone,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { formatStoryTime } from "@/lib/utils";
 import { api, resolveMediaUrl } from "@/lib/api";
@@ -43,7 +44,9 @@ const parseSecurityStory = (caption?: string) => {
   let location = "";
   let device = "";
   let time = "";
-  const isPanic = caption.includes("Panik Kodu") || caption.includes("ACİL DURUM") || caption.includes("Zorlama");
+  let detail = "";
+
+  const isPanic = caption.includes("Panik") || caption.includes("ACİL DURUM") || caption.includes("Zorlama");
   const isImpossibleTravel = caption.includes("İmkansız Seyahat");
   const isBruteForce = caption.includes("Kaba Kuvvet");
   const isFailedPassword = caption.includes("Hatalı Şifre") || caption.includes("Şüpheli Giriş");
@@ -66,12 +69,25 @@ const parseSecurityStory = (caption?: string) => {
     } else if (trimmed.includes("Zaman:")) {
       const parts = trimmed.split(":");
       if (parts.length > 1) time = parts.slice(1).join(":").trim();
+    } else if (trimmed.includes("Sebep:") || trimmed.includes("Ayrıntı:") || trimmed.includes("Detay:") || trimmed.includes("Neden:")) {
+      const parts = trimmed.split(":");
+      if (parts.length > 1) detail = parts.slice(1).join(":").trim();
     }
+  }
+
+  // Akıllı Ayrıntı / Sebep Çıkarımı (Önceki hikayelerde bile otomatik gösterilsin)
+  if (!detail) {
+    if (isPanic) detail = "Panik / Zorlama Şifresi";
+    else if (isImpossibleTravel) detail = "Fiziksel Hız Sınırı Aşıldı";
+    else if (isBruteForce) detail = "Çok Sayıda Hatalı Deneme";
+    else if (isConcurrent) detail = "İkinci Cihazdan Giriş";
+    else if (isFailedPassword) detail = "Hatalı Şifre";
+    else detail = "Kayıtsız Kullanıcı";
   }
 
   if (!targetUser && !ip) return null;
 
-  return { targetUser, ip, location, device, time, isFailedPassword, isConcurrent, isPanic, isImpossibleTravel, isBruteForce };
+  return { targetUser, ip, location, device, time, detail, isFailedPassword, isConcurrent, isPanic, isImpossibleTravel, isBruteForce };
 };
 
 export default function StoryViewerModal() {
@@ -904,24 +920,38 @@ export default function StoryViewerModal() {
                             secInfo.isPanic ? "bg-rose-500" : secInfo.isConcurrent ? "bg-amber-500" : "bg-red-500"
                           }`} />
                         </div>
-                        <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight mt-0.5 truncate">
-                          {secInfo.isPanic
-                            ? "🚨 Panik / Zorlama Kodu Tetiklendi"
-                            : secInfo.isImpossibleTravel
-                            ? "✈️ İmkansız Seyahat Tespiti"
-                            : secInfo.isBruteForce
-                            ? "🚫 Kaba Kuvvet Karantinası"
-                            : secInfo.isConcurrent
-                            ? "⚠️ Eşzamanlı Çoklu Oturum"
-                            : secInfo.isFailedPassword
-                            ? "🛡️ Şüpheli Giriş Engellendi"
-                            : "🛡️ Yetkisiz Giriş Teşebbüsü"}
+                        <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight mt-0.5 leading-snug">
+                          {secInfo.isPanic ? (
+                            <span>🚨 Panik / Zorlama Kodu <span className="text-rose-400 font-semibold">({secInfo.detail})</span></span>
+                          ) : secInfo.isImpossibleTravel ? (
+                            <span>✈️ İmkansız Seyahat <span className="text-purple-300 font-semibold">({secInfo.detail})</span></span>
+                          ) : secInfo.isBruteForce ? (
+                            <span>🚫 Kaba Kuvvet Karantinası <span className="text-red-400 font-semibold">({secInfo.detail})</span></span>
+                          ) : secInfo.isConcurrent ? (
+                            <span>⚠️ Eşzamanlı Çoklu Oturum <span className="text-amber-300 font-semibold">({secInfo.detail})</span></span>
+                          ) : secInfo.isFailedPassword ? (
+                            <span>🛡️ Şüpheli Giriş Engellendi <span className="text-amber-300 font-semibold">({secInfo.detail})</span></span>
+                          ) : (
+                            <span>🛡️ Yetkisiz Giriş Teşebbüsü <span className="text-red-300 font-semibold">({secInfo.detail})</span></span>
+                          )}
                         </h4>
                       </div>
                     </div>
 
                     {/* Detay Tablosu */}
                     <div className="space-y-1.5 text-xs">
+                      {/* Ayrıntı / Sebep Satırı */}
+                      {secInfo.detail && (
+                        <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
+                          <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Ayrıntı / Sebep:
+                          </span>
+                          <span className="font-semibold text-amber-300 text-[11px] truncate max-w-[170px] text-right">
+                            {secInfo.detail}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-white/5 gap-2">
                         <span className="text-[11px] text-slate-400 flex items-center gap-1.5 shrink-0">
                           <Lock className="w-3.5 h-3.5 text-purple-400" /> Hedef Hesap:

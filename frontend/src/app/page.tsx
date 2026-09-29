@@ -169,9 +169,11 @@ export default function HomePage() {
     id?: string;
     event_type?: string;
     username?: string;
+    attempted_login?: string;
     ip_address?: string;
     location?: string;
     user_agent?: string;
+    message?: string;
     details?: string;
     severity?: string;
   } | null>(null);
@@ -1540,10 +1542,18 @@ export default function HomePage() {
                   Güvenlik Uyarısı:
                 </span>
                 <span className="text-slate-200 truncate">
-                  {securityAlert.event_type === "unknown_user_login"
-                    ? "Kayıtsız hesapla giriş denendi!"
-                    : "Şüpheli oturum denemesi!"}{" "}
-                  (Kullanıcı: <b className="text-white font-mono">@{securityAlert.username || "bilinmeyen"}</b> • IP: <span className="font-mono text-red-200">{securityAlert.ip_address}</span>{securityAlert.location ? ` • 📍 ${securityAlert.location}` : ""})
+                  {securityAlert.message || (
+                    securityAlert.event_type === "failed_password_attempt"
+                      ? "Şüpheli Giriş Engellendi (Hatalı Şifre)"
+                      : securityAlert.event_type === "unknown_user_attempt" || securityAlert.event_type === "unknown_user_login"
+                      ? "Yetkisiz Giriş Teşebbüsü (Kayıtsız Kullanıcı)"
+                      : securityAlert.event_type === "concurrent_session_login"
+                      ? "Eşzamanlı Çoklu Oturum (İkinci Cihaz)"
+                      : securityAlert.event_type === "panic_mode_triggered"
+                      ? "Panik / Zorlama Kodu Tetiklendi (Acil Durum)"
+                      : "Şüpheli Giriş Denemesi Engellendi"
+                  )}{" "}
+                  (Kullanıcı: <b className="text-white font-mono">@{securityAlert.username || securityAlert.attempted_login || "bilinmeyen"}</b> • IP: <span className="font-mono text-red-200">{securityAlert.ip_address}</span>{securityAlert.location ? ` • 📍 ${securityAlert.location}` : ""})
                 </span>
               </div>
             </div>

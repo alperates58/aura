@@ -416,7 +416,7 @@ func (h *AuthHandler) recordFailedAttempt(ip string) {
 			if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 				nowStr := time.Now().Format("15:04:05")
 				caption := fmt.Sprintf(
-					"🛡️ GÜVENLİK ALARMI ⚠️\nKaba Kuvvet Saldırısı Engellendi!\n🌐 Engellenen IP: %s\n📍 Konum: %s\n⏰ Zaman: %s\nIP adresi 1 saat süreyle karantinaya alındı.",
+					"🛡️ GÜVENLİK ALARMI ⚠️\nKaba Kuvvet Karantinası (Çok Sayıda Hatalı Deneme)!\n🌐 Engellenen IP: %s\n📍 Konum: %s\n🔍 Sebep: Çok Sayıda Hatalı Giriş Denemesi\n⏰ Zaman: %s\nIP adresi 1 saat süreyle karantinaya alındı.",
 					jailedIP, location, nowStr,
 				)
 				securityStory := models.Story{
@@ -562,8 +562,8 @@ func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.Us
 		// 3. Hikaye Paylaş
 		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			caption := fmt.Sprintf(
-				"🛡️ GÜVENLİK ALARMI ⚠️\nİmkansız Seyahat Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Yeni Konum: %s\n🗺️ Önceki: %s\n⚡ Hız: %.0f km/s\n⏰ Zaman: %s\nFiziksel seyahat limitleri aşıldı.",
-				user.Username, currentIP, curLoc, prevLoc, speedKmH, nowStr,
+				"🛡️ GÜVENLİK ALARMI ⚠️\nİmkansız Seyahat Tespiti (Fiziksel Hız Sınırı)!\n👤 Kullanıcı: @%s\n🔍 Sebep: Fiziksel Hız Limiti Aşıldı (%.0f km/s)\n🌐 Yeni IP: %s\n📍 Yeni Konum: %s\n🗺️ Önceki: %s\n⚡ Hız: %.0f km/s\n⏰ Zaman: %s\nFiziksel seyahat limitleri aşıldı.",
+				user.Username, speedKmH, currentIP, curLoc, prevLoc, speedKmH, nowStr,
 			)
 			securityStory := models.Story{
 				UserID:          database.SecurityBotID,
@@ -620,9 +620,9 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 
 		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("⚠️ Bilinmeyen kullanıcı (@%s) ile yetkisiz giriş denemesi tespit edildi! (Konum: %s)", attemptedLogin, location)
+			alertMsg := fmt.Sprintf("⚠️ Yetkisiz Giriş Teşebbüsü (Kayıtsız Kullanıcı): @%s ile yetkisiz giriş denemesi tespit edildi! (Konum: %s)", attemptedLogin, location)
 			if eventType == "failed_password_attempt" {
-				alertMsg = fmt.Sprintf("⚠️ Kayıtlı kullanıcı (@%s) için hatalı şifre denemesi tespit edildi! (Konum: %s)", attemptedLogin, location)
+				alertMsg = fmt.Sprintf("⚠️ Şüpheli Giriş Engellendi (Hatalı Şifre): @%s için hatalı şifre denemesi tespit edildi! (Konum: %s)", attemptedLogin, location)
 			}
 
 			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
@@ -641,12 +641,12 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			nowStr := time.Now().Format("15:04:05")
 			caption := fmt.Sprintf(
-				"🛡️ GÜVENLİK ALARMI ⚠️\nYetkisiz Giriş Teşebbüsü!\n👤 Denenen: @%s\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nAura Tehdit Kalkanı devrede.",
+				"🛡️ GÜVENLİK ALARMI ⚠️\nYetkisiz Giriş Teşebbüsü (Kayıtsız Kullanıcı)!\n👤 Denenen: @%s\n🔍 Sebep: Kayıtsız Kullanıcı\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nAura Tehdit Kalkanı devrede.",
 				attemptedLogin, ip, location, deviceInfo, nowStr,
 			)
 			if eventType == "failed_password_attempt" {
 				caption = fmt.Sprintf(
-					"🛡️ GÜVENLİK ALARMI ⚠️\nŞüpheli Giriş Engellendi!\n👤 Kullanıcı: @%s\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nAura Tehdit Kalkanı devrede.",
+					"🛡️ GÜVENLİK ALARMI ⚠️\nŞüpheli Giriş Engellendi (Hatalı Şifre)!\n👤 Kullanıcı: @%s\n🔍 Sebep: Hatalı Şifre\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nAura Tehdit Kalkanı devrede.",
 					attemptedLogin, ip, location, deviceInfo, nowStr,
 				)
 			}
@@ -679,13 +679,13 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 			nowStr := time.Now().Format("15:04:05")
 			if eventType == "failed_password_attempt" {
 				chatMsg := fmt.Sprintf(
-					"🛡️ **AURA GÜVENLİK UYARISI**\n\n@%s hesabına az önce **hatalı bir şifre** ile başarısız giriş denemesi yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nAura Tehdit Kalkanı şüpheli giriş denemesini engelledi ve kayıt altına aldı.",
+					"🛡️ **AURA GÜVENLİK UYARISI: ŞÜPHELİ GİRİŞ ENGELLENDİ (HATALI ŞİFRE)**\n\n@%s hesabına az önce **hatalı bir şifre** ile başarısız giriş denemesi yapıldı.\n\n🔍 **Ayrıntı / Sebep:** Hatalı Şifre Girişi\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nAura Tehdit Kalkanı şüpheli giriş denemesini engelledi ve kayıt altına aldı.",
 					attemptedLogin, ip, location, deviceInfo, nowStr,
 				)
 				h.hub.SendSecurityNotificationMessage(nil, chatMsg)
 			} else if eventType == "unknown_user_attempt" {
 				chatMsg := fmt.Sprintf(
-					"🛡️ **AURA SİSTEM GÜVENLİK BİLGİLENDİRMESİ**\n\nSistemimize kayıtsız bir kullanıcı (@%s) ile yetkisiz giriş teşebbüsünde bulunuldu. Aura Tehdit Kalkanı şüpheli bağlantıyı engelledi ve kayıt altına aldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nTüm konuşmalarınız ve verileriniz güvendedir.",
+					"🛡️ **AURA SİSTEM GÜVENLİK BİLGİLENDİRMESİ: YETKİSİZ GİRİŞ (KAYITSIZ KULLANICI)**\n\nSistemimize kayıtsız bir kullanıcı (@%s) ile yetkisiz giriş teşebbüsünde bulunuldu.\n\n🔍 **Ayrıntı / Sebep:** Kayıtsız Kullanıcı Adı / E-posta\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nAura Tehdit Kalkanı şüpheli bağlantıyı engelledi ve kayıt altına aldı.",
 					attemptedLogin, ip, location, deviceInfo, nowStr,
 				)
 				h.hub.SendSecurityNotificationMessage(nil, chatMsg)
@@ -722,7 +722,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 
 		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla (banner)
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: @%s hesabında ikinci bir cihazdan giriş yapıldı! (Yeni Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
+			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Çoklu Oturum (İkinci Cihaz): @%s hesabında ikinci bir cihazdan giriş yapıldı! (Yeni Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
 			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
 				EventType:      eventType,
 				AttemptedLogin: user.Username,
@@ -738,7 +738,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 		// 3. Hikaye Paylaş (Aura Güvenlik)
 		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			caption := fmt.Sprintf(
-				"🛡️ GÜVENLİK ALARMI ⚠️\nÇoklu Oturum Tespiti!\n👤 Kullanıcı: @%s\n🌐 Yeni IP: %s\n📍 Konum: %s\n📱 Yeni Cihaz: %s\n⏰ Zaman: %s\nAynı anda iki oturum açıldı (ikinci cihaz).",
+				"🛡️ GÜVENLİK ALARMI ⚠️\nÇoklu Oturum Tespiti (İkinci Cihaz)!\n👤 Kullanıcı: @%s\n🔍 Sebep: İkinci Cihazdan Giriş\n🌐 Yeni IP: %s\n📍 Konum: %s\n📱 Yeni Cihaz: %s\n⏰ Zaman: %s\nAynı anda iki oturum açıldı (ikinci cihaz).",
 				user.Username, newIP, location, newDeviceInfo, nowStr,
 			)
 
@@ -797,7 +797,7 @@ func (h *AuthHandler) handlePanicBreach(c *fiber.Ctx, user *models.User, current
 
 		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla (banner)
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("🚨 ACİL DURUM: @%s için Zorlama / Panik Kodu tetiklendi! Güvenlik protokolü devrede.", user.Username)
+			alertMsg := fmt.Sprintf("🚨 Panik / Zorlama Kodu Tetiklendi (Acil Durum): @%s için panik protokolü devrede!", user.Username)
 			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
 				EventType:      eventType,
 				AttemptedLogin: user.Username,
@@ -813,7 +813,7 @@ func (h *AuthHandler) handlePanicBreach(c *fiber.Ctx, user *models.User, current
 		// 3. Aura Güvenlik Hikayesi Paylaş (Herkese Açık)
 		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
 			caption := fmt.Sprintf(
-				"🚨 ACİL DURUM PROTOKOLÜ ⚠️\nZorlama / Panik Kodu Tetiklendi!\n👤 Kullanıcı: @%s\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nPanik şifresi devreye sokuldu. Sistem sahte oturuma yönlendirildi.",
+				"🚨 ACİL DURUM PROTOKOLÜ ⚠️\nPanik / Zorlama Kodu Tetiklendi (Acil Durum)!\n👤 Kullanıcı: @%s\n🔍 Sebep: Panik Şifresi ile Giriş\n🌐 IP: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\nPanik şifresi devreye sokuldu. Sistem sahte oturuma yönlendirildi.",
 				user.Username, ip, location, deviceInfo, nowStr,
 			)
 
