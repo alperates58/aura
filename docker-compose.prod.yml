@@ -1,4 +1,4 @@
-﻿services:
+services:
   # 1. PostgreSQL 16
   postgres:
     image: postgres:16-alpine

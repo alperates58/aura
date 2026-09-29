@@ -1,4 +1,4 @@
-﻿package push
+package push
 
 import (
 	"encoding/json"

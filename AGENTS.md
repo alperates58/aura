@@ -1,4 +1,4 @@
-﻿# Aura - Yeni Nesil Gerçek Zamanlı Özel Sohbet Platformu
+# Aura - Yeni Nesil Gerçek Zamanlı Özel Sohbet Platformu
 ## Sistem Mimarisi, Protokol Spesifikasyonu ve Geliştirici Kılavuzu (AGENTS.md)
 
 > **BU BELGE HAKKINDA:**  

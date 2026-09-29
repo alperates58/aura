@@ -1,4 +1,4 @@
-﻿# Aura - Proje Geliştirme Fazları ve Görev Rehberi (FAZLAR.md)
+# Aura - Proje Geliştirme Fazları ve Görev Rehberi (FAZLAR.md)
 
 Bu doküman, **Aura** projesinin sıfırdan prodüksiyona (Coolify & Docker) kadar tüm geliştirme adımlarını, faz bazında detaylı görev listelerini, oluşturulacak kesin dosya yollarını ve test kriterlerini tanımlar.
 
