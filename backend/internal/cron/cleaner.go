@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"aura/internal/database"
 	"aura/internal/storage"
 	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
@@ -38,6 +39,7 @@ func (c *ExpiredMessagesCleaner) Start(ctx context.Context, interval time.Durati
 				return
 			case <-ticker.C:
 				c.cleanupExpiredMessages(ctx)
+				c.archiveExpiredSecurityStories(ctx)
 				c.cleanupExpiredStories(ctx)
 			}
 		}
@@ -152,4 +154,76 @@ func (c *ExpiredMessagesCleaner) cleanupExpiredStories(ctx context.Context) {
 		}
 	}
 }
+
+// archiveExpiredSecurityStories 24 saati dolan Aura Güvenlik hikayelerini tarih başlığıyla ("29.09.2026") öne çıkanlar albümüne arşivler.
+func (c *ExpiredMessagesCleaner) archiveExpiredSecurityStories(ctx context.Context) {
+	query := `
+		SELECT s.id, s.created_at
+		FROM stories s
+		WHERE s.user_id = $1
+		  AND s.expires_at <= NOW()
+		  AND NOT EXISTS (
+		      SELECT 1 FROM story_highlight_items shi WHERE shi.story_id = s.id
+		  )
+		ORDER BY s.created_at ASC
+		LIMIT 100
+	`
+	rows, err := c.db.QueryContext(ctx, query, database.SecurityBotID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type SecStory struct {
+		ID        uuid.UUID
+		CreatedAt time.Time
+	}
+	var stories []SecStory
+	for rows.Next() {
+		var s SecStory
+		if err := rows.Scan(&s.ID, &s.CreatedAt); err == nil {
+			stories = append(stories, s)
+		}
+	}
+
+	if len(stories) == 0 {
+		return
+	}
+
+	for _, s := range stories {
+		// Olayın gerçekleştiği tarih başlığı (Örn: "29.09.2026")
+		dateTitle := s.CreatedAt.In(time.Local).Format("02.01.2006")
+
+		// 1. Bu tarih için Aura Güvenlik öne çıkan albümü var mı?
+		var highlightID uuid.UUID
+		findHlQuery := `SELECT id FROM story_highlights WHERE user_id = $1 AND title = $2 LIMIT 1`
+		err := c.db.QueryRowContext(ctx, findHlQuery, database.SecurityBotID, dateTitle).Scan(&highlightID)
+		if err != nil {
+			// Yoksa tarih başlığıyla yeni bir highlight oluştur
+			createHlQuery := `
+				INSERT INTO story_highlights (id, user_id, title, cover_url, created_at, updated_at)
+				VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+				RETURNING id
+			`
+			coverURL := "https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b"
+			err = c.db.QueryRowContext(ctx, createHlQuery, database.SecurityBotID, dateTitle, coverURL).Scan(&highlightID)
+			if err != nil {
+				log.Printf("⚠️ [Cleaner] Güvenlik öne çıkan albümü oluşturulamadı (%s): %v", dateTitle, err)
+				continue
+			}
+		}
+
+		// 2. Hikayeyi bu albüme ekle
+		insertItemQuery := `
+			INSERT INTO story_highlight_items (highlight_id, story_id, position, created_at)
+			VALUES ($1, $2, (SELECT COALESCE(MAX(position), 0) + 1 FROM story_highlight_items WHERE highlight_id = $1), NOW())
+			ON CONFLICT (highlight_id, story_id) DO NOTHING
+		`
+		_, _ = c.db.ExecContext(ctx, insertItemQuery, highlightID, s.ID)
+		_, _ = c.db.ExecContext(ctx, "UPDATE story_highlights SET updated_at = NOW() WHERE id = $1", highlightID)
+
+		log.Printf("🛡️ [Cleaner] Aura Güvenlik hikayesi (%s) profile arşivlendi: Highlight [%s]", s.ID, dateTitle)
+	}
+}
+
 

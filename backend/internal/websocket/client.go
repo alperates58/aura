@@ -19,24 +19,28 @@ const (
 )
 
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	send     chan []byte
-	userID   uuid.UUID
-	username string
+	hub          *Hub
+	conn         *websocket.Conn
+	send         chan []byte
+	userID       uuid.UUID
+	username     string
+	sessionID    string
+	tokenVersion int
 
 	// Rate limiting / Flood control
 	lastWindowStart time.Time
 	msgsInWindow    int
 }
 
-func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username string) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessionID string, tokenVersion int) *Client {
 	return &Client{
-		hub:      hub,
-		conn:     conn,
-		send:     make(chan []byte, 256),
-		userID:   userID,
-		username: username,
+		hub:          hub,
+		conn:         conn,
+		send:         make(chan []byte, 256),
+		userID:       userID,
+		username:     username,
+		sessionID:    sessionID,
+		tokenVersion: tokenVersion,
 	}
 }
 

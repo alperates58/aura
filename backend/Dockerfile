@@ -21,7 +21,11 @@ RUN go mod tidy && \
 # 2. Aşama: Üretim Çalışma Zamanı (Production Runtime)
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata curl ffmpeg
+RUN apk add --no-cache ca-certificates tzdata curl ffmpeg && \
+    cp /usr/share/zoneinfo/Europe/Istanbul /etc/localtime && \
+    echo "Europe/Istanbul" > /etc/timezone
+
+ENV TZ=Europe/Istanbul
 
 WORKDIR /app
 

@@ -169,13 +169,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   killSessions: async () => {
-    await api.post("/users/kill-sessions");
+    const res = await api.post<{ message: string; token_version: number; access_token?: string }>("/users/kill-sessions");
     const currentUser = get().user;
     if (currentUser) {
       set({
         user: {
           ...currentUser,
-          token_version: (currentUser.token_version || 1) + 1,
+          token_version: res.data?.token_version || ((currentUser.token_version || 1) + 1),
         },
       });
     }

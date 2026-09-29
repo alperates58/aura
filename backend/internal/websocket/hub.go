@@ -150,28 +150,39 @@ func (h *Hub) DisconnectUser(userID uuid.UUID) {
 	}
 }
 
-// TerminateOtherSessions kullanıcının tüm açık oturumlarına uyarı gönderip bağlantılarını sonlandırır.
-func (h *Hub) TerminateOtherSessions(userID uuid.UUID) {
+// TerminateOtherSessions kullanıcının diğer açık oturumlarına uyarı gönderip bağlantılarını sonlandırır.
+// excludeSessionID: İşlemi başlatan aktif cihazın oturum kimliği (bu cihaz kapatılmaz ve tokenVersion'ı güncellenir).
+func (h *Hub) TerminateOtherSessions(userID uuid.UUID, excludeSessionID string, newVer int) {
 	h.mu.RLock()
 	clients, ok := h.userClients[userID]
 	var toClose []*Client
 	if ok && len(clients) > 0 {
 		for c := range clients {
-			toClose = append(toClose, c)
+			if excludeSessionID != "" && c.sessionID == excludeSessionID {
+				// İşlemi yapan cihaz açık kalır, tokenVersion değeri yeni versiyona eşitlenir
+				c.tokenVersion = newVer
+			} else {
+				toClose = append(toClose, c)
+			}
 		}
 	}
 	h.mu.RUnlock()
 
 	termMsg, _ := NewWSMessage("session_terminated", map[string]string{
+		"reason":  "remote_kill",
 		"message": "Bu oturum başka bir cihazdan uzaktan sonlandırıldı.",
 	})
 
 	for _, c := range toClose {
+		client := c
 		select {
-		case c.send <- termMsg:
+		case client.send <- termMsg:
 		default:
 		}
-		_ = c.conn.Close()
+		// Paketin istemciye TCP üzerinden basılabilmesi için 200ms mühlet tanı
+		time.AfterFunc(200*time.Millisecond, func() {
+			_ = client.conn.Close()
+		})
 	}
 }
 

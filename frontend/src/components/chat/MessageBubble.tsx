@@ -508,7 +508,7 @@ export default function MessageBubble({
         className={`relative flex items-end gap-1.5 ${
           isEditing
             ? "w-full max-w-[96%] sm:max-w-[85%] md:max-w-[75%] min-w-[280px]"
-            : "max-w-[92%] sm:max-w-[80%] md:max-w-[75%] lg:max-w-[65%] min-w-fit"
+            : "max-w-[88%] sm:max-w-[78%] md:max-w-[72%] lg:max-w-[65%] min-w-0 w-fit"
         } ${
           message.is_mine ? "flex-row-reverse" : "flex-row"
         }`}
@@ -573,7 +573,7 @@ export default function MessageBubble({
               : "var(--incoming-text, #f8fafc)",
           }}
           className={`relative px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl shadow-md text-sm transition-shadow duration-300 select-none ${
-            isEditing ? "w-full min-w-[280px]" : "max-w-full min-w-[80px]"
+            isEditing ? "w-full min-w-[280px]" : "max-w-full min-w-0 w-fit"
           } overflow-hidden break-words ${
             isSelected
               ? "ring-2 ring-indigo-500 shadow-indigo-500/20 shadow-lg scale-[1.01]"
@@ -600,7 +600,10 @@ export default function MessageBubble({
                   onJumpToMessage(targetId);
                 }
               }}
-              className={`mb-2 rounded-xl overflow-hidden flex w-full max-w-full cursor-pointer transition-all hover:opacity-95 active:scale-[0.99] select-none ${
+              style={{
+                maxWidth: "min(100%, 340px)",
+              }}
+              className={`mb-2 rounded-xl overflow-hidden flex w-full max-w-full min-w-0 cursor-pointer transition-all hover:opacity-95 active:scale-[0.99] select-none ${
                 message.is_mine
                   ? "bg-black/15 text-inherit border-l-2 border-current"
                   : "bg-slate-950/70 text-slate-200 border border-white/5"
@@ -616,9 +619,9 @@ export default function MessageBubble({
 
               {/* Alıntı Metin Alanı */}
               <div className="py-1.5 px-2.5 flex-1 min-w-0 overflow-hidden">
-                <div className="flex items-center justify-between gap-1 mb-0.5">
+                <div className="flex items-center justify-between gap-1 mb-0.5 min-w-0">
                   <span
-                    className={`font-bold text-[11px] truncate ${
+                    className={`font-bold text-[11px] truncate min-w-0 flex-1 ${
                       message.is_mine ? "text-inherit opacity-90" : "text-grupo-accent"
                     }`}
                   >
@@ -634,7 +637,7 @@ export default function MessageBubble({
                   </span>
                   <CornerUpLeft className="w-3 h-3 opacity-60 flex-shrink-0" />
                 </div>
-                <div className="text-[11px] opacity-85 truncate overflow-hidden text-ellipsis whitespace-nowrap block">
+                <div className="text-[11px] opacity-85 line-clamp-2 break-all overflow-hidden">
                   {targetRepliedMessage
                     ? targetRepliedMessage.message_type === "voice"
                       ? "🎤 Sesli Mesaj"

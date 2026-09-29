@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"aura/internal/database"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -89,7 +91,7 @@ func ValidateToken(tokenString string, secret string) (*JWTClaims, error) {
 	return nil, errors.New("geçersiz token")
 }
 
-func JWTMiddleware(jwtSecret string) fiber.Handler {
+func JWTMiddleware(jwtSecret string, rdb *redis.Client, userRepo *database.UserRepository) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// 1. Önce HttpOnly Çerezi kontrol et
 		tokenStr := c.Cookies("access_token")
@@ -112,6 +114,29 @@ func JWTMiddleware(jwtSecret string) fiber.Handler {
 		if err != nil || claims.IsRefresh {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Geçersiz veya süresi dolmuş oturum.",
+			})
+		}
+
+		// Token Version Kontrolü (Remote Kill Session desteği)
+		activeVer := 0
+		if rdb != nil {
+			val, err := rdb.Get(c.Context(), "user:"+claims.UserID.String()+":token_version").Int()
+			if err == nil {
+				activeVer = val
+			}
+		}
+		if activeVer == 0 && userRepo != nil {
+			u, err := userRepo.GetUserByID(c.Context(), claims.UserID)
+			if err == nil && u != nil {
+				activeVer = u.TokenVersion
+				if rdb != nil {
+					_ = rdb.Set(c.Context(), "user:"+claims.UserID.String()+":token_version", activeVer, 24*time.Hour).Err()
+				}
+			}
+		}
+		if activeVer > 0 && claims.TokenVersion < activeVer {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Oturumunuz başka bir cihazdan sonlandırıldı.",
 			})
 		}
 

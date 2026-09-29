@@ -30,7 +30,15 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
-	log.Printf("🚀 Aura Backend başlatılıyor... Ortam: %s, Port: %s", cfg.Environment, cfg.Port)
+
+	// Türkiye Zaman Dilimi Ayarı (Europe/Istanbul, UTC+3)
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	if err == nil {
+		time.Local = loc
+	} else {
+		time.Local = time.FixedZone("TRT", 3*3600)
+	}
+	log.Printf("🚀 Aura Backend başlatılıyor... Ortam: %s, Port: %s, Yerel Saat: %s", cfg.Environment, cfg.Port, time.Now().Format("2006-01-02 15:04:05 MST"))
 	transcoder.LogStatus()
 
 	// 1. PostgreSQL 16 Bağlantısı ve Migration
@@ -124,11 +132,11 @@ func main() {
 
 	// 7. Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)
-	userHandler := handlers.NewUserHandler(userRepo, storageService, presenceService, accessRepo, hub)
+	userHandler := handlers.NewUserHandler(cfg, userRepo, storageService, presenceService, accessRepo, hub, rdb)
 	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)
 	callHandler := handlers.NewCallHandler(callRepo, chatRepo, userRepo, livekitService, hub, rdb, settingsRepo)
-	wsHandler := handlers.NewWSHandler(cfg, hub)
+	wsHandler := handlers.NewWSHandler(cfg, hub, rdb, userRepo)
 	pushHandler := handlers.NewPushHandler(pushRepo, vapidService, userRepo)
 	adminHandler := handlers.NewAdminHandler(userRepo, settingsRepo, accessRepo, securityRepo, callRepo, storageService, livekitService, rdb, hub)
 	storyHandler := handlers.NewStoryHandler(storyRepo, userRepo, storageService, hub)
@@ -224,11 +232,14 @@ func main() {
 	auth.Post("/refresh", authHandler.Refresh)
 	auth.Post("/logout", authHandler.Logout)
 
+	// JWT Kimlik Doğrulama Middleware (Token Versiyonu ve Uzaktan Oturum Düşürme Korumalı)
+	jwtAuth := middleware.JWTMiddleware(cfg.JWTAccessSecret, rdb, userRepo)
+
 	// Korumalı Rotalar (JWT Korumalı)
-	authProtected := auth.Group("", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	authProtected := auth.Group("", jwtAuth)
 	authProtected.Get("/me", authHandler.Me)
 
-	users := v1.Group("/users", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	users := v1.Group("/users", jwtAuth)
 	users.Put("/profile", userHandler.UpdateProfile)
 	users.Post("/avatar", userHandler.UploadAvatar)
 	users.Patch("/privacy", userHandler.UpdatePrivacy)
@@ -243,10 +254,10 @@ func main() {
 
 	// Sohbet ve Mesajlaşma Rotaları
 	v1.Get("/media/file/:bucket/*", mediaHandler.GetMediaFile)
-	v1.Post("/media/upload", middleware.JWTMiddleware(cfg.JWTAccessSecret), mediaLimiter, mediaHandler.UploadMedia)
-	v1.Post("/media/link-preview", middleware.JWTMiddleware(cfg.JWTAccessSecret), mediaHandler.GetLinkPreview)
+	v1.Post("/media/upload", jwtAuth, mediaLimiter, mediaHandler.UploadMedia)
+	v1.Post("/media/link-preview", jwtAuth, mediaHandler.GetLinkPreview)
 
-	conversations := v1.Group("/conversations", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	conversations := v1.Group("/conversations", jwtAuth)
 	conversations.Post("/", chatHandler.StartConversation)
 	conversations.Get("/", chatHandler.GetConversations)
 	conversations.Get("/:id/messages", chatHandler.GetMessages)
@@ -257,7 +268,7 @@ func main() {
 	conversations.Delete("/:id/clear", chatHandler.ClearHistory)
 	conversations.Delete("/:id", chatHandler.ClearHistory)
 
-	messages := v1.Group("/messages", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	messages := v1.Group("/messages", jwtAuth)
 	messages.Get("/starred", chatHandler.GetStarredMessages)
 	messages.Delete("/batch", chatHandler.DeleteMessagesBatch)
 	messages.Get("/:id/info", chatHandler.GetMessageInfo)
@@ -267,14 +278,14 @@ func main() {
 	messages.Post("/:id/star", chatHandler.ToggleStar)
 
 	// WebRTC Sesli & Görüntülü Arama Rotaları (JWT Korumalı)
-	calls := v1.Group("/calls", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	calls := v1.Group("/calls", jwtAuth)
 	calls.Post("/initiate", callHandler.InitiateCall)
 	calls.Post("/accept", callHandler.AcceptCall)
 	calls.Post("/reject", callHandler.RejectCall)
 	calls.Post("/end", callHandler.EndCall)
 
 	// 24 Saatlik Hikaye / Durum Rotaları (WhatsApp & Instagram Modu)
-	stories := v1.Group("/stories", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	stories := v1.Group("/stories", jwtAuth)
 	stories.Get("/", storyHandler.GetActiveStories)
 	stories.Get("/youtube-info", storyHandler.GetYouTubeInfo)
 	stories.Post("/", storyLimiter, storyHandler.CreateStory)
@@ -295,13 +306,13 @@ func main() {
 
 	// Web Push Bildirim Rotaları
 	v1.Get("/notifications/vapid-key", pushHandler.GetVapidKey)
-	notifications := v1.Group("/notifications", middleware.JWTMiddleware(cfg.JWTAccessSecret))
+	notifications := v1.Group("/notifications", jwtAuth)
 	notifications.Post("/subscribe", pushHandler.Subscribe)
 	notifications.Post("/unsubscribe", pushHandler.Unsubscribe)
 	notifications.Post("/test", pushHandler.TestNotification)
 
 	// Yönetim Paneli ve Sistem Parametreleri Rotaları (Yalnızca Admin)
-	admin := v1.Group("/admin", middleware.JWTMiddleware(cfg.JWTAccessSecret), adminHandler.RequireAdmin)
+	admin := v1.Group("/admin", jwtAuth, adminHandler.RequireAdmin)
 	admin.Get("/settings", adminHandler.GetSettings)
 	admin.Put("/settings", adminHandler.UpdateSetting)
 	admin.Get("/users", adminHandler.GetUsers)

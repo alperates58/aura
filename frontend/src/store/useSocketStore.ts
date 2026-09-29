@@ -4,6 +4,7 @@ import { useAuthStore } from "./useAuthStore";
 import { soundEffects } from "@/lib/sounds";
 import { notificationManager } from "@/lib/notifications";
 import { triggerReactionConfetti } from "@/lib/confetti";
+import { getOrCreateSessionId } from "@/lib/api";
 
 interface QueuedAction {
   id: string;
@@ -130,7 +131,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     if (!wsUrl) {
       wsUrl = "ws://localhost:8080/ws";
     }
-    const url = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
+    const sessionId = getOrCreateSessionId();
+    const queryParams: string[] = [];
+    if (token) queryParams.push(`token=${encodeURIComponent(token)}`);
+    if (sessionId) queryParams.push(`session_id=${encodeURIComponent(sessionId)}`);
+    const queryString = queryParams.length > 0 ? (wsUrl.includes("?") ? "&" : "?") + queryParams.join("&") : "";
+    const url = `${wsUrl}${queryString}`;
 
     if (activeWs) {
       try {
@@ -394,6 +400,24 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               import("./useStoryStore").then(({ useStoryStore }) => {
                 useStoryStore.getState().loadStories();
               });
+              break;
+            }
+
+            case "session_terminated": {
+              console.warn("🛑 [Aura Security] Oturum başka bir cihazdan sonlandırıldı.");
+              set({ isManualDisconnect: true, isConnected: false });
+              if (activeWs) {
+                try {
+                  activeWs.onclose = null;
+                  activeWs.close();
+                } catch (e) {}
+                activeWs = null;
+              }
+              useAuthStore.getState().logout();
+              if (typeof window !== "undefined") {
+                alert("Bu cihazdaki oturumunuz başka bir cihazdan uzaktan kapatıldı.");
+                window.location.href = "/login";
+              }
               break;
             }
 

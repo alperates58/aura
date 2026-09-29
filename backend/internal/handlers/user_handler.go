@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
+	"aura/internal/config"
 	"aura/internal/database"
 	"aura/internal/middleware"
 	"aura/internal/models"
@@ -12,30 +15,65 @@ import (
 	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type UserHandler struct {
+	cfg             config.Config
 	userRepo        *database.UserRepository
 	storage         *storage.StorageService
 	presenceService *auraredis.PresenceService
 	accessRepo      *database.AccessRepository
 	hub             *auraws.Hub
+	rdb             *redis.Client
 }
 
 func NewUserHandler(
+	cfg config.Config,
 	userRepo *database.UserRepository,
 	storage *storage.StorageService,
 	presenceService *auraredis.PresenceService,
 	accessRepo *database.AccessRepository,
 	hub *auraws.Hub,
+	rdb *redis.Client,
 ) *UserHandler {
 	return &UserHandler{
+		cfg:             cfg,
 		userRepo:        userRepo,
 		storage:         storage,
 		presenceService: presenceService,
 		accessRepo:      accessRepo,
 		hub:             hub,
+		rdb:             rdb,
 	}
+}
+
+func (h *UserHandler) setAuthCookies(c *fiber.Ctx, accessToken, refreshToken string) {
+	isSecure := h.cfg.Environment == "production"
+	cookiePath := h.cfg.AppBasePath
+	if cookiePath == "" {
+		cookiePath = "/"
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		Expires:  time.Now().Add(time.Duration(h.cfg.JWTAccessExpiryMin) * time.Minute),
+		HTTPOnly: true,
+		Secure:   isSecure,
+		SameSite: "Lax",
+		Path:     cookiePath,
+	})
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Expires:  time.Now().Add(time.Duration(h.cfg.JWTRefreshExpiryDays) * 24 * time.Hour),
+		HTTPOnly: true,
+		Secure:   isSecure,
+		SameSite: "Lax",
+		Path:     cookiePath,
+	})
 }
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
@@ -281,6 +319,14 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 
 func (h *UserHandler) KillSessions(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
+	username, _ := c.Locals("username").(string)
+	if username == "" {
+		if u, err := h.userRepo.GetUserByID(c.Context(), userID); err == nil && u != nil {
+			username = u.Username
+		}
+	}
+
+	excludeSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 
 	newVer, err := h.userRepo.IncrementTokenVersion(c.Context(), userID)
 	if err != nil {
@@ -289,13 +335,42 @@ func (h *UserHandler) KillSessions(c *fiber.Ctx) error {
 		})
 	}
 
+	// Redis önbelleğindeki token_version değerini güncelle
+	if h.rdb != nil {
+		_ = h.rdb.Set(c.Context(), "user:"+userID.String()+":token_version", newVer, 24*time.Hour).Err()
+	}
+
+	// İşlemi yapan aktif cihaza yeni çerezleri ver (böylece mevcut cihaz düşmez)
+	newAccessToken, err := middleware.GenerateCustomAccessToken(userID, username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, newVer, false)
+	if err == nil {
+		newRefreshToken, err := middleware.GenerateCustomRefreshToken(userID, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays, newVer, false)
+		if err == nil {
+			h.setAuthCookies(c, newAccessToken, newRefreshToken)
+		}
+	}
+
+	// Diğer tüm cihazların bağlantısını uzaktan sonlandır
 	if h.hub != nil {
-		h.hub.TerminateOtherSessions(userID)
+		h.hub.TerminateOtherSessions(userID, excludeSessionID, newVer)
+
+		// Güvenlik botu tüm kullanıcılara mesaj atsın!
+		nowStr := time.Now().Format("15:04:05")
+		chatMsg := fmt.Sprintf(
+			"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s kullanıcısı diğer tüm aktif cihaz ve oturumlarını tek tıkla uzaktan sonlandırdı.\n\n🌐 **İşlem IP:** %s\n⏰ **Zaman:** %s\n\nYetkisiz cihazların erişimi anında kesildi.",
+			username, c.IP(), nowStr,
+		)
+		h.hub.SendSecurityNotificationMessage(nil, chatMsg)
+	}
+
+	// Giriş loglarına kaydet
+	if h.accessRepo != nil {
+		_ = h.accessRepo.LogAccess(c.Context(), userID, c.IP(), c.Get("User-Agent"))
 	}
 
 	return c.JSON(fiber.Map{
 		"message":       "Tüm diğer cihaz ve oturumlar başarıyla sonlandırıldı.",
 		"token_version": newVer,
+		"access_token":  newAccessToken,
 	})
 }
 

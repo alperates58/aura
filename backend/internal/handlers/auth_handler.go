@@ -585,13 +585,13 @@ func (h *AuthHandler) handleImpossibleTravelBreach(c *fiber.Ctx, user *models.Us
 			}
 		}
 
-		// 4. Kullanıcıya Sohbet Mesajı
+		// 4. Kullanıcıya Sohbet Mesajı (Tüm Kullanıcılara İletilir)
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🛡️ **AURA GÜVENLİK UYARISI: İMKANSIZ SEYAHAT**\n\nHesabınıza **fiziksel olarak imkansız** bir hız ve mesafeden giriş yapıldı!\n\n📍 **Yeni Konum:** %s (IP: %s)\n🗺️ **Önceki Konum:** %s\n⚡ **Hesaplanan Hız:** %.0f km/saat\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nBu işlem bir VPN kullanımı değilse, hesabınız başka bir ülkeden ele geçirilmiş olabilir. Güvenliğiniz için lütfen profilinizden **Tüm Diğer Oturumları Kapat** seçeneğini kullanın ve şifrenizi yenileyin.",
-				curLoc, currentIP, prevLoc, speedKmH, currentDeviceInfo, nowStr,
+				"🛡️ **AURA GÜVENLİK UYARISI: İMKANSIZ SEYAHAT**\n\n@%s hesabına **fiziksel olarak imkansız** bir hız ve mesafeden giriş yapıldı!\n\n📍 **Yeni Konum:** %s (IP: %s)\n🗺️ **Önceki Konum:** %s\n⚡ **Hesaplanan Hız:** %.0f km/saat\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nBu işlem bir VPN kullanımı değilse, hesap ele geçirilmiş olabilir. Aura Tehdit Kalkanı sistemi 7/24 devrededir.",
+				user.Username, curLoc, currentIP, prevLoc, speedKmH, currentDeviceInfo, nowStr,
 			)
-			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+			h.hub.SendSecurityNotificationMessage(nil, chatMsg)
 		}
 	}()
 }
@@ -674,17 +674,15 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 			}
 		}
 
-		// 4. Sitedeki Kullanıcılara Doğrudan Güvenlik Mesajı Gönder
+		// 4. Sitedeki Tüm Kullanıcılara Doğrudan Güvenlik Mesajı Gönder
 		if h.hub != nil {
 			nowStr := time.Now().Format("15:04:05")
-			if eventType == "failed_password_attempt" && h.userRepo != nil {
-				if targetUser, err := h.userRepo.GetUserByUsername(ctx, attemptedLogin); err == nil && targetUser != nil {
-					chatMsg := fmt.Sprintf(
-						"🛡️ **AURA GÜVENLİK UYARISI**\n\nHesabınıza az önce **hatalı bir şifre** ile başarısız giriş denemesi yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nBu denemeyi siz gerçekleştirmediyseniz, hesabınızı korumak için lütfen şifrenizi derhal güncelleyin.",
-						ip, location, deviceInfo, nowStr,
-					)
-					h.hub.SendSecurityNotificationMessage(&targetUser.ID, chatMsg)
-				}
+			if eventType == "failed_password_attempt" {
+				chatMsg := fmt.Sprintf(
+					"🛡️ **AURA GÜVENLİK UYARISI**\n\n@%s hesabına az önce **hatalı bir şifre** ile başarısız giriş denemesi yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nAura Tehdit Kalkanı şüpheli giriş denemesini engelledi ve kayıt altına aldı.",
+					attemptedLogin, ip, location, deviceInfo, nowStr,
+				)
+				h.hub.SendSecurityNotificationMessage(nil, chatMsg)
 			} else if eventType == "unknown_user_attempt" {
 				chatMsg := fmt.Sprintf(
 					"🛡️ **AURA SİSTEM GÜVENLİK BİLGİLENDİRMESİ**\n\nSistemimize kayıtsız bir kullanıcı (@%s) ile yetkisiz giriş teşebbüsünde bulunuldu. Aura Tehdit Kalkanı şüpheli bağlantıyı engelledi ve kayıt altına aldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n\nTüm konuşmalarınız ve verileriniz güvendedir.",
@@ -769,13 +767,13 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 			}
 		}
 
-		// 4. Kullanıcıya Aura Güvenlik Botundan Doğrudan Mesaj Gönder!
+		// 4. Sitedeki Tüm Kullanıcılara Aura Güvenlik Botundan Doğrudan Mesaj Gönder!
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\nHesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Oturum:** %s\n\nBu işlemi siz gerçekleştirmediyseniz, hesabınız ele geçirilmiş olabilir. Lütfen derhal hesap şifrenizi güncelleyin.",
-				newDeviceInfo, newIP, location, nowStr, prevDevice,
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s hesabında eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Oturum:** %s\n\nAura Tehdit Kalkanı çoklu oturumu doğruladı ve güvenlik bildirimini yayınladı.",
+				user.Username, newDeviceInfo, newIP, location, nowStr, prevDevice,
 			)
-			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+			h.hub.SendSecurityNotificationMessage(nil, chatMsg)
 		}
 	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess)
 }
@@ -844,13 +842,13 @@ func (h *AuthHandler) handlePanicBreach(c *fiber.Ctx, user *models.User, current
 			}
 		}
 
-		// 4. Aura Güvenlik Botundan Kullanıcıya Sohbet Mesajı
+		// 4. Sitedeki Tüm Kullanıcılara Aura Güvenlik Botundan Sohbet Mesajı
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🚨 **AURA ACİL DURUM PROTOKOLÜ: PANİK KODU AKTİF**\n\nHesabınızda önceden tanımlanan **Zorlama / Panik Şifresi** ile giriş yapıldı.\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n🔗 **Yönlendirme:** %s\n\nSistem tüm gizli sohbetleri gizledi veya sahte yönlendirmeyi başlattı. Verileriniz koruma altındadır.",
-				ip, location, deviceInfo, nowStr, redirect,
+				"🚨 **AURA ACİL DURUM PROTOKOLÜ: PANİK KODU AKTİF**\n\n@%s hesabında önceden tanımlanan **Zorlama / Panik Şifresi** ile acil durum girişi yapıldı!\n\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **Zaman:** %s\n🔗 **Yönlendirme:** %s\n\nSistem tüm gizli sohbetleri gizledi veya sahte yönlendirmeyi başlattı. Veriler koruma altındadır.",
+				user.Username, ip, location, deviceInfo, nowStr, redirect,
 			)
-			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
+			h.hub.SendSecurityNotificationMessage(nil, chatMsg)
 		}
 	}(user, currentIP, currentUA, currentDeviceInfo, redirectURL)
 }

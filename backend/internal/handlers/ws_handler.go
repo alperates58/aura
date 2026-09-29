@@ -3,24 +3,31 @@ package handlers
 import (
 	"net/url"
 	"strings"
+	"time"
 
 	"aura/internal/config"
+	"aura/internal/database"
 	"aura/internal/middleware"
 	auraws "aura/internal/websocket"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type WSHandler struct {
-	cfg config.Config
-	hub *auraws.Hub
+	cfg      config.Config
+	hub      *auraws.Hub
+	rdb      *redis.Client
+	userRepo *database.UserRepository
 }
 
-func NewWSHandler(cfg config.Config, hub *auraws.Hub) *WSHandler {
+func NewWSHandler(cfg config.Config, hub *auraws.Hub, rdb *redis.Client, userRepo *database.UserRepository) *WSHandler {
 	return &WSHandler{
-		cfg: cfg,
-		hub: hub,
+		cfg:      cfg,
+		hub:      hub,
+		rdb:      rdb,
+		userRepo: userRepo,
 	}
 }
 
@@ -118,8 +125,36 @@ func (h *WSHandler) UpgradeMiddleware() fiber.Handler {
 				return fiber.ErrUnauthorized
 			}
 
+			// Token Version Kontrolü (Remote Kill Session desteği)
+			activeVer := 0
+			if h.rdb != nil {
+				val, err := h.rdb.Get(c.Context(), "user:"+claims.UserID.String()+":token_version").Int()
+				if err == nil {
+					activeVer = val
+				}
+			}
+			if activeVer == 0 && h.userRepo != nil {
+				u, err := h.userRepo.GetUserByID(c.Context(), claims.UserID)
+				if err == nil && u != nil {
+					activeVer = u.TokenVersion
+					if h.rdb != nil {
+						_ = h.rdb.Set(c.Context(), "user:"+claims.UserID.String()+":token_version", activeVer, 24*time.Hour).Err()
+					}
+				}
+			}
+			if activeVer > 0 && claims.TokenVersion < activeVer {
+				return fiber.ErrUnauthorized
+			}
+
+			sessionID := strings.TrimSpace(c.Query("session_id"))
+			if sessionID == "" {
+				sessionID = strings.TrimSpace(c.Get("X-Session-ID"))
+			}
+
 			c.Locals("user_id", claims.UserID)
 			c.Locals("username", claims.Username)
+			c.Locals("token_version", claims.TokenVersion)
+			c.Locals("session_id", sessionID)
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
@@ -131,8 +166,10 @@ func (h *WSHandler) HandleConnection() fiber.Handler {
 	return websocket.New(func(conn *websocket.Conn) {
 		userID := conn.Locals("user_id").(uuid.UUID)
 		username := conn.Locals("username").(string)
+		tokenVersion, _ := conn.Locals("token_version").(int)
+		sessionID, _ := conn.Locals("session_id").(string)
 
-		client := auraws.NewClient(h.hub, conn, userID, username)
+		client := auraws.NewClient(h.hub, conn, userID, username, sessionID, tokenVersion)
 		h.hub.RegisterClient(client)
 
 		go client.WritePump()

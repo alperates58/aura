@@ -101,12 +101,35 @@ export const resolveMediaUrl = (url?: string): string => {
   return url;
 };
 
+export const getOrCreateSessionId = (): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    let sid = localStorage.getItem("aura_device_session_id");
+    if (!sid) {
+      sid = "dev_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
+      localStorage.setItem("aura_device_session_id", sid);
+    }
+    return sid;
+  } catch {
+    return "";
+  }
+};
+
 export const api = axios.create({
   baseURL: getApiBaseUrl(),
   withCredentials: true, // HttpOnly cookie'leri otomatik taşır
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+// Tüm API isteklerine tarayıcı/sekme bazlı benzersiz Oturum Kimliği ekle
+api.interceptors.request.use((config) => {
+  const sid = getOrCreateSessionId();
+  if (sid) {
+    config.headers["X-Session-ID"] = sid;
+  }
+  return config;
 });
 
 // Otomatik 401 kontrolü ve token yenileme
@@ -125,7 +148,11 @@ api.interceptors.response.use(
       try {
         await api.post("/auth/refresh");
         return api(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
+        // Oturum başka bir cihazdan düşürülmüşse kullanıcıyı çıkışa zorla
+        if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+          window.location.href = "/login";
+        }
         return Promise.reject(refreshError);
       }
     }
