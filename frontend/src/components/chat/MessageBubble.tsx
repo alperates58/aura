@@ -153,13 +153,16 @@ export default function MessageBubble({
   }, [editingMessageId, message.id, message.content]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
   const resolvedMediaUrl = resolveMediaUrl(message.media_url);
 
-  // Menü dışına tıklanınca, kaydırılınca veya pencere boyutu değişince kapat
+  // Menü ve mobil eylem butonları dışına tıklanınca, kaydırılınca veya pencere boyutu değişince kapat
   useEffect(() => {
-    if (!showMenu) return;
+    if (!showMenu && !isMobileActionsOpen && !showReactions) return;
 
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
@@ -171,10 +174,20 @@ export default function MessageBubble({
       ) {
         setShowMenu(false);
       }
+      if (
+        bubbleRef.current &&
+        !bubbleRef.current.contains(target) &&
+        actionsRef.current &&
+        !actionsRef.current.contains(target)
+      ) {
+        setIsMobileActionsOpen(false);
+        setShowReactions(false);
+      }
     };
 
     const handleScrollOrResize = () => {
       setShowMenu(false);
+      setIsMobileActionsOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -188,7 +201,7 @@ export default function MessageBubble({
       window.removeEventListener("scroll", handleScrollOrResize, true);
       window.removeEventListener("resize", handleScrollOrResize);
     };
-  }, [showMenu]);
+  }, [showMenu, isMobileActionsOpen, showReactions]);
 
   const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -482,7 +495,10 @@ export default function MessageBubble({
       {showReactions && (
         <ReactionPicker
           messageId={message.id}
-          onSelect={() => setShowReactions(false)}
+          onSelect={() => {
+            setShowReactions(false);
+            setIsMobileActionsOpen(false);
+          }}
           className={`absolute -top-10 ${message.is_mine ? "right-2" : "left-2"}`}
         />
       )}
@@ -531,10 +547,18 @@ export default function MessageBubble({
 
         {/* Balon İçeriği */}
         <div
+          ref={bubbleRef}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onClick={isSelectionMode && !message.is_deleted_for_all ? () => toggleSelectMessage(message.id) : undefined}
+          onClick={(e) => {
+            if (isSelectionMode && !message.is_deleted_for_all) {
+              toggleSelectMessage(message.id);
+              return;
+            }
+            // Mobilde mesaja tıklandığında hızlı eylem butonlarını aç/kapat
+            setIsMobileActionsOpen((prev) => !prev);
+          }}
           onDoubleClick={() => setReplyingTo(message)}
           onContextMenu={handleContextMenu}
           style={{
@@ -953,15 +977,17 @@ export default function MessageBubble({
         {/* Hover / Tıklama Eylem Butonları */}
         {!message.is_deleted_for_all && !isSelectionMode && (
           <div
-            className={`hidden sm:flex items-center gap-0.5 transition-all duration-150 flex-shrink-0 ${
-              showMenu || showReactions
+            ref={actionsRef}
+            className={`flex items-center gap-0.5 transition-all duration-150 flex-shrink-0 ${
+              showMenu || showReactions || isMobileActionsOpen
                 ? "opacity-100 scale-100 pointer-events-auto"
                 : "opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
             }`}
           >
             {/* Tepki Ver */}
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setShowMenu(false);
                 setShowReactions(!showReactions);
               }}
@@ -973,7 +999,11 @@ export default function MessageBubble({
 
             {/* Yanıtla */}
             <button
-              onClick={() => setReplyingTo(message)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setReplyingTo(message);
+                setIsMobileActionsOpen(false);
+              }}
               title="Yanıtla"
               className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -983,7 +1013,10 @@ export default function MessageBubble({
             {/* Daha Fazla Seçenek Menüsü */}
             <button
               ref={buttonRef}
-              onClick={handleToggleMenu}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleMenu(e);
+              }}
               title="Daha Fazla"
               className={`p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer ${
                 showMenu ? "text-white bg-slate-800" : ""
