@@ -244,11 +244,21 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 	req.PanicPassword = strings.TrimSpace(req.PanicPassword)
 	redirectURL := strings.TrimSpace(req.PanicRedirectURL)
 	if redirectURL == "" {
-		redirectURL = "https://www.google.com"
+		redirectURL = "https://zodiacrf.com"
+	} else {
+		if !strings.HasPrefix(redirectURL, "http://") && !strings.HasPrefix(redirectURL, "https://") {
+			redirectURL = "https://" + redirectURL
+		}
+		redirectURL = strings.Replace(redirectURL, "://www.zodiacrf.com", "://zodiacrf.com", 1)
 	}
 
-	if req.PanicPassword == "" {
-		// Panik şifresini ve loginini kaldır
+	currentUser, err := h.userRepo.GetUserByID(c.Context(), userID)
+	if err != nil || currentUser == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Kullanıcı bulunamadı."})
+	}
+
+	// 1. Panik modunu tamamen kaldırma isteği (Kodu Kaldır butonu hem login hem password boş yollar)
+	if req.PanicLogin == "" && req.PanicPassword == "" {
 		if err := h.userRepo.SetPanicPassword(c.Context(), userID, "", "", redirectURL); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Panik şifresi kaldırılamadı.",
@@ -258,27 +268,26 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 			"message":            "Panik şifresi başarıyla devre dışı bırakıldı.",
 			"has_panic_password": false,
 			"panic_login":        "",
+			"panic_redirect_url": redirectURL,
 		})
 	}
 
-	if req.PanicLogin == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Lütfen panik durumunda kullanılacak sahte kullanıcı adı veya e-posta belirleyin.",
-		})
-	}
-
-	if len(req.PanicPassword) < 6 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Panik şifresi en az 6 karakter olmalıdır.",
-		})
-	}
-
-	// Normal şifre veya kullanıcı adı/email ile aynı olup olmadığını denetle
-	currentUser, err := h.userRepo.GetUserByID(c.Context(), userID)
-	if err == nil && currentUser != nil {
-		if strings.EqualFold(req.PanicLogin, currentUser.Username) || strings.EqualFold(req.PanicLogin, currentUser.Email) {
+	// 2. Şifre alanı boş bırakılmışsa:
+	var hash string
+	if req.PanicPassword == "" {
+		// Kullanıcının zaten aktif bir panik şifresi varsa, ESKİ ŞİFREYİ KORU
+		if currentUser.PanicPasswordHash != "" {
+			hash = currentUser.PanicPasswordHash
+		} else {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Panik giriş adı gerçek kullanıcı adınız veya e-postanızla aynı olamaz. Lütfen sahte bir kimlik belirleyin.",
+				"error": "İlk kez panik kodu kurarken bir panik şifresi belirlemeniz gerekir.",
+			})
+		}
+	} else {
+		// Yeni şifre belirleniyor:
+		if len(req.PanicPassword) < 6 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Panik şifresi en az 6 karakter olmalıdır.",
 			})
 		}
 		if middleware.CheckPasswordHash(req.PanicPassword, currentUser.PasswordHash) {
@@ -286,6 +295,30 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 				"error": "Panik şifresi ana giriş şifrenizle aynı olamaz. Lütfen farklı bir şifre belirleyin.",
 			})
 		}
+		var hErr error
+		hash, hErr = middleware.HashPassword(req.PanicPassword)
+		if hErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Şifre hash'lenemedi.",
+			})
+		}
+	}
+
+	if req.PanicLogin == "" {
+		if currentUser.PanicLogin != "" {
+			req.PanicLogin = currentUser.PanicLogin
+		} else {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Lütfen panik durumunda kullanılacak sahte kullanıcı adı veya e-posta belirleyin.",
+			})
+		}
+	}
+
+	// Normal şifre veya kullanıcı adı/email ile aynı olup olmadığını denetle
+	if strings.EqualFold(req.PanicLogin, currentUser.Username) || strings.EqualFold(req.PanicLogin, currentUser.Email) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Panik giriş adı gerçek kullanıcı adınız veya e-postanızla aynı olamaz. Lütfen sahte bir kimlik belirleyin.",
+		})
 	}
 
 	// Başka bir kullanıcının bu panic_login'i kullanıp kullanmadığını denetle
@@ -293,13 +326,6 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 	if existingUser != nil && existingUser.ID != userID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Bu panik giriş adı zaten kullanımda. Lütfen başka bir ad/e-posta seçin.",
-		})
-	}
-
-	hash, err := middleware.HashPassword(req.PanicPassword)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Şifre hash'lenemedi.",
 		})
 	}
 

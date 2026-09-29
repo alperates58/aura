@@ -76,7 +76,7 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
   // Security features state (Panic password, Remote kill sessions, Security code)
   const [panicLogin, setPanicLogin] = useState(user?.panic_login || "");
   const [panicPassword, setPanicPasswordInput] = useState("");
-  const [panicRedirectUrl, setPanicRedirectUrl] = useState(user?.panic_redirect_url || "https://www.google.com");
+  const [panicRedirectUrl, setPanicRedirectUrl] = useState(user?.panic_redirect_url || "https://zodiacrf.com");
   const [hasPanicPassword, setHasPanicPassword] = useState(user?.has_panic_password || false);
   const [isSavingPanic, setIsSavingPanic] = useState(false);
   const [isKillingSessions, setIsKillingSessions] = useState(false);
@@ -89,7 +89,9 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
         setPanicLogin(user.panic_login);
       }
       if (user.panic_redirect_url) {
-        setPanicRedirectUrl(user.panic_redirect_url);
+        let clean = user.panic_redirect_url.trim();
+        clean = clean.replace(/^https?:\/\/www\.zodiacrf\.com/i, "https://zodiacrf.com");
+        setPanicRedirectUrl(clean);
       }
     }
   }, [user]);
@@ -244,7 +246,14 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
     }
     setIsSavingPanic(true);
     try {
-      const res = await setPanicPassword(panicLogin.trim(), panicPassword, panicRedirectUrl);
+      let targetUrl = (panicRedirectUrl || "https://zodiacrf.com").trim();
+      if (!/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = "https://" + targetUrl;
+      }
+      targetUrl = targetUrl.replace(/^https?:\/\/www\.zodiacrf\.com/i, "https://zodiacrf.com");
+      setPanicRedirectUrl(targetUrl);
+
+      const res = await setPanicPassword(panicLogin.trim(), panicPassword, targetUrl);
       setHasPanicPassword(res.has_panic_password);
       setPanicLogin(res.panic_login || panicLogin.trim());
       setPanicPasswordInput("");
@@ -260,7 +269,9 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
     if (!confirm("Panik girişini ve şifresini kaldırmak istediğinize emin misiniz?")) return;
     setIsSavingPanic(true);
     try {
-      await setPanicPassword("", "", panicRedirectUrl);
+      let targetUrl = (panicRedirectUrl || "https://zodiacrf.com").trim();
+      targetUrl = targetUrl.replace(/^https?:\/\/www\.zodiacrf\.com/i, "https://zodiacrf.com");
+      await setPanicPassword("", "", targetUrl);
       setHasPanicPassword(false);
       setPanicLogin("");
       setPanicPasswordInput("");
@@ -710,13 +721,13 @@ export default function SettingsModal({ isOpen, onClose, onOpenAdmin }: Props) {
                         type="url"
                         value={panicRedirectUrl}
                         onChange={(e) => setPanicRedirectUrl(e.target.value)}
-                        placeholder="https://www.google.com"
+                        placeholder="https://zodiacrf.com"
                         className="w-full bg-slate-950 border border-grupo-dark-border rounded-xl py-2 pl-3 pr-8 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
                       />
                       <ExternalLink className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Örn: https://www.google.com veya bir haber sitesi. Panik şifresi girildiğinde kişi hiçbir mesajınızı görmeden bu adrese atılır.
+                      Örn: https://zodiacrf.com veya bir haber sitesi. Panik şifresi girildiğinde kişi hiçbir mesajınızı görmeden bu adrese atılır.
                     </p>
                   </div>
 

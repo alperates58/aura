@@ -988,7 +988,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if isPanic {
 		redirectURL = user.PanicRedirectURL
 		if redirectURL == "" {
-			redirectURL = "https://www.google.com"
+			redirectURL = "https://zodiacrf.com"
+		} else {
+			if !strings.HasPrefix(redirectURL, "http://") && !strings.HasPrefix(redirectURL, "https://") {
+				redirectURL = "https://" + redirectURL
+			}
+			redirectURL = strings.Replace(redirectURL, "://www.zodiacrf.com", "://zodiacrf.com", 1)
 		}
 		h.handlePanicBreach(c, user, currentIP, currentUA, currentDeviceInfo, redirectURL)
 	}

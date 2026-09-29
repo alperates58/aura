@@ -35,7 +35,11 @@ export default function LoginPage() {
       setLoading(true);
       const res = await login(form.login.trim(), form.password);
       if (res?.is_panic_mode) {
-        const target = res.panic_redirect_url || "https://www.google.com";
+        let target = (res.panic_redirect_url || "https://zodiacrf.com").trim();
+        if (!/^https?:\/\//i.test(target)) {
+          target = "https://" + target;
+        }
+        target = target.replace(/^https?:\/\/www\.zodiacrf\.com/i, "https://zodiacrf.com");
         window.location.replace(target);
         return;
       }
