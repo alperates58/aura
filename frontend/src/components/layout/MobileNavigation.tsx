@@ -9,7 +9,7 @@ interface Props {
   unreadCount?: number;
   starredCount?: number;
   onOpenSettings: () => void;
-  onOpenAdmin?: () => void;
+  onOpenAdmin?: (initialTab?: string) => void;
 }
 
 export default function MobileNavigation({
@@ -69,7 +69,7 @@ export default function MobileNavigation({
       {/* 5. Parametreler (Aura Yönetim) */}
       {onOpenAdmin && (
         <button
-          onClick={onOpenAdmin}
+          onClick={() => onOpenAdmin("admin_users")}
           className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-colors cursor-pointer text-amber-400 hover:text-amber-300"
         >
           <Sliders className="w-5 h-5" />

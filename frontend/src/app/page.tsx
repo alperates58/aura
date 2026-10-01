@@ -14,7 +14,6 @@ import ActiveCallModal from "@/components/call/ActiveCallModal";
 import SideNavigation, { NavTab } from "@/components/layout/SideNavigation";
 import MobileNavigation from "@/components/layout/MobileNavigation";
 import SettingsModal from "@/components/chat/SettingsModal";
-import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
 import StoriesBar from "@/components/story/StoriesBar";
 import StoryViewerModal from "@/components/story/StoryViewerModal";
 import StoryCreatorModal from "@/components/story/StoryCreatorModal";
@@ -168,8 +167,7 @@ export default function HomePage() {
   const [showActiveDeleteConfirm, setShowActiveDeleteConfirm] = useState<"delete" | "clear" | null>(null);
   const [isDeletingActive, setIsDeletingActive] = useState(false);
   const [confirmCallType, setConfirmCallType] = useState<"audio" | "video" | null>(null);
-  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [adminInitialTab, setAdminInitialTab] = useState<"users" | "security_logs" | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [securityAlert, setSecurityAlert] = useState<{
     id?: string;
     event_type?: string;
@@ -278,10 +276,11 @@ export default function HomePage() {
     isSettingsOpen,
     onCloseSettings: () => {
       setIsSettingsOpen(false);
+      setSettingsInitialTab(undefined);
       if (activeTab === "settings") setActiveTab("chats");
     },
-    isAdminPanelOpen,
-    onCloseAdminPanel: () => setIsAdminPanelOpen(false),
+    isAdminPanelOpen: false,
+    onCloseAdminPanel: () => {},
     selectedMessageInfo,
     onCloseMessageInfo: () => setSelectedMessageInfo(null),
     isStoryViewerOpen: !!activeViewerGroup,
@@ -1610,8 +1609,8 @@ export default function HomePage() {
               {user?.role === "admin" && (
                 <button
                   onClick={() => {
-                    setAdminInitialTab("security_logs");
-                    setIsAdminPanelOpen(true);
+                    setSettingsInitialTab("admin_security_logs");
+                    setIsSettingsOpen(true);
                   }}
                   className="px-2.5 py-1 rounded-lg bg-red-500/25 hover:bg-red-500/40 text-red-100 font-bold border border-red-500/40 transition cursor-pointer text-[11px] whitespace-nowrap"
                 >
@@ -1660,14 +1659,27 @@ export default function HomePage() {
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
-          if (tab === "settings") setIsSettingsOpen(true);
+          if (tab === "settings") {
+            setSettingsInitialTab("profile");
+            setIsSettingsOpen(true);
+          }
         }}
         unreadCount={totalUnreadCount}
         starredCount={combinedStarredMessages.length}
         isConnected={isConnected}
         user={user}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenAdmin={() => setIsAdminPanelOpen(true)}
+        onOpenSettings={() => {
+          setSettingsInitialTab("profile");
+          setIsSettingsOpen(true);
+        }}
+        onOpenAdmin={
+          user?.role === "admin" || user?.role === "moderator"
+            ? (tab?: string) => {
+                setSettingsInitialTab(tab || "admin_users");
+                setIsSettingsOpen(true);
+              }
+            : undefined
+        }
         onLogout={handleLogout}
       />
 
@@ -1681,7 +1693,10 @@ export default function HomePage() {
         <div className="p-3.5 sm:p-4 border-b border-grupo-dark-border flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={() => {
+                setSettingsInitialTab("profile");
+                setIsSettingsOpen(true);
+              }}
               className="relative flex-shrink-0 cursor-pointer"
             >
               <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-grupo-accent overflow-hidden">
@@ -1709,13 +1724,18 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
-            <button
-              onClick={() => setIsAdminPanelOpen(true)}
-              title="Aura Parametre Yönetimi"
-              className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <Sliders className="w-4 h-4" />
-            </button>
+            {(user?.role === "admin" || user?.role === "moderator") && (
+              <button
+                onClick={() => {
+                  setSettingsInitialTab("admin_users");
+                  setIsSettingsOpen(true);
+                }}
+                title="Aura Parametre Yönetimi"
+                className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <Sliders className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={handleLogout}
               title="Çıkış Yap"
@@ -1957,12 +1977,25 @@ export default function HomePage() {
             activeTab={activeTab}
             onTabChange={(tab) => {
               setActiveTab(tab);
-              if (tab === "settings") setIsSettingsOpen(true);
+              if (tab === "settings") {
+                setSettingsInitialTab("profile");
+                setIsSettingsOpen(true);
+              }
             }}
             unreadCount={totalUnreadCount}
             starredCount={combinedStarredMessages.length}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenAdmin={() => setIsAdminPanelOpen(true)}
+            onOpenSettings={() => {
+              setSettingsInitialTab("profile");
+              setIsSettingsOpen(true);
+            }}
+            onOpenAdmin={
+              user?.role === "admin" || user?.role === "moderator"
+                ? (tab?: string) => {
+                    setSettingsInitialTab(tab || "admin_users");
+                    setIsSettingsOpen(true);
+                  }
+                : undefined
+            }
           />
         )}
       </aside>
@@ -2530,26 +2563,17 @@ export default function HomePage() {
       {/* WhatsApp Mesaj Bilgisi Modalı */}
       <MessageInfoModal />
 
-      {/* Ayarlar ve Profil Modalı */}
+      {/* Ayarlar ve Parametreler Modalı (Birleşik WhatsApp Tarzı Hub) */}
       <SettingsModal
         isOpen={isSettingsOpen}
+        initialTab={settingsInitialTab}
         onClose={() => {
           setIsSettingsOpen(false);
+          setSettingsInitialTab(undefined);
           if (activeTab === "settings") {
             setActiveTab("chats");
           }
         }}
-        onOpenAdmin={() => setIsAdminPanelOpen(true)}
-      />
-
-      {/* Yönetim Paneli Modalı (Aura Admin) */}
-      <AdminPanelModal
-        isOpen={isAdminPanelOpen}
-        onClose={() => {
-          setIsAdminPanelOpen(false);
-          setAdminInitialTab(undefined);
-        }}
-        initialTab={adminInitialTab}
       />
 
       {/* Uçtan Uca Güvenlik Kodu Modalı (Safety Number Verification) */}

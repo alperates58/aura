@@ -26,7 +26,7 @@ interface Props {
   isConnected: boolean;
   user: User | null;
   onOpenSettings: () => void;
-  onOpenAdmin?: () => void;
+  onOpenAdmin?: (initialTab?: string) => void;
   onLogout: () => void;
 }
 
@@ -217,7 +217,7 @@ export default function SideNavigation({
           {onOpenAdmin && (
             <div className="pt-2 border-t border-[#222631] mt-2 space-y-1">
               <button
-                onClick={onOpenAdmin}
+                onClick={() => onOpenAdmin("admin_users")}
                 title="Sistem Parametreleri"
                 className="w-full h-11 rounded-xl flex items-center gap-3 px-3 text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all cursor-pointer shadow-sm group"
               >
@@ -233,7 +233,7 @@ export default function SideNavigation({
               </button>
 
               <button
-                onClick={onOpenAdmin}
+                onClick={() => onOpenAdmin("admin_stats")}
                 title="Sistem Sağlığı & İzleme"
                 className="w-full h-10 rounded-xl flex items-center gap-3 px-3 text-slate-400 hover:text-white hover:bg-[#1E222D] transition-all cursor-pointer"
               >
