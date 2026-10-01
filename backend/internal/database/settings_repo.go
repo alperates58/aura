@@ -117,7 +117,7 @@ func (r *SettingsRepository) GetSiteInfo(ctx context.Context) models.SiteInfoSet
 		SiteTagline:       "",
 		SiteURL:           "",
 		LogoURL:           "",
-		AllowRegistration: true,
+		AllowRegistration: false, // Guvenlik kurali: Ayar DB'den kesinlesene kadar kapali (Fail-Closed)
 		DefaultTheme:      "dark",
 		MaintenanceMode:   false,
 	}

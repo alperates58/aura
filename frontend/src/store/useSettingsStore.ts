@@ -68,7 +68,7 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     site_tagline: "",
     site_url: "",
     logo_url: "",
-    allow_registration: true,
+    allow_registration: false, // Güvenlik Kuralı: Kanıtlanana kadar kapalı (Fail-Closed)
     default_theme: "dark",
     maintenance_mode: false,
   },

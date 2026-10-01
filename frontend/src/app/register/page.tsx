@@ -30,8 +30,9 @@ export default function RegisterPage() {
     }
   }, []);
 
+  const isLoaded = useSettingsStore((state) => state.isLoaded);
   const siteName = settings?.site_info?.site_name || "Aura";
-  const allowRegistration = settings?.site_info?.allow_registration !== false;
+  const allowRegistration = isLoaded && settings?.site_info?.allow_registration === true;
   const isMaintenance = settings?.site_info?.maintenance_mode === true;
 
   const handleSubmit = async (e: React.FormEvent) => {

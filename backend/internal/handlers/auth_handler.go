@@ -138,14 +138,18 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 
-	// 0. Sistem Ayarları Denetimi
-	if h.settingsRepo != nil {
-		siteInfo := h.settingsRepo.GetSiteInfo(c.Context())
-		if !siteInfo.AllowRegistration {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Yeni üye kaydı yönetici tarafından durdurulmuştur.",
-			})
-		}
+	// 0. Sistem Ayarları Denetimi (Fail-Closed)
+	if h.settingsRepo == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Sistem ayarları yüklenemedi. Yeni üye kaydı geçici olarak durdurulmuştur.",
+		})
+	}
+	siteInfo := h.settingsRepo.GetSiteInfo(c.Context())
+	if !siteInfo.AllowRegistration {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Yeni üye kaydı yönetici tarafından durdurulmuştur.",
+		})
+	}
 		if siteInfo.MaintenanceMode {
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"error": "Sistem şu anda bakım modundadır.",
