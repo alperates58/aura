@@ -751,7 +751,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 
 		// 2. Canlı WebSocket Güvenlik Uyarısını Yalnızca İlgili Kullanıcıya Gönder (Tüm siteye değil!)
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: Hesabınızda başka bir cihazdan giriş yapıldı! (Cihaz: %s, Konum: %s)", newDeviceInfo, location)
+			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: @%s hesabınızda başka bir cihazdan giriş yapıldı! (Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
 			alertPayload, err := auraws.NewWSMessage("security_alert", models.SecurityAlertPayload{
 				EventType:      eventType,
 				AttemptedLogin: user.Username,
@@ -770,8 +770,8 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 		// 3. Yalnızca İlgili Kullanıcıya Aura Güvenlik Botundan Özel Bilgilendirme Mesajı Gönder (Tüm siteye değil!)
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\nHesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Giriş Yapan Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Cihaz:** %s\n\nBu giriş size ait değilse, Ayarlar > Güvenlik menüsünden **'Diğer Tüm Oturumları Kapat'** seçeneğini kullanarak diğer cihazların erişimini hemen kesebilirsiniz.",
-				newDeviceInfo, newIP, location, nowStr, prevDevice,
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s hesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n👤 **Kullanıcı:** @%s\n📱 **Yeni Giriş Yapan Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Cihaz:** %s\n\nBu giriş size ait değilse, Ayarlar > Aktif Cihazlarım menüsünden **'Diğer Tüm Oturumları Kapat'** seçeneğini kullanarak diğer cihazların erişimini hemen kesebilirsiniz.",
+				user.Username, user.Username, newDeviceInfo, newIP, location, nowStr, prevDevice,
 			)
 			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
 		}
@@ -1143,6 +1143,25 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	user, err := h.userRepo.GetUserByID(c.Context(), userID)
 	if err != nil || user == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Kullanıcı bulunamadı."})
+	}
+
+	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+	if currentSessionID != "" && h.sessionRepo != nil {
+		currentIP := GetRealIP(c)
+		currentUA := c.Get("User-Agent")
+		devName, devType, devOS, devBrowser := database.ParseUserAgentDetailed(currentUA)
+		loc := ResolveIPLocation(currentIP)
+		_ = h.sessionRepo.UpsertSession(c.Context(), &models.UserSession{
+			UserID:     userID,
+			SessionID:  currentSessionID,
+			DeviceName: devName,
+			DeviceType: devType,
+			OS:         devOS,
+			Browser:    devBrowser,
+			IPAddress:  currentIP,
+			Location:   loc,
+			UserAgent:  currentUA,
+		})
 	}
 
 	return c.JSON(user.ToResponse())

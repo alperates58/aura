@@ -935,12 +935,60 @@ export default function SettingsModal({
                       </div>
 
                       {(() => {
+                        // Tarayıcı ortamında istemci cihaz bilgisi
+                        const clientInfo = (() => {
+                          if (typeof window === "undefined") {
+                            return { device_name: "Windows Bilgisayar", device_type: "desktop" as const, os: "Windows", browser: "Google Chrome" };
+                          }
+                          const ua = navigator.userAgent.toLowerCase();
+                          let device_type: "desktop" | "mobile" | "tablet" = "desktop";
+                          let os = "Windows";
+                          let device_name = "Windows Bilgisayar";
+                          let browser = "Google Chrome";
+
+                          if (ua.includes("ipad") || (ua.includes("macintosh") && "ontouchend" in document)) {
+                            device_type = "tablet";
+                            os = "iPadOS";
+                            device_name = "Apple iPad";
+                          } else if (ua.includes("iphone")) {
+                            device_type = "mobile";
+                            os = "iOS";
+                            device_name = "Apple iPhone";
+                          } else if (ua.includes("android")) {
+                            device_type = ua.includes("mobile") ? "mobile" : "tablet";
+                            os = "Android";
+                            device_name = device_type === "mobile" ? "Android Cihaz" : "Android Tablet";
+                          } else if (ua.includes("macintosh") || ua.includes("mac os")) {
+                            device_type = "desktop";
+                            os = "macOS";
+                            device_name = "Apple Mac";
+                          } else if (ua.includes("linux")) {
+                            device_type = "desktop";
+                            os = "Linux";
+                            device_name = "Linux Bilgisayar";
+                          }
+
+                          if (ua.includes("edg/") || ua.includes("edge/")) {
+                            browser = "Microsoft Edge";
+                          } else if (ua.includes("opr/") || ua.includes("opera")) {
+                            browser = "Opera";
+                          } else if (ua.includes("chrome/") && !ua.includes("edg/") && !ua.includes("opr/")) {
+                            browser = "Google Chrome";
+                          } else if (ua.includes("safari/") && !ua.includes("chrome/")) {
+                            browser = "Safari";
+                          } else if (ua.includes("firefox/")) {
+                            browser = "Mozilla Firefox";
+                          }
+
+                          return { device_name, device_type, os, browser };
+                        })();
+
                         const currentSession = sessions.find((s) => s.is_current) || {
-                          device_name: "Bu Cihaz",
-                          device_type: "desktop" as const,
-                          os: "Geçerli Sistem",
-                          browser: "Web Tarayıcı",
-                          ip_address: "Mevcut IP",
+                          device_name: clientInfo.device_name,
+                          device_type: clientInfo.device_type,
+                          os: clientInfo.os,
+                          browser: clientInfo.browser,
+                          ip_address: "Mevcut Bağlantı",
                           location: "Yerel Oturum",
                           is_current: true,
                           last_active_at: new Date().toISOString(),
@@ -969,7 +1017,7 @@ export default function SettingsModal({
                                   </h4>
                                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    <span>Mevcut Cihaz</span>
+                                    <span>Bu Cihaz (Şu Anki Oturum)</span>
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-300 mt-0.5">
@@ -1185,14 +1233,19 @@ export default function SettingsModal({
               </div>
             )}
 
-            {/* 5. GİRİŞ KAYITLARIM */}
+            {/* 5. GİRİŞ KAYITLARIM (GEÇMİŞ GÜVENLİK GÜNLÜĞÜ) */}
             {activeTab === "access_logs" && (
               <div className="space-y-4 max-w-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-white">Son Giriş Kayıtlarım</h3>
-                    <p className="text-xs text-slate-400">
-                      Hesabınıza erişilen son IP adresleri, cihazlar ve oturum zamanları.
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-white">Giriş Kayıtlarım & Geçmiş</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-mono border border-slate-700">
+                        Güvenlik Denetim Günlüğü
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Hesabınıza bugüne kadar yapılan başarılı girişlerin değişmez tarihçesidir (Aktif açık oturumları kapatmak için &quot;Aktif Cihazlarım&quot; sekmesini kullanın).
                     </p>
                   </div>
                   <button
@@ -1219,23 +1272,37 @@ export default function SettingsModal({
                   <p className="py-8 text-center text-xs text-slate-500">Henüz kayıtlı bir giriş geçmişi bulunmuyor.</p>
                 ) : (
                   <div className="space-y-2 max-h-[450px] overflow-y-auto">
-                    {userAccessLogs.map((log: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Smartphone className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                          <div>
-                            <span className="font-semibold text-white block">{log.device_info || "Bilinmeyen Cihaz"}</span>
-                            <span className="text-[11px] text-slate-400 font-mono">{log.ip_address}</span>
+                    {userAccessLogs.map((log: any, idx: number) => {
+                      const isMobile = (log.device_info || "").toLowerCase().includes("iphone") || (log.device_info || "").toLowerCase().includes("android");
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 flex-shrink-0">
+                              {isMobile ? (
+                                <Smartphone className="w-4 h-4" />
+                              ) : (
+                                <Laptop className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white">{log.device_info || "Bilinmeyen Cihaz"}</span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                                  Giriş Yapıldı
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-400 font-mono">{log.ip_address}</span>
+                            </div>
                           </div>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {new Date(log.created_at).toLocaleString("tr-TR")}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-slate-500">
-                          {new Date(log.created_at).toLocaleString("tr-TR")}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

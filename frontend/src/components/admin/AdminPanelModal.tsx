@@ -53,6 +53,7 @@ import {
   Filter,
   MapPin,
   Smartphone,
+  Laptop,
 } from "lucide-react";
 
 interface AdminPanelModalProps {
@@ -1108,14 +1109,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Güvenlik Botu Bilgilendirme Kutusu */}
-                  <div className="p-3.5 bg-gradient-to-r from-red-950/30 to-amber-950/20 border border-red-500/20 rounded-2xl flex items-start gap-3">
-                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="text-xs text-slate-300 leading-relaxed">
-                      <b className="text-white font-medium">Aura Otomatik Güvenlik Botu (@security): </b>
-                      Kayıtlı olmayan kullanıcı adları ile giriş denendiğinde veya şüpheli oturum isteklerinde tüm çevrimiçi kullanıcılara anlık alarm iletilir ve durum akışında güvenlik uyarısı hikayesi otomatik olarak yayınlanır (15 dk koruma limiti).
-                    </div>
-                  </div>
 
                   {/* Filtre Barı */}
                   <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1140,9 +1133,115 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Kayıtlar Tablosu */}
+                  {/* Kayıtlar Listesi & Tablosu */}
                   <div className="border border-[#222631] rounded-2xl overflow-hidden bg-[#10131A]">
-                    <div className="overflow-x-auto -mx-1 sm:mx-0">
+                    {/* MOBİL GÖRÜNÜM (Kart Yapısı - Sağa Kaydırma Gerektirmez) */}
+                    <div className="block sm:hidden divide-y divide-[#1D212B]">
+                      {securityLogs.map((log) => {
+                        const isUnknownUser = log.event_type === "unknown_user_login" || log.event_type === "unknown_user_attempt";
+                        const isFailedPassword = log.event_type === "failed_password_login" || log.event_type === "failed_password_attempt";
+                        const isConcurrent = log.event_type === "concurrent_session_login";
+
+                        let location = "";
+                        if (log.details) {
+                          if (typeof log.details === "object" && (log.details as any).location) {
+                            location = (log.details as any).location;
+                          } else if (typeof log.details === "string") {
+                            try {
+                              const parsed = JSON.parse(log.details);
+                              location = parsed.location || "";
+                            } catch {}
+                          }
+                        }
+
+                        const severity = log.severity || (isUnknownUser ? "critical" : "high");
+                        const attemptedUser = log.attempted_username || log.attempted_login || "—";
+                        const isMobileDev = (log.device_info || log.user_agent || "").toLowerCase().includes("iphone") || (log.device_info || log.user_agent || "").toLowerCase().includes("android");
+
+                        return (
+                          <div key={log.id} className="p-3 space-y-2 hover:bg-[#151922] transition-colors">
+                            {/* Üst Bar: Olay Rozeti + Şiddet + Tarih */}
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                {isUnknownUser ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-semibold">
+                                    <ShieldAlert className="w-3 h-3" /> Kayıtsız Kullanıcı
+                                  </span>
+                                ) : isFailedPassword ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
+                                    <Lock className="w-3 h-3" /> Hatalı Şifre
+                                  </span>
+                                ) : isConcurrent ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
+                                    <Smartphone className="w-3 h-3" /> Çoklu Oturum
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-semibold">
+                                    <AlertTriangle className="w-3 h-3" /> {log.event_type}
+                                  </span>
+                                )}
+
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                    severity === "critical"
+                                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
+                                      : severity === "high"
+                                      ? "bg-orange-500/20 text-orange-300 border border-orange-500/30"
+                                      : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                                  }`}
+                                >
+                                  {severity}
+                                </span>
+                              </div>
+
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {new Date(log.created_at).toLocaleString("tr-TR")}
+                              </span>
+                            </div>
+
+                            {/* Orta Kısım: Hedef Kullanıcı & IP / Konum */}
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <div className="font-mono font-bold text-white flex items-center gap-1">
+                                <span className="text-slate-400 font-normal text-[11px]">Hedef:</span>
+                                <span>@{attemptedUser}</span>
+                              </div>
+
+                              <div className="text-right">
+                                <span className="font-mono text-red-300 text-xs font-semibold">{log.ip_address}</span>
+                                {location && (
+                                  <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 mt-0.5">
+                                    <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                    <span className="truncate max-w-[130px]">{location}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Alt Kısım: Cihaz Bilgisi */}
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 pt-1 border-t border-[#1a1e29]">
+                              {isMobileDev ? (
+                                <Smartphone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              ) : (
+                                <Laptop className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              )}
+                              <span className="truncate">{log.device_info || log.user_agent || "Bilinmeyen Cihaz"}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {securityLogs.length === 0 && (
+                        <div className="py-10 text-center text-slate-500 text-xs">
+                          <div className="flex flex-col items-center gap-2">
+                            <CheckCircle2 className="w-7 h-7 text-emerald-500/50" />
+                            <span>Kayıtlı herhangi bir güvenlik ihlali veya yetkisiz giriş bulunamadı.</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MASAÜSTÜ & TABLET GÖRÜNÜM (Klasik Tablo) */}
+                    <div className="hidden sm:block overflow-x-auto">
                       <table className="w-full text-left text-xs min-w-[620px]">
                         <thead className="bg-[#141720] border-b border-[#222631] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                           <tr>
@@ -2571,7 +2670,45 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
 
                   <div className="border border-[#222631] rounded-2xl overflow-hidden bg-[#10131A]">
-                    <div className="overflow-x-auto -mx-1 sm:mx-0">
+                    {/* MOBİL GÖRÜNÜM (Kart Yapısı) */}
+                    <div className="block sm:hidden divide-y divide-[#1D212B]">
+                      {accessLogs.map((log) => {
+                        const isMobileDev = (log.device_info || "").toLowerCase().includes("iphone") || (log.device_info || "").toLowerCase().includes("android");
+                        return (
+                          <div key={log.id} className="p-3 space-y-1.5 hover:bg-[#151922] transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-white text-xs truncate">
+                                {log.display_name ? `${log.display_name} (@${log.username})` : `@${log.username}`}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">
+                                {new Date(log.created_at).toLocaleString("tr-TR")}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                              <div className="flex items-center gap-1.5 truncate">
+                                {isMobileDev ? (
+                                  <Smartphone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                ) : (
+                                  <Laptop className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                )}
+                                <span className="truncate">{log.device_info || "Bilinmeyen Cihaz"}</span>
+                              </div>
+                              <span className="font-mono text-slate-400 text-xs flex-shrink-0">{log.ip_address}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {accessLogs.length === 0 && (
+                        <div className="py-8 text-center text-slate-500 text-xs">
+                          Henüz bir erişim kaydı yok.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MASAÜSTÜ GÖRÜNÜM (Tablo) */}
+                    <div className="hidden sm:block overflow-x-auto">
                       <table className="w-full text-left text-xs min-w-[500px]">
                         <thead className="bg-[#141720] border-b border-[#222631] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                           <tr>

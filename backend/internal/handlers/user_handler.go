@@ -350,6 +350,25 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 
+	// Mevcut istemcinin oturumunu veritabanında garantiye al (daha önce giriş yapılmış ve çerezi olan cihazlar için)
+	if currentSessionID != "" && h.sessionRepo != nil {
+		currentIP := GetRealIP(c)
+		currentUA := c.Get("User-Agent")
+		devName, devType, devOS, devBrowser := database.ParseUserAgentDetailed(currentUA)
+		loc := ResolveIPLocation(currentIP)
+		_ = h.sessionRepo.UpsertSession(c.Context(), &models.UserSession{
+			UserID:     userID,
+			SessionID:  currentSessionID,
+			DeviceName: devName,
+			DeviceType: devType,
+			OS:         devOS,
+			Browser:    devBrowser,
+			IPAddress:  currentIP,
+			Location:   loc,
+			UserAgent:  currentUA,
+		})
+	}
+
 	sessions, err := h.sessionRepo.GetUserSessions(c.Context(), userID, currentSessionID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
