@@ -1021,11 +1021,6 @@ export default function MessageBubble({
                       }}
                       className="inline-flex items-center gap-1 text-[11px] float-right ml-2.5 mt-1 select-none flex-shrink-0"
                     >
-                      {message.is_e2ee && (
-                        <span title="Uçtan uca şifreli (Aura E2EE)" className="text-[10px] opacity-80 inline-flex items-center">
-                          🔒
-                        </span>
-                      )}
                       {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
                       {message.is_edited && !message.is_deleted_for_all && (
                         <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>

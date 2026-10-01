@@ -181,6 +181,6 @@ export async function decryptE2EEMessage(
   } catch (err) {
     // Şifre çözülemezse çökmeyi önle
     console.warn("E2EE mesaj deşifre edilemedi (anahtar uyuşmazlığı olabilir):", err);
-    return "🔒 [Şifreli Mesaj - Deşifre Edilemedi]";
+    return encryptedText;
   }
 }

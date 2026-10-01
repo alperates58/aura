@@ -161,11 +161,15 @@ async function decryptMessageList(convId: string, list: Message[]): Promise<Mess
 /**
  * Tek bir gelen mesajı E2EE şifresini çözerek döndürür.
  */
-async function decryptSingleMessage(msg: Message): Promise<Message> {
+async function decryptSingleMessage(
+  msg: Message,
+  targetConv?: Conversation,
+  user?: any
+): Promise<Message> {
   if (!isE2EEEncrypted(msg.content) || typeof window === "undefined") return msg;
 
-  const conv = useChatStore.getState().conversations.find((c) => c.id === msg.conversation_id);
-  const currentUser = useAuthStore.getState().user;
+  const conv = targetConv || useChatStore.getState().conversations.find((c) => c.id === msg.conversation_id);
+  const currentUser = user || useAuthStore.getState().user;
   if (!conv || !currentUser) return msg;
 
   const combinedSalt = getCombinedSalt(currentUser, conv.other_user);
@@ -204,7 +208,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadConversations: async () => {
     try {
       const res = await api.get<Conversation[]>("/conversations");
-      set({ conversations: res.data });
+      const convs = res.data || [];
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser && typeof window !== "undefined") {
+        const decryptedConvs = await Promise.all(
+          convs.map(async (conv) => {
+            if (conv.last_message && isE2EEEncrypted(conv.last_message.content)) {
+              const decryptedLastMsg = await decryptSingleMessage(conv.last_message, conv, currentUser);
+              return { ...conv, last_message: decryptedLastMsg };
+            }
+            return conv;
+          })
+        );
+        set({ conversations: decryptedConvs });
+      } else {
+        set({ conversations: convs });
+      }
     } catch (err) {
       console.error("Konuşmalar yüklenemedi:", err);
     }
@@ -511,14 +530,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       created_at: new Date().toISOString(),
     };
 
-    // İyimser ekle
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [convId]: [...(state.messages[convId] || []), optimisticMsg],
-      },
-      replyingTo: null,
-    }));
+    // İyimser ekle ve konuşma listesindeki son mesajı güncelle
+    set((state) => {
+      const targetConv = state.conversations.find((c) => c.id === convId);
+      const otherConvs = state.conversations.filter((c) => c.id !== convId);
+      let updatedConvs = state.conversations;
+      if (targetConv) {
+        updatedConvs = [{ ...targetConv, last_message: optimisticMsg }, ...otherConvs];
+      }
+      return {
+        messages: {
+          ...state.messages,
+          [convId]: [...(state.messages[convId] || []), optimisticMsg],
+        },
+        conversations: updatedConvs,
+        replyingTo: null,
+      };
+    });
 
     // Mesaj tek başına veya tekrar eden özel konfeti emojisi ise ekranda konfeti patlat
     const trimmedContent = content.trim();
