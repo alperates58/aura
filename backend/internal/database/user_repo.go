@@ -247,10 +247,13 @@ func (r *UserRepository) SearchUsers(ctx context.Context, search string, exclude
 	}
 
 	cleanSearch := "%" + strings.ToLower(strings.TrimSpace(search)) + "%"
+	// Guvenlik ve Gizlilik:
+	// 1. Yasaklanmis (is_banned) hesaplar normal arama sonuclarinda listelenmez.
+	// 2. Kullanicilarin ozel e-posta, rol veya ban detaylari asla baska kullanicilara sizdirilmaz.
 	query := `
-		SELECT id, username, display_name, email, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings, created_at
+		SELECT id, username, display_name, avatar_url, bio, online_status, last_seen_at, created_at
 		FROM users
-		WHERE id != $1 AND (LOWER(username) LIKE $2 OR LOWER(display_name) LIKE $2)
+		WHERE id != $1 AND is_banned = FALSE AND (LOWER(username) LIKE $2 OR LOWER(display_name) LIKE $2)
 		ORDER BY display_name ASC
 		LIMIT $3
 	`
@@ -265,9 +268,8 @@ func (r *UserRepository) SearchUsers(ctx context.Context, search string, exclude
 	for rows.Next() {
 		var u models.UserResponse
 		if err := rows.Scan(
-			&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.AvatarURL, &u.Bio,
-			&u.Role, &u.IsBanned, &u.BanReason,
-			&u.OnlineStatus, &u.LastSeenAt, &u.PrivacySettings, &u.CreatedAt,
+			&u.ID, &u.Username, &u.DisplayName, &u.AvatarURL, &u.Bio,
+			&u.OnlineStatus, &u.LastSeenAt, &u.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

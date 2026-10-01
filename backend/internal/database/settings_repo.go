@@ -210,7 +210,7 @@ func (r *SettingsRepository) GetSecuritySettings(ctx context.Context) models.Sec
 	defaults := models.SecuritySettings{
 		MaxMessagesPerSecond:      5,
 		MaxMessagesPerMinute:      60,
-		RequireStrongPasswords:    false,
+		RequireStrongPasswords:    true, // Guvenlik Kurali: Ayar okunamadigi durumlarda guclu sifre zorunlulugu varsayilan olarak aktiftir (Fail-Closed)
 		LockoutAttempts:           5,
 		SessionTimeoutDays:        30,
 		InactivityLogoutEnabled:   false,

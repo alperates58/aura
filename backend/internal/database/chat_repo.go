@@ -146,6 +146,14 @@ func (r *ChatRepository) GetUserConversations(ctx context.Context, userID uuid.U
 			return nil, fmt.Errorf("satir okunamadi: %w", err)
 		}
 
+		// Guvenlik ve Gizlilik: Karsi tarafin ozel e-posta, rol veya panik modu detaylari asla baska kullanicilara sizdirilmaz.
+		otherUser.Email = ""
+		otherUser.Role = ""
+		otherUser.BanReason = ""
+		otherUser.PanicLogin = ""
+		otherUser.HasPanicPassword = false
+		otherUser.PanicRedirectURL = ""
+		otherUser.TokenVersion = 0
 		resp.OtherUser = otherUser
 		if len(lastMsgBytes) > 0 {
 			var msg models.Message

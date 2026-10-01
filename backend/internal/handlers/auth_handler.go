@@ -150,18 +150,17 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 			"error": "Yeni üye kaydı yönetici tarafından durdurulmuştur.",
 		})
 	}
-		if siteInfo.MaintenanceMode {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error": "Sistem şu anda bakım modundadır.",
+	if siteInfo.MaintenanceMode {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Sistem şu anda bakım modundadır.",
+		})
+	}
+	sec := h.settingsRepo.GetSecuritySettings(c.Context())
+	if sec.RequireStrongPasswords {
+		if !isStrongPassword(req.Password) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Güçlü şifre zorunludur: Şifreniz en az 8 karakter olmalı, en az bir harf ve bir rakam içermelidir.",
 			})
-		}
-		sec := h.settingsRepo.GetSecuritySettings(c.Context())
-		if sec.RequireStrongPasswords {
-			if !isStrongPassword(req.Password) {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Güçlü şifre zorunludur: Şifreniz en az 8 karakter olmalı, en az bir harf ve bir rakam içermelidir.",
-				})
-			}
 		}
 	}
 

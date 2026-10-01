@@ -107,7 +107,7 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   security_settings: {
     max_messages_per_second: 5,
     max_messages_per_minute: 60,
-    require_strong_passwords: false,
+    require_strong_passwords: true, // Guvenlik Kurali: Ayar DB'den kesinlesene kadar guclu sifre aktiftir (Fail-Closed)
     lockout_attempts: 5,
     session_timeout_days: 30,
     inactivity_logout_enabled: false,

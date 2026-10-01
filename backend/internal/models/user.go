@@ -50,19 +50,19 @@ type UserResponse struct {
 	ID               uuid.UUID       `json:"id"`
 	Username         string          `json:"username"`
 	DisplayName      string          `json:"display_name"`
-	Email            string          `json:"email"`
+	Email            string          `json:"email,omitempty"`
 	AvatarURL        string          `json:"avatar_url"`
 	Bio              string          `json:"bio"`
-	Role             string          `json:"role"`
-	IsBanned         bool            `json:"is_banned"`
-	BanReason        string          `json:"ban_reason"`
+	Role             string          `json:"role,omitempty"`
+	IsBanned         bool            `json:"is_banned,omitempty"`
+	BanReason        string          `json:"ban_reason,omitempty"`
 	OnlineStatus     int             `json:"online_status"`
 	LastSeenAt       time.Time       `json:"last_seen_at"`
-	PrivacySettings  json.RawMessage `json:"privacy_settings"`
+	PrivacySettings  json.RawMessage `json:"privacy_settings,omitempty"`
 	PanicLogin       string          `json:"panic_login,omitempty"`
-	HasPanicPassword bool            `json:"has_panic_password"`
-	PanicRedirectURL string          `json:"panic_redirect_url"`
-	TokenVersion     int             `json:"token_version"`
+	HasPanicPassword bool            `json:"has_panic_password,omitempty"`
+	PanicRedirectURL string          `json:"panic_redirect_url,omitempty"`
+	TokenVersion     int             `json:"token_version,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 }
 
@@ -89,6 +89,21 @@ func (u *User) ToResponse() UserResponse {
 		PanicRedirectURL: redirectURL,
 		TokenVersion:     u.TokenVersion,
 		CreatedAt:        u.CreatedAt,
+	}
+}
+
+// ToPublicResponse diğer kullanıcılara veya arama sonuçlarına sunulan güvenli kullanıcı profilidir.
+// E-posta, rol, panik şifresi, token versiyonu ve ban detayları asla üçüncü taraflara sızdırılmaz.
+func (u *User) ToPublicResponse() UserResponse {
+	return UserResponse{
+		ID:           u.ID,
+		Username:     u.Username,
+		DisplayName:  u.DisplayName,
+		AvatarURL:    u.AvatarURL,
+		Bio:          u.Bio,
+		OnlineStatus: u.OnlineStatus,
+		LastSeenAt:   u.LastSeenAt,
+		CreatedAt:    u.CreatedAt,
 	}
 }
 

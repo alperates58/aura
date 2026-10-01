@@ -64,9 +64,25 @@ func (s *StorageService) UploadAvatar(ctx context.Context, userID uuid.UUID, fil
 		return "", errors.New("sadece JPG, PNG veya WEBP formatında görseller yüklenebilir")
 	}
 
+	// Güvenlik doğrulaması: Avatar dosyasının ilk 512 baytını kokla (content sniffing & magic bytes)
+	buf := make([]byte, 512)
+	n, err := file.Read(buf)
+	if err != nil && err != io.EOF {
+		return "", errors.New("avatar dosyası okunamadı")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", errors.New("avatar dosyası sıfırlanamadı")
+	}
+	if n > 0 {
+		detected := strings.ToLower(http.DetectContentType(buf[:n]))
+		if strings.Contains(detected, "html") || strings.Contains(detected, "javascript") || strings.Contains(detected, "xml") || (!strings.HasPrefix(detected, "image/") && detected != "application/octet-stream") {
+			return "", errors.New("geçersiz veya zararlı görsel formatı tespit edildi")
+		}
+	}
+
 	objectName := fmt.Sprintf("%s_%d%s", userID.String(), time.Now().Unix(), ext)
 
-	_, err := s.client.PutObject(ctx, s.avatarBucket, objectName, file, header.Size, minio.PutObjectOptions{
+	_, err = s.client.PutObject(ctx, s.avatarBucket, objectName, file, header.Size, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	if err != nil {

@@ -205,8 +205,9 @@ func (h *MediaHandler) UploadMedia(c *fiber.Ctx) error {
 
 func (h *MediaHandler) GetMediaFile(c *fiber.Ctx) error {
 	bucket := c.Params("bucket")
-	objectName := c.Params("*")
-	if bucket == "" || objectName == "" {
+	bucket = filepath.Clean(bucket)
+	objectName = filepath.Clean(objectName)
+	if strings.Contains(bucket, "..") || strings.Contains(objectName, "..") || strings.HasPrefix(objectName, "/") || strings.HasPrefix(objectName, "\\") {
 		return c.Status(fiber.StatusBadRequest).SendString("Geçersiz medya yolu")
 	}
 

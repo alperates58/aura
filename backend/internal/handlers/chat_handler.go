@@ -88,7 +88,7 @@ func (h *ChatHandler) StartConversation(c *fiber.Ctx) error {
 
 	return c.JSON(models.ConversationResponse{
 		ID:          conv.ID,
-		OtherUser:   otherUser.ToResponse(),
+		OtherUser:   otherUser.ToPublicResponse(),
 		UnreadCount: 0,
 		IsOnline:    isOnline,
 		IsBlocked:   conv.IsBlocked,
