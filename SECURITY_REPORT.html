@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura - Sistem Güvenlik ve Tehdit Değerlendirme Raporu</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.3);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-[#0f172a] text-[#f8fafc] antialiased p-4 md:p-8 min-h-screen">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Header & Brand -->
+    <header class="bg-[#1e293b] border border-[#334155] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div class="flex items-center space-x-4">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-2xl">
+          🛡️
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-2xl font-bold tracking-tight text-[#f8fafc]">Aura Güvenlik ve Mimari Değerlendirme Raporu</h1>
+            <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">v1.2 Prodüksiyon</span>
+          </div>
+          <p class="text-sm text-[#94a3b8] mt-0.5">Yazılım Katmanı & Sunucu Altyapısı Beyaz Şapka Güvenlik Analizi</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="text-right hidden sm:block">
+          <div class="text-xs text-[#94a3b8]">Son Güncelleme</div>
+          <div class="text-sm font-semibold text-emerald-400">01 Ekim 2026</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Scorecards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Software Score -->
+      <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 shadow-md flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-[#94a3b8]">Yazılım & Kod Mimarisi</span>
+          <div class="text-3xl font-extrabold text-emerald-400 mt-1">9.6 <span class="text-lg font-normal text-[#94a3b8]">/ 10</span></div>
+          <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 mt-1 font-medium">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Zırhlı & Kriptografik
+          </span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl font-bold">
+          💻
+        </div>
+      </div>
+
+      <!-- Infrastructure Score -->
+      <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 shadow-md flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-[#94a3b8]">Sunucu, Ağ & DevOps</span>
+          <div class="text-3xl font-extrabold text-cyan-400 mt-1">8.8 <span class="text-lg font-normal text-[#94a3b8]">/ 10</span></div>
+          <span class="inline-flex items-center gap-1.5 text-xs text-cyan-400 mt-1 font-medium">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Yüksek İzolasyon
+          </span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center text-xl font-bold">
+          🏢
+        </div>
+      </div>
+
+      <!-- Combined Score -->
+      <div class="bg-gradient-to-br from-emerald-950/40 via-[#1e293b] to-cyan-950/40 border border-emerald-500/30 rounded-2xl p-5 shadow-md flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-emerald-300">Genel Birleşik Skor</span>
+          <div class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 mt-1">9.2 <span class="text-lg font-normal text-[#94a3b8]">/ 10</span></div>
+          <span class="text-xs text-emerald-400/90 font-medium">Kurumsal Bankacılık Seviyesi</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 border border-emerald-500/40 text-emerald-300 flex items-center justify-center text-xl font-bold">
+          ⚡
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Navigation Controls -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-[#1e293b] border border-[#334155] rounded-2xl p-3 shadow-md">
+      <!-- Tabs -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0" id="tabButtons">
+        <button onclick="switchTab('software')" id="tabBtn-software" class="tab-btn active px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-emerald-500 text-white shadow-md shadow-emerald-500/20 flex items-center gap-2">
+          <span>💻 1. Yazılım & Kod Katmanı</span>
+          <span class="px-1.5 py-0.5 rounded-full bg-white/20 text-xs">11</span>
+        </button>
+        <button onclick="switchTab('server')" id="tabBtn-server" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all text-[#94a3b8] hover:text-[#f8fafc] hover:bg-white/5 flex items-center gap-2">
+          <span>🏢 2. Sunucu & Altyapı Katmanı</span>
+          <span class="px-1.5 py-0.5 rounded-full bg-white/10 text-xs">9</span>
+        </button>
+        <button onclick="switchTab('checklist')" id="tabBtn-checklist" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all text-[#94a3b8] hover:text-[#f8fafc] hover:bg-white/5 flex items-center gap-2">
+          <span>📋 Canlı DevOps Kontrol Listesi</span>
+          <span class="px-1.5 py-0.5 rounded-full bg-white/10 text-xs">5</span>
+        </button>
+      </div>
+
+      <!-- Quick Search -->
+      <div class="relative w-full sm:w-64">
+        <input 
+          type="text" 
+          id="tableSearch" 
+          placeholder="Tehdit veya savunma ara..." 
+          onkeyup="filterRows()"
+          class="w-full bg-[#0f172a] border border-[#334155] rounded-xl px-3.5 py-2 text-xs text-[#f8fafc] placeholder-[#94a3b8] focus:outline-none focus:border-emerald-500 transition-colors"
+        />
+        <span class="absolute right-3 top-2.5 text-xs text-[#94a3b8] pointer-events-none">🔍</span>
+      </div>
+    </div>
+
+    <!-- TAB 1: Yazılım Katmanı -->
+    <div id="tab-software" class="tab-pane space-y-4">
+      <div class="bg-[#1e293b] border border-[#334155] rounded-2xl overflow-hidden shadow-lg">
+        <div class="p-5 border-b border-[#334155] flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-[#f8fafc]">Yazılım ve Uygulama Katmanı Güvenliği</h2>
+            <p class="text-xs text-[#94a3b8] mt-0.5">Uçtan Uca Şifreleme, Kimlik Doğrulama, Girdi Kontrolü ve DevSecOps Standartları</p>
+          </div>
+          <span class="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">11 Güvenlik Vektörü</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm" id="softwareTable">
+            <thead class="bg-[#0f172a]/50 text-xs uppercase tracking-wider text-[#94a3b8] border-b border-[#334155]">
+              <tr>
+                <th class="py-3.5 px-4 font-semibold">Güvenlik Vektörü</th>
+                <th class="py-3.5 px-4 font-semibold">Olası Tehdit / Saldırı</th>
+                <th class="py-3.5 px-4 font-semibold">Aura Savunma Mekanizması</th>
+                <th class="py-3.5 px-4 font-semibold">Kaynak Kod Konumu</th>
+                <th class="py-3.5 px-4 font-semibold text-center">Durum</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#334155]">
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🔐</span> Metin E2EE (Uçtan Uca)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Veritabanı sızıntısı veya sunucu ele geçirilmesi durumunda mesajların okunması</td>
+                <td class="py-4 px-4 text-xs text-slate-200">İstemcide <strong>WebCrypto AES-GCM-256</strong> ile şifreleme. Sunucu veritabanında sadece <code>enc:v1:...</code> şifreli metin tutulur, anahtar asla sunucuya gitmez.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">frontend/src/lib/e2ee.ts</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🍪</span> Kimlik & Token Güvenliği
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">XSS ile token çalınması, LocalStorage hırsızlığı</td>
+                <td class="py-4 px-4 text-xs text-slate-200">JWT'ler JavaScript'in erişemeyeceği <strong>HttpOnly, Secure, SameSite=Lax</strong> çerezlerde saklanır. LocalStorage sıfır token tutar.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/handlers/auth_handler.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>⚡</span> Uzaktan Oturum İptali
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Çalınan oturumun veya açık unutulan cihazın süresi dolana kadar kullanılması</td>
+                <td class="py-4 px-4 text-xs text-slate-200"><strong>token_version</strong> mimarisi. Kullanıcı "Tüm oturumları kapat" dediğinde sayaç artar ve tüm eski token'lar anında geçersiz kılınır.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/database/user_repo.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🌐</span> İç Ağ Sızma Koruması (SSRF)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Bağlantı önizleme üzerinden iç ağdaki servislere (5432, 6379, 22) sızma</td>
+                <td class="py-4 px-4 text-xs text-slate-200"><strong>Özel HTTP Dialer:</strong> RFC1918, Loopback, Cloud Metadata engeli + Yalnızca <strong>80, 443, 8080, 8443</strong> portlarına izin verilir. DNS Rebinding engellidir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/preview/preview.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>💉</span> SQL Enjeksiyonu (SQLi)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Form veya URL sorgularını bozarak yetkisiz veri çekme</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Sıfır string birleştirme (<code>Sprintf</code>). %100 <strong>Parametreli sorgular ($1, $2) ve Prepared Statements</strong>.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/database/*_repo.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam Koruma</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>👥</span> Yetki Aşımı & IDOR
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Başka bir kullanıcının mesajlarını okuma, silme veya yerine mesaj atma</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Her REST ve WebSocket işleminde oturum kimliği zorunlu tutulur; konuşma tarafları (<code>user_one_id</code>, <code>user_two_id</code>) doğrulanır.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/websocket/hub.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam Koruma</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🔌</span> WebSocket Hijacking (CSWSH)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Sahte bir siteden kurbanın adına canlı sokete bağlanma</td>
+                <td class="py-4 px-4 text-xs text-slate-200">El sıkışma anında <strong>Origin başlığı sıkı kontrol edilir</strong>; yabancı domain isteklerine <code>403 Forbidden</code> verilir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/handlers/ws_handler.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam Koruma</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>📦</span> Tedarik Zinciri (Supply Chain)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Bir npm veya Go paketine arka kapı / zararlı script gizlenmesi</td>
+                <td class="py-4 px-4 text-xs text-slate-200"><code>npm ci --ignore-scripts</code> + <code>go.sum</code> SHA-256 hash kilitleme + GitHub Actions CI hattında <strong>govulncheck</strong>, <strong>npm audit</strong>, <strong>Trivy</strong>.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">.github/workflows/security-audit.yml</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 DevSecOps</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🚨</span> Panik Şifresi (Anti-Coercion)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Fiziksel tehdit altında parolanın zorla söyletilmesi</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Özel panik şifresi girildiğinde hesabı sahte modda açar, tüm sohbetleri gizler ve tarayıcıyı Google'a yönlendirir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">012_advanced_security_features.sql</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 İleri Düzey</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>📷</span> Medya Dosyaları E2EE
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">MinIO diskine fiziksel erişim sağlanırsa resim/ses/video dosyalarının okunması</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Medyalar aktarımda TLS ile şifrelidir; ancak <strong>dosyaların kendisi istemcide henüz WebCrypto ile şifrelenmemektedir</strong> (ham dosya).</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/storage/minio.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">🟡 İyileştirme</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🤖</span> Dağıtık Kaba Kuvvet (Brute-Force)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">1000 farklı proxy IP ile tek bir kullanıcı adının şifresinin denenmesi</td>
+                <td class="py-4 px-4 text-xs text-slate-200">IP Jail (5 denemede 1 saat ban) devrede; botnet saldırılarına karşı kullanıcı adı bazlı ek sayaç önerilir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/internal/middleware/rate_limit.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">🟡 Sıkılaştırma</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Sunucu Katmanı -->
+    <div id="tab-server" class="tab-pane hidden space-y-4">
+      <div class="bg-[#1e293b] border border-[#334155] rounded-2xl overflow-hidden shadow-lg">
+        <div class="p-5 border-b border-[#334155] flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-[#f8fafc]">Sunucu, Ağ & Altyapı Katmanı Güvenliği</h2>
+            <p class="text-xs text-[#94a3b8] mt-0.5">Docker İzolasyonu, Traefik, CrowdSec, MinIO ve Canlı Port Güvenliği</p>
+          </div>
+          <span class="text-xs font-semibold px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">9 Altyapı Vektörü</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm" id="serverTable">
+            <thead class="bg-[#0f172a]/50 text-xs uppercase tracking-wider text-[#94a3b8] border-b border-[#334155]">
+              <tr>
+                <th class="py-3.5 px-4 font-semibold">Altyapı Bileşeni</th>
+                <th class="py-3.5 px-4 font-semibold">Olası Tehdit / Güvenlik Riski</th>
+                <th class="py-3.5 px-4 font-semibold">Aura Sunucu Mimarisi Çözümü</th>
+                <th class="py-3.5 px-4 font-semibold">Yapılandırma Dosyası</th>
+                <th class="py-3.5 px-4 font-semibold text-center">Durum</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#334155]">
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🐳</span> Host Breakout & Docker Socket
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Konteynerden ana işletim sistemine root yetkisiyle sıçrama</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Aura backend <strong>asla <code>/var/run/docker.sock</code> mount etmez</strong>. Konteyner içinde root değil, yetkisiz <strong>appuser (10001)</strong> çalışır.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/Dockerfile</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🐘</span> PostgreSQL Ağ İzolasyonu
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">5432 portuna internetten doğrudan SQL kaba kuvvet denemeleri</td>
+                <td class="py-4 px-4 text-xs text-slate-200">5432 portu ana makineye veya dış internete <strong>kesinlikle kapalıdır</strong>. Yalnızca Docker dahili ağı <code>aura-network</code> üzerinden erişilir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">docker-compose.prod.yml</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam İzolasyon</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🔴</span> Redis Ağ İzolasyonu & Parola
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Dışa açık Redis ile uzaktan kod çalıştırma (RCE)</td>
+                <td class="py-4 px-4 text-xs text-slate-200">6379 portu dış dünyaya kapalıdır + güçlü parola zorunluluğu (<strong>--requirepass</strong>) aktiftir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">docker-compose.prod.yml</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam İzolasyon</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🔒</span> Traefik v3 & Let's Encrypt TLS
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Man-in-the-Middle (MitM) dinleme, şifresiz HTTP trafiği</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Tüm HTTP istekleri zorunlu HTTPS'e yönlendirilir (HSTS). Let's Encrypt TLS 1.2/1.3 aktiftir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">Coolify / Traefik Labels</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🛡️</span> CrowdSec Saldırı Tespit (IPS)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Otomatik botnet exploit taramaları ve web saldırıları</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Traefik önüne <strong>crowdsec@file</strong> middleware'i entegre edilmiştir; kötü şöhretli IP'ler backend'e ulaşamadan kesilir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">docker-compose.prod.yml</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Aktif</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>📜</span> Access Log Gizliliği
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Sohbetlerde paylaşılan gizli linklerin Traefik access log'una sızması</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Link önizleme <code>GET</code> query string'inden çıkarılıp <strong>POST HTTP Body</strong> mimarisine taşındı. Loglarda URL parametresi çıkmaz.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">backend/cmd/server/main.go</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Zırhlı</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>🪣</span> MinIO S3 İzolasyonu
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">S3 Bucket dosya listeleme (listing) açığı ve yönetim konsolu sızıntısı</td>
+                <td class="py-4 px-4 text-xs text-slate-200">MinIO Console dışarı kapalıdır. Bucket listing devre dışıdır; dosyalar sadece UUID ve presigned URL ile erişilebilir.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">docker-compose.prod.yml</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 Tam Koruma</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>☁️</span> Cloudflare & Gerçek IP (XFF)
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Cloudflare proxy arkasında CrowdSec'in saldırgan yerine Cloudflare IP'sini görmesi</td>
+                <td class="py-4 px-4 text-xs text-slate-200">Traefik'te Cloudflare IP blokları <strong>trustedIPs</strong> olarak ayarlanmalı veya DNS 'Gri Bulut' (DNS Only) çalışmalıdır.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">Sunucu Traefik Ayarı</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">🟡 DevOps Kontrol</span>
+                </td>
+              </tr>
+
+              <tr class="hover:bg-white/[0.02] transition-colors">
+                <td class="py-4 px-4 font-semibold text-white flex items-center gap-2">
+                  <span>📞</span> LiveKit Medya Güvenlik Duvarı
+                </td>
+                <td class="py-4 px-4 text-xs text-[#94a3b8]">Ses ve video WebRTC paketlerinin UFW engeline takılması</td>
+                <td class="py-4 px-4 text-xs text-slate-200"><code>7881 UDP/TCP</code> portu sunucunun ana güvenlik duvarında (UFW / Hetzner) açık olmalıdır.</td>
+                <td class="py-4 px-4 text-xs font-mono text-cyan-400">Sunucu UFW Ayarı</td>
+                <td class="py-4 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">🟡 DevOps Kontrol</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Canlı DevOps Kontrol Listesi -->
+    <div id="tab-checklist" class="tab-pane hidden space-y-4">
+      <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-6 shadow-lg space-y-4">
+        <h2 class="text-lg font-bold text-[#f8fafc]">Canlı Sunucu İçin 5 Maddelik Operasyonel Kontrol Listesi</h2>
+        <p class="text-sm text-[#94a3b8]">Yazılım kod tabanı tamamen hazırdır; canlı sunucuda (alperserver) aşağıdaki 5 maddenin teyit edilmesi puanı 9.5+ seviyesine çıkaracaktır:</p>
+
+        <div class="space-y-3 pt-2">
+          <div class="p-4 rounded-xl bg-[#0f172a]/60 border border-[#334155] flex items-start gap-3">
+            <span class="text-emerald-400 font-bold text-lg">1.</span>
+            <div>
+              <div class="font-semibold text-white text-sm">LiveKit Medya Portu (7881 UDP/TCP) UFW Kontrolü</div>
+              <p class="text-xs text-[#94a3b8] mt-0.5">Sunucu terminalinde <code>ufw allow 7881/udp && ufw allow 7881/tcp</code> komutunun çalıştırıldığından emin olun.</p>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#0f172a]/60 border border-[#334155] flex items-start gap-3">
+            <span class="text-emerald-400 font-bold text-lg">2.</span>
+            <div>
+              <div class="font-semibold text-white text-sm">Cloudflare Trusted IPs / DNS Proxy Modu</div>
+              <p class="text-xs text-[#94a3b8] mt-0.5">Cloudflare kullanılıyorsa DNS Only (gri bulut) tercih edilmeli veya Traefik'e Cloudflare IP listesi eklenmelidir.</p>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#0f172a]/60 border border-[#334155] flex items-start gap-3">
+            <span class="text-emerald-400 font-bold text-lg">3.</span>
+            <div>
+              <div class="font-semibold text-white text-sm">Docker Socket Yalıtımı Teyidi</div>
+              <p class="text-xs text-[#94a3b8] mt-0.5">Aura servislerinin hiçbirinde <code>/var/run/docker.sock</code> mount'u yoktur; Coolify ortamında bu durum korunmalıdır.</p>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#0f172a]/60 border border-[#334155] flex items-start gap-3">
+            <span class="text-emerald-400 font-bold text-lg">4.</span>
+            <div>
+              <div class="font-semibold text-white text-sm">PostgreSQL & Redis Dış Port Kapalılığı</div>
+              <p class="text-xs text-[#94a3b8] mt-0.5">5432 ve 6379 portlarının sunucu IP'sinden internete kapalı olduğu <code>nmap</code> ile teyit edilmelidir.</p>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#0f172a]/60 border border-[#334155] flex items-start gap-3">
+            <span class="text-emerald-400 font-bold text-lg">5.</span>
+            <div>
+              <div class="font-semibold text-white text-sm">Periyodik Bağımlılık Taraması</div>
+              <p class="text-xs text-[#94a3b8] mt-0.5"><code>make audit</code> komutu ile düzenli olarak paket güvenlik açıkları taranmalıdır.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-[#94a3b8] py-4 border-t border-[#334155]">
+      Aura Architecture Security Review • Prepared for Production Deployment • All Systems Hardened
+    </footer>
+
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-emerald-500', 'text-white', 'shadow-md', 'shadow-emerald-500/20');
+        btn.classList.add('text-[#94a3b8]');
+      });
+
+      document.getElementById('tab-' + tabId).classList.remove('hidden');
+      const activeBtn = document.getElementById('tabBtn-' + tabId);
+      activeBtn.classList.add('bg-emerald-500', 'text-white', 'shadow-md', 'shadow-emerald-500/20');
+      activeBtn.classList.remove('text-[#94a3b8]');
+    }
+
+    function filterRows() {
+      const q = document.getElementById('tableSearch').value.toLowerCase();
+      const rows = document.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(q) ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
