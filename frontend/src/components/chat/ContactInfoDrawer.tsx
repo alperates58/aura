@@ -18,16 +18,13 @@ import {
   ShieldCheck,
   Play,
   Pause,
-  ExternalLink,
   Download,
   Trash2,
-  Calendar,
   Sparkles,
   Music,
   ArrowRight,
   Key,
   Palette,
-  MapPin,
 } from "lucide-react";
 import { Conversation, Message } from "@/store/useChatStore";
 import { User } from "@/store/useAuthStore";
@@ -145,7 +142,11 @@ function VoiceItemPlayer({
       <button
         type="button"
         onClick={togglePlay}
-        className="w-8 h-8 rounded-full bg-pink-500/20 text-pink-400 hover:bg-pink-500 hover:text-white flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
+        style={{
+          backgroundColor: "var(--accent-shadow, rgba(233, 30, 99, 0.2))",
+          color: "var(--accent, #E91E63)",
+        }}
+        className="w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer flex-shrink-0 hover:scale-105"
       >
         {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
       </button>
@@ -154,7 +155,7 @@ function VoiceItemPlayer({
       <div className="flex-1 min-w-0">
         <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
           <div
-            className="h-full bg-pink-500 rounded-full transition-all duration-100"
+            className="h-full bg-grupo-accent rounded-full transition-all duration-100"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -369,17 +370,17 @@ export default function ContactInfoDrawer({
   }, [voiceItems]);
 
   return (
-    <aside className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[#0c1015] border-l border-[#1f2633] z-40 shadow-2xl flex flex-col select-none overflow-hidden animate-in slide-in-from-right duration-200">
+    <aside className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-grupo-dark-bg border-l border-grupo-dark-border z-40 shadow-2xl flex flex-col select-none overflow-hidden animate-in slide-in-from-right duration-200">
       {/* ─────────────────────────────────────────────────────────────
-          1. ANA GÖRÜNÜM: KİŞİ BİLGİSİ (WHATSAPP + AURA DOKUNUŞLARI)
+          1. ANA GÖRÜNÜM: KİŞİ BİLGİSİ (AURA TEMA UYUMLU)
       ────────────────────────────────────────────────────────────── */}
       {currentView === "main" && (
         <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-[#0c1015]/90 backdrop-blur-md px-4 h-14 border-b border-[#1f2633]/50 flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/90 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={onClose}
-              className="flex items-center gap-1.5 text-grupo-accent hover:text-grupo-accent/80 font-medium text-sm transition-colors cursor-pointer py-1"
+              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
             >
               <ChevronLeft className="w-5 h-5 -ml-1" />
               <span>Geri</span>
@@ -426,10 +427,10 @@ export default function ContactInfoDrawer({
                           ? "border-2 border-emerald-500/70"
                           : "border-2 border-slate-700"
                       }`
-                    : "border-2 border-[#2b3345] bg-[#161c26]"
+                    : "border-2 border-grupo-dark-border bg-grupo-dark-card"
                 }`}
               >
-                <div className="w-full h-full rounded-full bg-[#181e2b] flex items-center justify-center font-bold text-3xl text-grupo-accent overflow-hidden">
+                <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center font-bold text-3xl text-grupo-accent overflow-hidden">
                   {activeConv.other_user.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -453,7 +454,7 @@ export default function ContactInfoDrawer({
                         : "bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-white font-bold"
                       : isOtherCloseFriends
                       ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : "bg-[#181e2b] text-slate-300 border border-slate-700"
+                      : "bg-grupo-dark-card text-slate-300 border border-slate-700"
                   }`}
                 >
                   <Sparkles className="w-3 h-3" />
@@ -469,7 +470,7 @@ export default function ContactInfoDrawer({
             <p className="text-xs text-slate-400 mt-0.5">@{activeConv.other_user.username}</p>
 
             {/* Çevrimiçi / Son Görülme Rozeti */}
-            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-[#161b24] border border-[#262f40]">
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-grupo-dark-card border border-grupo-dark-border">
               <span
                 className={`w-2 h-2 rounded-full ${
                   activeConv.is_online ? "bg-emerald-500" : "bg-slate-500"
@@ -500,7 +501,7 @@ export default function ContactInfoDrawer({
               {/* 1. Sesli Arama */}
               <button
                 onClick={() => onStartCall("audio")}
-                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-[#151a24] hover:bg-[#1d2433] border border-[#232a3b] text-white transition-all cursor-pointer group shadow-sm"
+                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-grupo-dark-card hover:bg-slate-800/80 border border-grupo-dark-border text-white transition-all cursor-pointer group shadow-sm"
               >
                 <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Phone className="w-4 h-4" />
@@ -511,7 +512,7 @@ export default function ContactInfoDrawer({
               {/* 2. Görüntülü Arama */}
               <button
                 onClick={() => onStartCall("video")}
-                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-[#151a24] hover:bg-[#1d2433] border border-[#232a3b] text-white transition-all cursor-pointer group shadow-sm"
+                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-grupo-dark-card hover:bg-slate-800/80 border border-grupo-dark-border text-white transition-all cursor-pointer group shadow-sm"
               >
                 <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Video className="w-4 h-4" />
@@ -525,9 +526,15 @@ export default function ContactInfoDrawer({
                   onClose();
                   if (onOpenListenTogether) onOpenListenTogether();
                 }}
-                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-[#151a24] hover:bg-[#1d2433] border border-[#232a3b] text-white transition-all cursor-pointer group shadow-sm"
+                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-grupo-dark-card hover:bg-slate-800/80 border border-grupo-dark-border text-white transition-all cursor-pointer group shadow-sm"
               >
-                <div className="w-8 h-8 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <div
+                  style={{
+                    backgroundColor: "var(--accent-shadow, rgba(233, 30, 99, 0.15))",
+                    color: "var(--accent, #E91E63)",
+                  }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"
+                >
                   <Headphones className="w-4 h-4" />
                 </div>
                 <span className="text-[11px] font-semibold text-slate-200">Dinle</span>
@@ -539,7 +546,7 @@ export default function ContactInfoDrawer({
                   onClose();
                   onOpenSearch();
                 }}
-                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-[#151a24] hover:bg-[#1d2433] border border-[#232a3b] text-white transition-all cursor-pointer group shadow-sm"
+                className="flex flex-col items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl bg-grupo-dark-card hover:bg-slate-800/80 border border-grupo-dark-border text-white transition-all cursor-pointer group shadow-sm"
               >
                 <div className="w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Search className="w-4 h-4" />
@@ -551,14 +558,14 @@ export default function ContactInfoDrawer({
 
           {/* 1. GRUP KARTI: Medya, Depolama ve Yıldızlı */}
           <div className="p-4 space-y-3">
-            <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] divide-y divide-[#232a3b]/70 overflow-hidden shadow-sm">
+            <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border divide-y divide-grupo-dark-border overflow-hidden shadow-sm">
               {/* Medya, bağlantı ve belgeler */}
               <button
                 onClick={() => {
                   setMediaTab("media");
                   setCurrentView("media_links_docs");
                 }}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-[#1c2331] transition-colors cursor-pointer"
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-800/50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center flex-shrink-0">
@@ -579,7 +586,7 @@ export default function ContactInfoDrawer({
               {/* Depolama alanını yönet */}
               <button
                 onClick={() => setCurrentView("storage")}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-[#1c2331] transition-colors cursor-pointer"
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-800/50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center flex-shrink-0">
@@ -598,7 +605,7 @@ export default function ContactInfoDrawer({
               {/* Yıldızlı Mesajlar */}
               <button
                 onClick={() => setCurrentView("starred")}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-[#1c2331] transition-colors cursor-pointer"
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-800/50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-amber-400/15 text-amber-400 flex items-center justify-center flex-shrink-0">
@@ -617,14 +624,14 @@ export default function ContactInfoDrawer({
 
             {/* Şifreleme ve Güvenlik Kodu (E2EE) */}
             {onOpenSafetyNumber && (
-              <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] overflow-hidden shadow-sm">
+              <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border overflow-hidden shadow-sm">
                 <button
                   type="button"
                   onClick={() => {
                     onClose();
                     onOpenSafetyNumber();
                   }}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#1c2331] transition-colors cursor-pointer text-left"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-slate-800/50 transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center flex-shrink-0">
@@ -644,7 +651,7 @@ export default function ContactInfoDrawer({
 
             {/* Hakkında (Biyografi) Kartı */}
             {activeConv.other_user.bio && (
-              <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] p-4 shadow-sm">
+              <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border p-4 shadow-sm">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                   Hakkında
                 </span>
@@ -655,12 +662,12 @@ export default function ContactInfoDrawer({
             )}
 
             {/* 2. GRUP KARTI: Alt Yıkıcı Eylemler (Sohbeti Temizle & Engelle) */}
-            <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] divide-y divide-[#232a3b]/70 overflow-hidden shadow-sm mt-4">
+            <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border divide-y divide-grupo-dark-border overflow-hidden shadow-sm mt-4">
               {/* Sohbeti Temizle */}
               <button
                 type="button"
                 onClick={onClearChat}
-                className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-[#1c2331] transition-colors cursor-pointer text-amber-400"
+                className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-slate-800/50 transition-colors cursor-pointer text-amber-400"
               >
                 <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center flex-shrink-0">
                   <Eraser className="w-4 h-4" />
@@ -680,7 +687,7 @@ export default function ContactInfoDrawer({
                     setIsBlocking(false);
                   }
                 }}
-                className={`w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-[#1c2331] transition-colors cursor-pointer ${
+                className={`w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-slate-800/50 transition-colors cursor-pointer ${
                   activeConv.is_blocked ? "text-emerald-400" : "text-rose-500"
                 }`}
               >
@@ -709,7 +716,7 @@ export default function ContactInfoDrawer({
                 <button
                   type="button"
                   onClick={onDeleteChat}
-                  className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-[#1c2331] transition-colors cursor-pointer text-rose-500"
+                  className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-slate-800/50 transition-colors cursor-pointer text-rose-500"
                 >
                   <div className="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
                     <Trash2 className="w-4 h-4" />
@@ -726,13 +733,13 @@ export default function ContactInfoDrawer({
           2. ALT GÖRÜNÜM: MEDYA, SESLER, BAĞLANTILAR VE BELGELER
       ────────────────────────────────────────────────────────────── */}
       {currentView === "media_links_docs" && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0c1015]">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-grupo-dark-bg">
           {/* Üst Bar & 4'lü Segmented Tab Kontrolü */}
-          <div className="sticky top-0 z-20 bg-[#0c1015]/95 backdrop-blur-md px-3 pt-3 pb-2 border-b border-[#1f2633]/60 flex flex-col gap-2.5">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-3 pt-3 pb-2 border-b border-grupo-dark-border flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setCurrentView("main")}
-                className="flex items-center gap-1 text-grupo-accent hover:text-grupo-accent/80 font-medium text-sm transition-colors cursor-pointer py-1"
+                className="flex items-center gap-1 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
               >
                 <ChevronLeft className="w-5 h-5 -ml-1" />
                 <span>Geri</span>
@@ -748,13 +755,13 @@ export default function ContactInfoDrawer({
               </button>
             </div>
 
-            {/* 4'lü iOS Segmented Bar [ Medya | Sesler | Bağlantılar | Belgeler ] */}
-            <div className="grid grid-cols-4 p-1 bg-[#161c26] rounded-xl border border-[#232a3b] gap-1">
+            {/* 4'lü Segmented Bar [ Medya | Sesler | Bağlantılar | Belgeler ] */}
+            <div className="grid grid-cols-4 p-1 bg-slate-900/90 rounded-xl border border-grupo-dark-border gap-1">
               <button
                 onClick={() => setMediaTab("media")}
                 className={`py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer text-center truncate px-1 ${
                   mediaTab === "media"
-                    ? "bg-[#283244] text-white shadow-sm font-bold"
+                    ? "bg-grupo-dark-card text-white shadow-sm font-bold border border-grupo-dark-border"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -764,7 +771,7 @@ export default function ContactInfoDrawer({
                 onClick={() => setMediaTab("voices")}
                 className={`py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer text-center truncate px-1 ${
                   mediaTab === "voices"
-                    ? "bg-[#283244] text-white shadow-sm font-bold"
+                    ? "bg-grupo-dark-card text-white shadow-sm font-bold border border-grupo-dark-border"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -774,7 +781,7 @@ export default function ContactInfoDrawer({
                 onClick={() => setMediaTab("links")}
                 className={`py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer text-center truncate px-1 ${
                   mediaTab === "links"
-                    ? "bg-[#283244] text-white shadow-sm font-bold"
+                    ? "bg-grupo-dark-card text-white shadow-sm font-bold border border-grupo-dark-border"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -784,7 +791,7 @@ export default function ContactInfoDrawer({
                 onClick={() => setMediaTab("docs")}
                 className={`py-1.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer text-center truncate px-1 ${
                   mediaTab === "docs"
-                    ? "bg-[#283244] text-white shadow-sm font-bold"
+                    ? "bg-grupo-dark-card text-white shadow-sm font-bold border border-grupo-dark-border"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -829,7 +836,7 @@ export default function ContactInfoDrawer({
                               });
                             }
                           }}
-                          className="aspect-square bg-[#151a24] relative cursor-pointer group overflow-hidden"
+                          className="aspect-square bg-grupo-dark-card relative cursor-pointer group overflow-hidden"
                         >
                           {isVid ? (
                             <div className="w-full h-full relative bg-black flex items-center justify-center">
@@ -897,13 +904,13 @@ export default function ContactInfoDrawer({
                         <div className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           {monthKey}
                         </div>
-                        <div className="divide-y divide-[#1e2533] bg-[#131822] border-y border-[#1f2635]">
+                        <div className="divide-y divide-grupo-dark-border bg-grupo-dark-card border-y border-grupo-dark-border">
                           {items.map((m) => {
                             const isMine = m.sender_id === currentUser?.id || m.is_mine;
                             return (
                               <div
                                 key={m.id}
-                                className="p-3.5 space-y-2 hover:bg-[#19202d] transition-colors"
+                                className="p-3.5 space-y-2 hover:bg-slate-800/40 transition-colors"
                               >
                                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                                   <span className="font-semibold text-slate-300">
@@ -950,11 +957,11 @@ export default function ContactInfoDrawer({
                         <div className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           {monthKey}
                         </div>
-                        <div className="divide-y divide-[#1e2533] bg-[#131822] border-y border-[#1f2635]">
+                        <div className="divide-y divide-grupo-dark-border bg-grupo-dark-card border-y border-grupo-dark-border">
                           {items.map((item, idx) => (
                             <div
                               key={`${item.messageId}-${idx}`}
-                              className="p-3.5 flex items-start justify-between gap-3 hover:bg-[#19202d] transition-colors"
+                              className="p-3.5 flex items-start justify-between gap-3 hover:bg-slate-800/40 transition-colors"
                             >
                               <a
                                 href={item.url}
@@ -1021,7 +1028,7 @@ export default function ContactInfoDrawer({
                         <div className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           {monthKey}
                         </div>
-                        <div className="divide-y divide-[#1e2533] bg-[#131822] border-y border-[#1f2635]">
+                        <div className="divide-y divide-grupo-dark-border bg-grupo-dark-card border-y border-grupo-dark-border">
                           {items.map((m) => {
                             const fileName = m.media_metadata?.file_name || "Belge";
                             const fileSize = m.media_metadata?.file_size
@@ -1034,7 +1041,7 @@ export default function ContactInfoDrawer({
                             return (
                               <div
                                 key={m.id}
-                                className="p-3.5 flex items-center justify-between gap-3 hover:bg-[#19202d] transition-colors"
+                                className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors"
                               >
                                 <a
                                   href={finalUrl}
@@ -1088,12 +1095,12 @@ export default function ContactInfoDrawer({
           3. ALT GÖRÜNÜM: DEPOLAMA ALANINI YÖNET
       ────────────────────────────────────────────────────────────── */}
       {currentView === "storage" && (
-        <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar bg-[#0c1015]">
+        <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar bg-grupo-dark-bg">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-[#0c1015]/95 backdrop-blur-md px-4 h-14 border-b border-[#1f2633]/60 flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={() => setCurrentView("main")}
-              className="flex items-center gap-1.5 text-grupo-accent hover:text-grupo-accent/80 font-medium text-sm transition-colors cursor-pointer py-1"
+              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
             >
               <ChevronLeft className="w-5 h-5 -ml-1" />
               <span>Geri</span>
@@ -1109,7 +1116,7 @@ export default function ContactInfoDrawer({
 
           <div className="p-4 space-y-4">
             {/* Toplam Alan Kartı */}
-            <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] p-5 text-center shadow-sm">
+            <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border p-5 text-center shadow-sm">
               <span className="text-xs font-semibold text-slate-400 block mb-1">
                 Bu Sohbette Kullanılan Alan
               </span>
@@ -1122,7 +1129,7 @@ export default function ContactInfoDrawer({
             </div>
 
             {/* Kategori Dağılımı */}
-            <div className="bg-[#151a24] rounded-2xl border border-[#232a3b] divide-y divide-[#232a3b]/70 overflow-hidden shadow-sm">
+            <div className="bg-grupo-dark-card rounded-2xl border border-grupo-dark-border divide-y divide-grupo-dark-border overflow-hidden shadow-sm">
               {/* Fotoğraflar */}
               <div className="px-4 py-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1174,7 +1181,13 @@ export default function ContactInfoDrawer({
               {/* Ses Kayıtları */}
               <div className="px-4 py-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-pink-500/15 text-pink-400 flex items-center justify-center">
+                  <div
+                    style={{
+                      backgroundColor: "var(--accent-shadow, rgba(233, 30, 99, 0.15))",
+                      color: "var(--accent, #E91E63)",
+                    }}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center"
+                  >
                     <Music className="w-4 h-4" />
                   </div>
                   <div>
@@ -1205,12 +1218,12 @@ export default function ContactInfoDrawer({
           4. ALT GÖRÜNÜM: YILDIZLI MESAJLAR (BU SOHBETE AİT)
       ────────────────────────────────────────────────────────────── */}
       {currentView === "starred" && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0c1015]">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-grupo-dark-bg">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-[#0c1015]/95 backdrop-blur-md px-4 h-14 border-b border-[#1f2633]/60 flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={() => setCurrentView("main")}
-              className="flex items-center gap-1.5 text-grupo-accent hover:text-grupo-accent/80 font-medium text-sm transition-colors cursor-pointer py-1"
+              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
             >
               <ChevronLeft className="w-5 h-5 -ml-1" />
               <span>Geri</span>
@@ -1240,9 +1253,9 @@ export default function ContactInfoDrawer({
                 return (
                   <div
                     key={msg.id}
-                    className="p-3.5 rounded-2xl bg-[#151a24] border border-[#232a3b] space-y-2 shadow-sm relative group"
+                    className="p-3.5 rounded-2xl bg-grupo-dark-card border border-grupo-dark-border space-y-2 shadow-sm relative group"
                   >
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-[#232a3b]/60 pb-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-grupo-dark-border pb-1.5">
                       <span className="font-semibold text-slate-300">
                         {isMine ? "Siz" : activeConv.other_user.display_name}
                       </span>
@@ -1289,7 +1302,7 @@ export default function ContactInfoDrawer({
                     )}
 
                     {/* Aksiyonlar: Mesaja Git & Yıldızı Kaldır */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[#232a3b]/40">
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-grupo-dark-border">
                       {onToggleStarMessage && (
                         <button
                           type="button"
@@ -1306,7 +1319,7 @@ export default function ContactInfoDrawer({
                             onJumpToMessage(msg.id);
                             onClose();
                           }}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-grupo-accent hover:bg-grupo-accent/10 transition-colors cursor-pointer flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-grupo-accent hover:opacity-80 transition-opacity cursor-pointer flex items-center gap-1"
                         >
                           <span>Mesaja Git</span>
                           <ArrowRight className="w-3 h-3" />
