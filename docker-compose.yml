@@ -1,3 +1,5 @@
+name: aura
+
 services:
   # 1. PostgreSQL 16 Veritabanı
   postgres:

@@ -2,6 +2,7 @@
 
 import { useChatStore } from "@/store/useChatStore";
 import { CornerUpLeft, X, Mic, Image, Video, FileText, MapPin } from "lucide-react";
+import { focusChatInput } from "@/lib/utils";
 
 export default function ReplyBar() {
   const { replyingTo, setReplyingTo, conversations, activeConversationId } = useChatStore();
@@ -59,7 +60,13 @@ export default function ReplyBar() {
   };
 
   return (
-    <div className="mb-2 rounded-2xl bg-slate-900/95 border border-slate-700/80 overflow-hidden flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+    <div
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        focusChatInput();
+      }}
+      className="mb-2 rounded-2xl bg-slate-900/95 border border-slate-700/80 overflow-hidden flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 cursor-pointer"
+    >
       <div className="w-1.5 self-stretch flex-shrink-0" style={{ backgroundColor: "var(--accent, #E91E63)" }} />
       <div className="flex items-center gap-2.5 min-w-0 flex-1 p-2.5 pl-3">
         <CornerUpLeft className="w-4 h-4 flex-shrink-0" style={{ color: "var(--accent, #E91E63)" }} />
@@ -71,7 +78,10 @@ export default function ReplyBar() {
         </div>
       </div>
       <button
-        onClick={() => setReplyingTo(null)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setReplyingTo(null);
+        }}
         title="Yanıtlamayı İptal Et"
         className="w-7 h-7 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer mr-2 flex-shrink-0"
       >

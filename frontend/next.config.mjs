@@ -9,6 +9,7 @@ const normalizedBasePath = rawBasePath.startsWith("/")
 const nextConfig = {
   output: "standalone",
   reactStrictMode: false,
+  skipTrailingSlashRedirect: true,
   basePath: normalizedBasePath || undefined,
   assetPrefix: normalizedBasePath ? `${normalizedBasePath}/` : undefined,
   images: {

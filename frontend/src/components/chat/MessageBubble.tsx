@@ -38,6 +38,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import CodeSnippetBox from "./CodeSnippetBox";
 import LocationMessageCard from "./LocationMessageCard";
 import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
+import { focusChatInput } from "@/lib/utils";
 
 interface Props {
   message: Message;
@@ -122,6 +123,7 @@ export default function MessageBubble({
   const handleTouchEnd = () => {
     if (swipeOffset >= 45) {
       setReplyingTo(message);
+      focusChatInput();
       if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate(15);
       }
@@ -576,7 +578,10 @@ export default function MessageBubble({
             // Mobilde mesaja tıklandığında hızlı eylem butonlarını aç/kapat
             setIsMobileActionsOpen((prev) => !prev);
           }}
-          onDoubleClick={() => setReplyingTo(message)}
+          onDoubleClick={() => {
+            setReplyingTo(message);
+            focusChatInput();
+          }}
           onContextMenu={handleContextMenu}
           style={{
             transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
@@ -1084,6 +1089,7 @@ export default function MessageBubble({
                 e.stopPropagation();
                 setReplyingTo(message);
                 setIsMobileActionsOpen(false);
+                focusChatInput();
               }}
               title="Yanıtla"
               className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
@@ -1140,6 +1146,7 @@ export default function MessageBubble({
               onClick={() => {
                 setShowMenu(false);
                 setReplyingTo(message);
+                focusChatInput();
               }}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-left transition-colors cursor-pointer text-slate-200"
             >

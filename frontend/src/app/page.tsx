@@ -41,7 +41,7 @@ import InChatSearchBar from "@/components/chat/InChatSearchBar";
 import ActiveChatHeader from "@/components/chat/ActiveChatHeader";
 import { compressImage, validateVideo } from "@/lib/compression";
 import { api, resolveMediaUrl, getApiBaseUrl, getBasePath, getLoginUrl } from "@/lib/api";
-import { formatLastSeen } from "@/lib/utils";
+import { formatLastSeen, focusChatInput } from "@/lib/utils";
 import { notificationManager } from "@/lib/notifications";
 import { subscribeUserToPush, getPushSubscription } from "@/lib/push_notifications";
 import ConversationListItem from "@/components/chat/ConversationListItem";
@@ -491,6 +491,13 @@ export default function HomePage() {
       inputRef.current.style.overflowY = "hidden";
     }
   }, [activeConversationId]);
+
+  // 2c. Yanıtla seçildiğinde mesaj yazma alanına otomatik odaklan (özellikle PC'de)
+  useEffect(() => {
+    if (replyingTo) {
+      focusChatInput();
+    }
+  }, [replyingTo]);
 
   // 3. Mesaj listesi otomatik en alta kaydırma
   useEffect(() => {
@@ -2285,6 +2292,7 @@ export default function HomePage() {
                     ) : (
                       <form onSubmit={handleSend} className="flex-1 flex items-end gap-2">
                         <textarea
+                          id="aura-chat-input"
                           ref={inputRef}
                           rows={1}
                           value={inputMessage}

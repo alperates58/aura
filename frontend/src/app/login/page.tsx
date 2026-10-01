@@ -56,8 +56,15 @@ export default function LoginPage() {
         localStorage.setItem("aura_last_active", Date.now().toString());
       }
       const bp = getBasePath();
-      const targetUrl = bp ? `${bp}/` : "/";
-      window.location.href = targetUrl;
+      if (process.env.NEXT_PUBLIC_BASE_PATH) {
+        router.replace("/");
+      } else if (bp) {
+        // Trailing slash KESİNLİKLE konmaz (/b/ yerine /b).
+        // Böylece Next.js 308 redirect üretmez ve tarayıcı Basic Auth credential'larını korur.
+        window.location.href = bp;
+      } else {
+        router.replace("/");
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || "Giriş yapılırken bir hata oluştu.";
       setError(msg);

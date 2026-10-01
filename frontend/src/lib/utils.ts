@@ -157,3 +157,29 @@ export function getMutedTextColor(bubbleHex?: string, textHex?: string): string 
   return "rgba(255, 255, 255, 0.70)";
 }
 
+/**
+ * Sohbet mesaj yazma alanına (textarea) odağı verir ve imleci sona taşır.
+ * Özellikle masaüstü (PC) ortamında yanıtla butonuna tıklandığında hemen yazmaya başlamak için kullanılır.
+ */
+export function focusChatInput(delayMs: number = 0) {
+  if (typeof document === "undefined") return;
+
+  const doFocus = () => {
+    const textarea = document.getElementById("aura-chat-input") as HTMLTextAreaElement | null;
+    if (textarea) {
+      textarea.focus();
+      const len = textarea.value.length;
+      textarea.setSelectionRange(len, len);
+    }
+  };
+
+  if (delayMs <= 0) {
+    doFocus();
+    // Menü kapanış animasyonu ve DOM yerleşimi sonrası garanti odakla
+    setTimeout(doFocus, 50);
+    setTimeout(doFocus, 150);
+  } else {
+    setTimeout(doFocus, delayMs);
+  }
+}
+
