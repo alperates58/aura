@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { User } from "@/store/useAuthStore";
 
-export type NavTab = "chats" | "contacts" | "starred" | "settings";
+export type NavTab = "chats" | "contacts" | "settings";
 
 interface Props {
   activeTab: NavTab;
@@ -187,46 +187,7 @@ export default function SideNavigation({
             {isExpanded && <span className="text-xs whitespace-nowrap">Kişiler</span>}
           </button>
 
-          {/* 3. Yıldızlı Mesajlar (Starred) */}
-          <button
-            onClick={() => onTabChange("starred")}
-            title="Yıldızlı Mesajlar"
-            style={
-              activeTab === "starred"
-                ? {
-                    backgroundColor: "var(--accent, #E91E63)",
-                    color: "var(--accent-text, #ffffff)",
-                    boxShadow: "0 4px 12px var(--accent-shadow, rgba(233, 30, 99, 0.35))",
-                  }
-                : undefined
-            }
-            className={`w-full h-11 rounded-xl flex items-center gap-3 px-3 transition-all cursor-pointer ${
-              activeTab === "starred"
-                ? "text-white shadow-md font-semibold"
-                : "text-slate-400 hover:text-white hover:bg-[#1E222D]"
-            }`}
-          >
-            <div className="relative flex items-center justify-center flex-shrink-0">
-              <Star className="w-5 h-5" />
-              {starredCount > 0 && !isExpanded && (
-                <span className="absolute -top-1.5 -right-2 px-1 py-0.2 min-w-[16px] h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center shadow">
-                  {starredCount}
-                </span>
-              )}
-            </div>
-            {isExpanded && (
-              <div className="flex-1 flex items-center justify-between text-xs whitespace-nowrap overflow-hidden">
-                <span>Yıldızlılar</span>
-                {starredCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                    {starredCount}
-                  </span>
-                )}
-              </div>
-            )}
-          </button>
-
-          {/* 4. Profil & Ayarlar */}
+          {/* 3. Profil & Ayarlar */}
           <button
             onClick={() => {
               onTabChange("settings");

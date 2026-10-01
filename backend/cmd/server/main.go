@@ -153,7 +153,7 @@ func main() {
 	app.Use(middleware.SecurityHeadersMiddleware())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Protocol",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Protocol, X-Session-ID, X-Requested-With",
 		AllowCredentials: true,
 	}))
 

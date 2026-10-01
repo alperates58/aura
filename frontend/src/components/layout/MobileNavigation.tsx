@@ -51,24 +51,7 @@ export default function MobileNavigation({
         <span className="text-[10px]">Kişiler</span>
       </button>
 
-      {/* 3. Yıldızlı */}
-      <button
-        onClick={() => onTabChange("starred")}
-        style={activeTab === "starred" ? { color: "var(--accent, #E91E63)" } : undefined}
-        className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-colors relative cursor-pointer ${
-          activeTab === "starred" ? "font-bold" : "text-slate-400 hover:text-white"
-        }`}
-      >
-        <Star className="w-5 h-5" />
-        <span className="text-[10px]">Yıldızlı</span>
-        {starredCount > 0 && (
-          <span className="absolute top-0 right-2 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[9px] font-bold">
-            {starredCount}
-          </span>
-        )}
-      </button>
-
-      {/* 4. Ayarlar */}
+      {/* 3. Ayarlar */}
       <button
         onClick={() => {
           onTabChange("settings");
