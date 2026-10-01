@@ -284,15 +284,25 @@ export default function MessageBubble({
 
   const isCallLog =
     message.message_type === "call_log" ||
-    Boolean(message.content && (message.content.includes("Arama") || message.content.includes("Görüntülü")));
+    Boolean(
+      message.content &&
+      (message.content.startsWith("📞") || message.content.startsWith("📹")) &&
+      (message.content.includes("Sesli Arama") || message.content.includes("Görüntülü Arama"))
+    );
 
   const isVideoCall =
-    Boolean(message.content?.includes("Görüntülü") ||
-    message.media_metadata?.call_type === "video");
+    isCallLog &&
+    Boolean(
+      message.content?.includes("Görüntülü") ||
+      message.media_metadata?.call_type === "video"
+    );
 
   const isMissedOrRejected =
-    Boolean(message.content?.includes("Cevapsız") ||
-    message.content?.includes("Reddedilen"));
+    isCallLog &&
+    Boolean(
+      message.content?.includes("Cevapsız") ||
+      message.content?.includes("Reddedilen")
+    );
 
   const renderInlinePart = (part: string, keyPrefix: string) => {
     if (searchQuery && searchQuery.trim().length > 0) {
@@ -645,15 +655,19 @@ export default function MessageBubble({
                 </div>
                 <div className="text-[11px] opacity-85 line-clamp-2 break-all overflow-hidden">
                   {targetRepliedMessage
-                    ? targetRepliedMessage.message_type === "voice"
+                    ? targetRepliedMessage.is_deleted_for_all
+                      ? "🚫 Bu mesaj silindi"
+                      : targetRepliedMessage.message_type === "voice"
                       ? "🎤 Sesli Mesaj"
                       : targetRepliedMessage.message_type === "image"
-                      ? "📷 Fotoğraf"
+                      ? targetRepliedMessage.content ? `📷 ${targetRepliedMessage.content}` : "📷 Fotoğraf"
                       : targetRepliedMessage.message_type === "video"
-                      ? "🎬 Video"
+                      ? targetRepliedMessage.content ? `🎬 ${targetRepliedMessage.content}` : "🎬 Video"
                       : targetRepliedMessage.message_type === "file"
-                      ? "📄 Belge"
-                      : targetRepliedMessage.content
+                      ? targetRepliedMessage.content ? `📄 ${targetRepliedMessage.content}` : "📄 Belge"
+                      : targetRepliedMessage.message_type === "location"
+                      ? "📍 Konum"
+                      : targetRepliedMessage.content || "Mesaj"
                     : "Orijinal mesaja git..."}
                 </div>
               </div>

@@ -311,10 +311,16 @@ export default function ConversationListItem({
                 {isTyping ? (
                   <span className="text-pink-400 font-medium animate-pulse">yazıyor...</span>
                 ) : conversation.last_message ? (
-                  conversation.last_message.message_type === "voice" ? (
+                  conversation.last_message.is_deleted_for_all ? (
+                    <span className="italic opacity-80">🚫 Bu mesaj silindi</span>
+                  ) : conversation.last_message.message_type === "voice" ? (
                     "🎤 Sesli Mesaj"
                   ) : conversation.last_message.message_type === "image" ? (
-                    "📷 Fotoğraf"
+                    conversation.last_message.content ? `📷 ${conversation.last_message.content}` : "📷 Fotoğraf"
+                  ) : conversation.last_message.message_type === "video" ? (
+                    conversation.last_message.content ? `🎥 ${conversation.last_message.content}` : "🎥 Video"
+                  ) : conversation.last_message.message_type === "file" ? (
+                    conversation.last_message.content ? `📄 ${conversation.last_message.content}` : "📄 Belge"
                   ) : conversation.last_message.message_type === "location" ? (
                     "📍 Konum"
                   ) : (

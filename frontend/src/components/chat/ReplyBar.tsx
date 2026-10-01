@@ -1,7 +1,7 @@
 "use client";
 
 import { useChatStore } from "@/store/useChatStore";
-import { CornerUpLeft, X, Mic, Image, Video, FileText } from "lucide-react";
+import { CornerUpLeft, X, Mic, Image, Video, FileText, MapPin } from "lucide-react";
 
 export default function ReplyBar() {
   const { replyingTo, setReplyingTo, conversations, activeConversationId } = useChatStore();
@@ -12,6 +12,9 @@ export default function ReplyBar() {
   const otherUserName = activeConv?.other_user.display_name || "Karşı Taraf";
 
   const renderContentPreview = () => {
+    if (replyingTo.is_deleted_for_all) {
+      return <span className="italic opacity-80">🚫 Bu mesaj silindi</span>;
+    }
     if (replyingTo.message_type === "voice") {
       return (
         <span className="flex items-center gap-1.5" style={{ color: "var(--accent, #E91E63)" }}>
@@ -41,6 +44,14 @@ export default function ReplyBar() {
         <span className="flex items-center gap-1.5" style={{ color: "var(--accent, #E91E63)" }}>
           <FileText className="w-3.5 h-3.5" />
           <span>Belge / Dosya</span>
+        </span>
+      );
+    }
+    if (replyingTo.message_type === "location") {
+      return (
+        <span className="flex items-center gap-1.5" style={{ color: "var(--accent, #E91E63)" }}>
+          <MapPin className="w-3.5 h-3.5" />
+          <span>Konum</span>
         </span>
       );
     }
