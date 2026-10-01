@@ -21,13 +21,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToArrayBuffer(base64: string): Uint8Array {
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return bytes;
+  return bytes.buffer as ArrayBuffer;
 }
 
 /**
@@ -126,7 +126,7 @@ export async function encryptE2EEMessage(
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: "AES-GCM",
-        iv: iv,
+        iv: iv.buffer as ArrayBuffer,
       },
       key,
       encoded
@@ -171,10 +171,10 @@ export async function decryptE2EEMessage(
     const decrypted = await window.crypto.subtle.decrypt(
       {
         name: "AES-GCM",
-        iv: iv,
+        iv: iv as BufferSource,
       },
       key,
-      ciphertext
+      ciphertext as BufferSource
     );
 
     return new TextDecoder().decode(decrypted);
