@@ -1348,35 +1348,37 @@ export default function SettingsModal({
                 ) : userAccessLogs.length === 0 ? (
                   <p className="py-8 text-center text-xs text-slate-500">Henüz kayıtlı bir giriş geçmişi bulunmuyor.</p>
                 ) : (
-                  <div className="space-y-2 max-h-[450px] overflow-y-auto">
+                  <div className="space-y-2.5">
                     {userAccessLogs.map((log: any, idx: number) => {
                       const isMobile = (log.device_info || "").toLowerCase().includes("iphone") || (log.device_info || "").toLowerCase().includes("android");
                       return (
                         <div
                           key={idx}
-                          className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition-colors"
+                          className="p-3 sm:p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs shadow-xs"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 flex-shrink-0">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 flex-shrink-0">
                               {isMobile ? (
-                                <Smartphone className="w-4 h-4" />
+                                <Smartphone className="w-4 h-4 text-pink-400" />
                               ) : (
-                                <Laptop className="w-4 h-4" />
+                                <Laptop className="w-4 h-4 text-blue-400" />
                               )}
                             </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-white">{log.device_info || "Bilinmeyen Cihaz"}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-white text-xs truncate">{log.device_info || "Bilinmeyen Cihaz"}</span>
                                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
                                   Giriş Yapıldı
                                 </span>
                               </div>
-                              <span className="text-[11px] text-slate-400 font-mono">{log.ip_address}</span>
+                              <span className="text-[11px] text-slate-400 font-mono block mt-0.5">{log.ip_address}</span>
                             </div>
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            {new Date(log.created_at).toLocaleString("tr-TR")}
-                          </span>
+                          <div className="flex items-center justify-end sm:text-right flex-shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800/80">
+                            <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                              {new Date(log.created_at).toLocaleString("tr-TR")}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
