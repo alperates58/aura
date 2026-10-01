@@ -217,8 +217,8 @@ export default function SideNavigation({
           {onOpenAdmin && (
             <div className="pt-2 border-t border-[#222631] mt-2 space-y-1">
               <button
-                onClick={() => onOpenAdmin("general")}
-                title="Sistem Parametreleri"
+                onClick={() => onOpenAdmin()}
+                title="Sistem Parametreleri Menüsü"
                 className="w-full h-11 rounded-xl flex items-center gap-3 px-3 text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all cursor-pointer shadow-sm group"
               >
                 <Sliders className="w-5 h-5 flex-shrink-0 text-amber-400 group-hover:scale-110 transition-transform" />

@@ -136,6 +136,22 @@ func (h *ChatHandler) GetMessages(c *fiber.Ctx) error {
 	}
 
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+
+	// Hedef mesajın etrafındaki mesajları getirme (Sohbette Göster / Alıntıya Git)
+	aroundStr := c.Query("around")
+	if aroundStr == "" {
+		aroundStr = c.Query("around_id")
+	}
+	if aroundStr != "" {
+		if targetMsgID, err := uuid.Parse(aroundStr); err == nil {
+			messages, err := h.chatRepo.GetMessagesAround(c.Context(), convID, userID, targetMsgID, limit)
+			if err != nil {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+			}
+			return c.JSON(messages)
+		}
+	}
+
 	var beforeTime *time.Time
 	if beforeStr := c.Query("before"); beforeStr != "" {
 		if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {

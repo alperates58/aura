@@ -126,11 +126,11 @@ export default function MediaGalleryModal({
                 onClose();
                 onJumpToMessage(currentItem.id);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-grupo-accent hover:text-white text-slate-200 transition-all text-xs font-semibold cursor-pointer border border-slate-700/60 shadow-md"
-              title="Bu mesajı sohbette göster"
+              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer border border-slate-700/60 flex items-center gap-1.5 shadow-sm"
+              title="Sohbette Göster"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Sohbette Göster</span>
+              <MessageSquare className="w-5 h-5 text-pink-400" />
+              <span className="hidden md:inline text-xs font-medium">Sohbette Göster</span>
             </button>
           )}
 

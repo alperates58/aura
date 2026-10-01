@@ -66,10 +66,10 @@ export default function MobileNavigation({
         <span className="text-[10px]">Ayarlar</span>
       </button>
 
-      {/* 5. Parametreler (Aura Yönetim) */}
+      {/* 5. Parametreler (Aura Yönetim Menüsü) */}
       {onOpenAdmin && (
         <button
-          onClick={() => onOpenAdmin("general")}
+          onClick={() => onOpenAdmin()}
           className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-colors cursor-pointer text-amber-400 hover:text-amber-300"
         >
           <Sliders className="w-5 h-5" />

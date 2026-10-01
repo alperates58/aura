@@ -85,6 +85,7 @@ interface ChatState {
   deselectConversation: () => void;
   loadMessages: (convId: string) => Promise<void>;
   loadOlderMessages: (convId: string) => Promise<boolean>;
+  loadMessagesAround: (convId: string, messageId: string) => Promise<boolean>;
   blockConversation: (convId: string) => Promise<void>;
   unblockConversation: (convId: string) => Promise<void>;
   searchMessages: (convId: string, query: string) => Promise<Message[]>;
@@ -424,6 +425,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err) {
       console.error("Eski mesajlar yüklenemedi:", err);
       set({ loadingOlderMessages: false });
+      return false;
+    }
+  },
+
+  loadMessagesAround: async (convId: string, messageId: string) => {
+    if (!convId || !messageId) return false;
+    try {
+      const res = await api.get<Message[]>(
+        `/conversations/${convId}/messages?around=${encodeURIComponent(messageId)}&limit=50`
+      );
+      const rawMsgs = res.data || [];
+      const decryptedMsgs = await decryptMessageList(convId, rawMsgs);
+
+      if (decryptedMsgs.length === 0) return false;
+
+      set((state) => {
+        const existing = state.messages[convId] || [];
+        const map = new Map<string, Message>();
+        for (const m of existing) {
+          map.set(m.id, m);
+        }
+        for (const m of decryptedMsgs) {
+          map.set(m.id, m);
+        }
+        const merged = Array.from(map.values()).sort((a, b) => {
+          const tA = new Date(a.created_at || a.sent_at).getTime();
+          const tB = new Date(b.created_at || b.sent_at).getTime();
+          return tA - tB;
+        });
+
+        return {
+          messages: {
+            ...state.messages,
+            [convId]: merged,
+          },
+        };
+      });
+      return true;
+    } catch (err) {
+      console.error("Hedef mesaj etrafı yüklenemedi:", err);
       return false;
     }
   },

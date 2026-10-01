@@ -1274,26 +1274,49 @@ export default function HomePage() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const handleJumpToMessage = async (conversationId: string, messageId: string) => {
+    if (!messageId) return;
+
     if (activeConversationId !== conversationId) {
       await selectConversation(conversationId);
     }
     setShowContactDrawer(false);
     setIsGalleryOpen(false);
-    setHighlightedMessageId(messageId);
 
-    // 1. Doğrudan DOM kontrolü
+    // 1. Doğrudan DOM kontrolü (zaten ekrandaysa hemen git)
     let el = document.getElementById(`msg-${messageId}`);
     if (el) {
+      setHighlightedMessageId(messageId);
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
-    // 2. Mesaj henüz yüklenmemişse geçmişi aşamalı olarak çek
+    // 2. Mesaj bellekte veya DOM'da yoksa sunucudan tam o mesajın çevresini çek (WhatsApp tarzı hassas yükleme)
+    await useChatStore.getState().loadMessagesAround(conversationId, messageId);
+    await new Promise((r) => setTimeout(r, 120));
+
+    el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      setHighlightedMessageId(messageId);
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // 3. İkinci deneme (Render gecikmelerine karşı kısa bir bekleme ve tekrar arama)
+    await new Promise((r) => setTimeout(r, 200));
+    el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      setHighlightedMessageId(messageId);
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // 4. Fallback: Kademeli eski mesajları yükleme
     for (let i = 0; i < 5; i++) {
       const hasMore = await useChatStore.getState().loadOlderMessages(conversationId);
       await new Promise((r) => setTimeout(r, 120));
       el = document.getElementById(`msg-${messageId}`);
       if (el) {
+        setHighlightedMessageId(messageId);
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         break;
       }
@@ -1680,7 +1703,7 @@ export default function HomePage() {
         isConnected={isConnected}
         user={user}
         onOpenSettings={() => handleOpenSettings("profile")}
-        onOpenAdmin={(tab?: string) => handleOpenAdmin(tab || "general")}
+        onOpenAdmin={(tab?: string) => handleOpenAdmin(tab)}
         onLogout={handleLogout}
       />
 
@@ -1723,7 +1746,7 @@ export default function HomePage() {
 
           <div className="flex items-center gap-1 md:hidden">
             <button
-              onClick={() => handleOpenAdmin("general")}
+              onClick={() => handleOpenAdmin(undefined)}
               title="Aura Parametre Yönetimi"
               className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -1977,7 +2000,7 @@ export default function HomePage() {
             unreadCount={totalUnreadCount}
             starredCount={combinedStarredMessages.length}
             onOpenSettings={() => handleOpenSettings("profile")}
-            onOpenAdmin={(tab?: string) => handleOpenAdmin(tab || "general")}
+            onOpenAdmin={(tab?: string) => handleOpenAdmin(tab)}
           />
         )}
       </aside>
