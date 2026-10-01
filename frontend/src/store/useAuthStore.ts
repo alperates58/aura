@@ -40,6 +40,7 @@ export interface UserSession {
   ip_address: string;
   location: string;
   is_current: boolean;
+  is_online?: boolean;
   last_active_at: string;
   created_at: string;
 }

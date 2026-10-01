@@ -84,6 +84,19 @@ func (r *SessionRepository) UpsertSession(ctx context.Context, s *models.UserSes
 		s.SessionID = uuid.New().String()
 	}
 
+	// 1. Aynı kullanıcının aynı IP, cihaz tipi ve tarayıcısına ait 15 dakikadan eski ve farklı oturum kimlikli kopyalarını temizle
+	// (örneğin Safari yeniden açıldığında yeni session_id üretip eski oturumu kopyalamasın)
+	cleanStaleQuery := `
+		DELETE FROM user_sessions
+		WHERE user_id = $1 
+		  AND device_name = $2 
+		  AND os = $3 
+		  AND browser = $4 
+		  AND session_id <> $5 
+		  AND last_active_at < NOW() - INTERVAL '15 minutes'
+	`
+	_, _ = r.db.ExecContext(ctx, cleanStaleQuery, s.UserID, s.DeviceName, s.OS, s.Browser, s.SessionID)
+
 	query := `
 		INSERT INTO user_sessions (
 			user_id, session_id, device_name, device_type, os, browser,

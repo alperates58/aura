@@ -723,8 +723,8 @@ func (h *AuthHandler) handleSecurityBreach(c *fiber.Ctx, eventType, attemptedLog
 	}(ip, ua, deviceInfo, path, method)
 }
 
-func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog) {
-	go func(user *models.User, newIP, ua, newDeviceInfo string, prevAccess *models.AccessLog) {
+func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo string, prevAccess *models.AccessLog, sessionOrdinal int) {
+	go func(user *models.User, newIP, ua, newDeviceInfo string, prevAccess *models.AccessLog, ordinal int) {
 		ctx := context.Background()
 		location := ResolveIPLocation(newIP)
 		eventType := "concurrent_session_login"
@@ -739,19 +739,25 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 			prevIP = prevAccess.IPAddress
 		}
 
+		ordinalStr := fmt.Sprintf("%d.", ordinal)
+		if ordinal <= 1 {
+			ordinalStr = "yeni bir"
+		}
+
 		// 1. Veritabanına Güvenlik Olayını Kaydet (Admin audit için)
 		if h.securityRepo != nil {
 			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, user.Username, newIP, ua, newDeviceInfo, map[string]interface{}{
-				"location":    location,
-				"prev_device": prevDevice,
-				"prev_ip":     prevIP,
-				"note":        "Eşzamanlı iki aktif oturum tespit edildi (ikinci cihazdan giriş)",
+				"location":        location,
+				"prev_device":     prevDevice,
+				"prev_ip":         prevIP,
+				"session_ordinal": ordinal,
+				"note":            fmt.Sprintf("Eşzamanlı aktif oturum tespit edildi (%s cihazdan giriş)", ordinalStr),
 			})
 		}
 
 		// 2. Canlı WebSocket Güvenlik Uyarısını Yalnızca İlgili Kullanıcıya Gönder (Tüm siteye değil!)
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: @%s hesabınızda başka bir cihazdan giriş yapıldı! (Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
+			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: @%s hesabınızda %s cihazdan giriş yapıldı! (Cihaz: %s, Konum: %s)", user.Username, ordinalStr, newDeviceInfo, location)
 			alertPayload, err := auraws.NewWSMessage("security_alert", models.SecurityAlertPayload{
 				EventType:      eventType,
 				AttemptedLogin: user.Username,
@@ -770,12 +776,12 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 		// 3. Yalnızca İlgili Kullanıcıya Aura Güvenlik Botundan Özel Bilgilendirme Mesajı Gönder (Tüm siteye değil!)
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s hesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n👤 **Kullanıcı:** @%s\n📱 **Yeni Giriş Yapan Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Cihaz:** %s\n\nBu giriş size ait değilse, Ayarlar > Aktif Cihazlarım menüsünden **'Diğer Tüm Oturumları Kapat'** seçeneğini kullanarak diğer cihazların erişimini hemen kesebilirsiniz.",
-				user.Username, user.Username, newDeviceInfo, newIP, location, nowStr, prevDevice,
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s hesabınızda eşzamanlı **%s oturum** açıldı!\n\n👤 **Kullanıcı:** @%s\n📱 **Yeni Giriş Yapan Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Cihaz:** %s\n\nBu giriş size ait değilse, Ayarlar > Aktif Cihazlarım menüsünden **'Diğer Tüm Oturumları Kapat'** seçeneğini kullanarak diğer cihazların erişimini hemen kesebilirsiniz.",
+				user.Username, ordinalStr, user.Username, newDeviceInfo, newIP, location, nowStr, prevDevice,
 			)
 			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
 		}
-	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess)
+	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess, sessionOrdinal)
 }
 
 func (h *AuthHandler) handlePanicBreach(c *fiber.Ctx, user *models.User, currentIP, currentUA, currentDeviceInfo, redirectURL string) {
@@ -960,8 +966,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 	isConcurrent := false
 	var otherDevInfo, otherDevIP string
+	var activeCount int
 	if h.hub != nil {
-		isConcurrent, otherDevInfo, otherDevIP = h.hub.HasActiveSessionExcluding(user.ID, currentSessionID, currentIP)
+		isConcurrent, activeCount, otherDevInfo, otherDevIP = h.hub.HasActiveSessionExcluding(user.ID, currentSessionID, currentIP)
 	}
 
 	if !isPanic && isConcurrent {
@@ -972,7 +979,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		if otherDevIP == "" && lastAccess != nil {
 			prevAccessInfo = lastAccess
 		}
-		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, prevAccessInfo)
+		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, prevAccessInfo, activeCount+1)
 	}
 
 	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, isPanic)

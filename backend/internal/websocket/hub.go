@@ -330,18 +330,42 @@ func (h *Hub) IsUserConnected(userID uuid.UUID) bool {
 	return len(h.userClients[userID]) > 0
 }
 
-// HasActiveSessionExcluding kullanıcının halihazırda farklı bir cihazda/tarayıcıda açık ve canlı bir WebSocket oturumu olup olmadığını denetler.
-func (h *Hub) HasActiveSessionExcluding(userID uuid.UUID, excludeSessionID string, currentIP string) (bool, string, string) {
+// IsSessionConnected belirli bir kullanıcının sessionID kimlikli canlı WebSocket bağlantısı olup olmadığını döndürür
+func (h *Hub) IsSessionConnected(userID uuid.UUID, sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	clients, ok := h.userClients[userID]
 	if !ok || len(clients) == 0 {
-		return false, "", ""
+		return false
 	}
 
 	for c := range clients {
-		// Aynı tarayıcı/cihaz oturum kimliği ise eşzamanlı ikinci cihaz DEĞİLDİR
+		if c.sessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// HasActiveSessionExcluding kullanıcının halihazırda farklı bir cihazda/tarayıcıda açık ve canlı bir WebSocket oturumu olup olmadığını denetler.
+func (h *Hub) HasActiveSessionExcluding(userID uuid.UUID, excludeSessionID string, currentIP string) (bool, int, string, string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	clients, ok := h.userClients[userID]
+	if !ok || len(clients) == 0 {
+		return false, 0, "", ""
+	}
+
+	activeCount := 0
+	var firstOtherDevInfo, firstOtherDevIP string
+
+	for c := range clients {
+		// Aynı tarayıcı/cihaz oturum kimliği ise eşzamanlı farklı cihaz sayılmaz
 		if excludeSessionID != "" && c.sessionID != "" && c.sessionID == excludeSessionID {
 			continue
 		}
@@ -359,11 +383,18 @@ func (h *Hub) HasActiveSessionExcluding(userID uuid.UUID, excludeSessionID strin
 			continue
 		}
 
-		deviceInfo := "Aktif Oturum (Masaüstü / Mobil)"
-		return true, deviceInfo, clientIP
+		activeCount++
+		if firstOtherDevInfo == "" {
+			firstOtherDevInfo = "Aktif Oturum (Masaüstü / Mobil)"
+			firstOtherDevIP = clientIP
+		}
 	}
 
-	return false, "", ""
+	if activeCount > 0 {
+		return true, activeCount, firstOtherDevInfo, firstOtherDevIP
+	}
+
+	return false, 0, "", ""
 }
 
 func (h *Hub) BroadcastToAll(message []byte) {

@@ -1174,10 +1174,22 @@ export default function SettingsModal({
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <h4 className="text-xs sm:text-sm font-bold text-white truncate">
-                                        {s.device_name}
-                                      </h4>
-                                      <p className="text-[11px] text-slate-400 truncate">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                                          {s.device_name}
+                                        </h4>
+                                        {s.is_online ? (
+                                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-semibold border border-emerald-500/30 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            <span>Çevrimiçi</span>
+                                          </span>
+                                        ) : (
+                                          <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 text-[10px] border border-slate-700/60">
+                                            Çevrimdışı
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
                                         {s.browser} • {s.os}
                                       </p>
                                       <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5 flex-wrap">

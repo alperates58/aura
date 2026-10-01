@@ -376,6 +376,14 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 		})
 	}
 
+	for i := range sessions {
+		if sessions[i].IsCurrent {
+			sessions[i].IsOnline = true
+		} else if h.hub != nil {
+			sessions[i].IsOnline = h.hub.IsSessionConnected(userID, sessions[i].SessionID)
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"sessions": sessions,
 	})

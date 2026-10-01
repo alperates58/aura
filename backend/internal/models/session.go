@@ -19,6 +19,7 @@ type UserSession struct {
 	Location     string    `json:"location"`
 	UserAgent    string    `json:"user_agent,omitempty"`
 	IsCurrent    bool      `json:"is_current"`
+	IsOnline     bool      `json:"is_online"`
 	LastActiveAt time.Time `json:"last_active_at"`
 	CreatedAt    time.Time `json:"created_at"`
 }
