@@ -49,6 +49,7 @@ type AuthHandler struct {
 	presenceService *auraredis.PresenceService
 	hub             *auraws.Hub
 	accessRepo      *database.AccessRepository
+	sessionRepo     *database.SessionRepository
 	settingsRepo    *database.SettingsRepository
 	securityRepo    *database.SecurityRepository
 	storyRepo       *database.StoryRepository
@@ -60,6 +61,7 @@ func NewAuthHandler(
 	presenceService *auraredis.PresenceService,
 	hub *auraws.Hub,
 	accessRepo *database.AccessRepository,
+	sessionRepo *database.SessionRepository,
 	settingsRepo *database.SettingsRepository,
 	securityRepo *database.SecurityRepository,
 	storyRepo *database.StoryRepository,
@@ -70,6 +72,7 @@ func NewAuthHandler(
 		presenceService: presenceService,
 		hub:             hub,
 		accessRepo:      accessRepo,
+		sessionRepo:     sessionRepo,
 		settingsRepo:    settingsRepo,
 		securityRepo:    securityRepo,
 		storyRepo:       storyRepo,
@@ -238,8 +241,31 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	h.setAuthCookies(c, accessToken, refreshToken)
 
+	realIP := GetRealIP(c)
+	currentUA := c.Get("User-Agent")
+
 	if h.accessRepo != nil {
-		_ = h.accessRepo.LogAccess(c.Context(), user.ID, GetRealIP(c), c.Get("User-Agent"))
+		_ = h.accessRepo.LogAccess(c.Context(), user.ID, realIP, currentUA)
+	}
+
+	sessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+	}
+	devName, devType, devOS, devBrowser := database.ParseUserAgentDetailed(currentUA)
+	loc := ResolveIPLocation(realIP)
+	if h.sessionRepo != nil {
+		_ = h.sessionRepo.UpsertSession(c.Context(), &models.UserSession{
+			UserID:     user.ID,
+			SessionID:  sessionID,
+			DeviceName: devName,
+			DeviceType: devType,
+			OS:         devOS,
+			Browser:    devBrowser,
+			IPAddress:  realIP,
+			Location:   loc,
+			UserAgent:  currentUA,
+		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(models.AuthResponse{
@@ -965,6 +991,26 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		_ = h.accessRepo.LogAccess(c.Context(), user.ID, currentIP, currentUA)
 	}
 
+	sessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+	}
+	devName, devType, devOS, devBrowser := database.ParseUserAgentDetailed(currentUA)
+	loc := ResolveIPLocation(currentIP)
+	if h.sessionRepo != nil {
+		_ = h.sessionRepo.UpsertSession(c.Context(), &models.UserSession{
+			UserID:     user.ID,
+			SessionID:  sessionID,
+			DeviceName: devName,
+			DeviceType: devType,
+			OS:         devOS,
+			Browser:    devBrowser,
+			IPAddress:  currentIP,
+			Location:   loc,
+			UserAgent:  currentUA,
+		})
+	}
+
 	redirectURL := ""
 	if isPanic {
 		redirectURL = user.PanicRedirectURL
@@ -1032,6 +1078,13 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 
 	h.setAuthCookies(c, newAccessToken, refreshToken)
 
+	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+	if h.sessionRepo != nil && currentSessionID != "" {
+		currentIP := GetRealIP(c)
+		loc := ResolveIPLocation(currentIP)
+		_ = h.sessionRepo.TouchSession(c.Context(), user.ID, currentSessionID, currentIP, loc)
+	}
+
 	return c.JSON(fiber.Map{
 		"access_token":  newAccessToken,
 		"user":          user.ToResponse(),
@@ -1068,6 +1121,10 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		}
 		if h.userRepo != nil {
 			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+		}
+		currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+		if h.sessionRepo != nil && currentSessionID != "" {
+			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
 		}
 	}
 

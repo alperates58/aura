@@ -24,6 +24,7 @@ type UserHandler struct {
 	storage         *storage.StorageService
 	presenceService *auraredis.PresenceService
 	accessRepo      *database.AccessRepository
+	sessionRepo     *database.SessionRepository
 	hub             *auraws.Hub
 	rdb             *redis.Client
 }
@@ -34,6 +35,7 @@ func NewUserHandler(
 	storage *storage.StorageService,
 	presenceService *auraredis.PresenceService,
 	accessRepo *database.AccessRepository,
+	sessionRepo *database.SessionRepository,
 	hub *auraws.Hub,
 	rdb *redis.Client,
 ) *UserHandler {
@@ -43,6 +45,7 @@ func NewUserHandler(
 		storage:         storage,
 		presenceService: presenceService,
 		accessRepo:      accessRepo,
+		sessionRepo:     sessionRepo,
 		hub:             hub,
 		rdb:             rdb,
 	}
@@ -343,6 +346,46 @@ func (h *UserHandler) SetPanicPassword(c *fiber.Ctx) error {
 	})
 }
 
+func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+
+	sessions, err := h.sessionRepo.GetUserSessions(c.Context(), userID, currentSessionID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Oturumlar listelenemedi.",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"sessions": sessions,
+	})
+}
+
+func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+	targetSessionID := strings.TrimSpace(c.Params("sessionId"))
+	if targetSessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Geçersiz oturum kimliği.",
+		})
+	}
+
+	if err := h.sessionRepo.DeleteSession(c.Context(), userID, targetSessionID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Oturum sonlandırılamadı.",
+		})
+	}
+
+	if h.hub != nil {
+		h.hub.DisconnectSession(userID, targetSessionID)
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Oturum başarıyla kapatıldı.",
+	})
+}
+
 func (h *UserHandler) KillSessions(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 	username, _ := c.Locals("username").(string)
@@ -359,6 +402,11 @@ func (h *UserHandler) KillSessions(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Oturumlar sonlandırılamadı.",
 		})
+	}
+
+	// Veritabanındaki diğer oturum kayıtlarını temizle
+	if h.sessionRepo != nil {
+		_ = h.sessionRepo.DeleteOtherSessions(c.Context(), userID, excludeSessionID)
 	}
 
 	// Redis önbelleğindeki token_version değerini güncelle

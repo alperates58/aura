@@ -212,6 +212,37 @@ func (h *Hub) TerminateOtherSessions(userID uuid.UUID, excludeSessionID string, 
 	}
 }
 
+// DisconnectSession belirli bir istemcinin oturumunu (sessionID) anında sonlandırır.
+func (h *Hub) DisconnectSession(userID uuid.UUID, sessionID string) {
+	h.mu.RLock()
+	clients, ok := h.userClients[userID]
+	var toClose []*Client
+	if ok && len(clients) > 0 {
+		for c := range clients {
+			if c.sessionID == sessionID {
+				toClose = append(toClose, c)
+			}
+		}
+	}
+	h.mu.RUnlock()
+
+	termMsg, _ := NewWSMessage("session_terminated", map[string]string{
+		"reason":  "session_deleted",
+		"message": "Bu cihazdaki oturumunuz kullanıcı tarafından kapatıldı.",
+	})
+
+	for _, c := range toClose {
+		client := c
+		select {
+		case client.send <- termMsg:
+		default:
+		}
+		time.AfterFunc(200*time.Millisecond, func() {
+			_ = client.conn.Close()
+		})
+	}
+}
+
 func (h *Hub) onUserOffline(userID uuid.UUID) {
 	ctx := context.Background()
 	_ = h.presenceService.SetUserOffline(ctx, userID)

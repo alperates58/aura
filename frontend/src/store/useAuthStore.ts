@@ -29,6 +29,21 @@ export interface User {
   created_at: string;
 }
 
+export interface UserSession {
+  id: string;
+  user_id: string;
+  session_id: string;
+  device_name: string;
+  device_type: "desktop" | "mobile" | "tablet";
+  os: string;
+  browser: string;
+  ip_address: string;
+  location: string;
+  is_current: boolean;
+  last_active_at: string;
+  created_at: string;
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -42,6 +57,9 @@ interface AuthState {
   updatePrivacy: (settings: Partial<User["privacy_settings"]>) => Promise<void>;
   setPanicPassword: (login: string, password: string, redirectUrl: string) => Promise<{ has_panic_password: boolean; panic_login: string; panic_redirect_url: string }>;
   killSessions: () => Promise<void>;
+  getSessions: () => Promise<UserSession[]>;
+  terminateSession: (sessionId: string) => Promise<void>;
+  terminateOtherSessions: () => Promise<void>;
   regenerateSecurityCode: () => Promise<string>;
 }
 
@@ -179,6 +197,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         },
       });
     }
+  },
+
+  getSessions: async () => {
+    try {
+      const res = await api.get<{ sessions: UserSession[] }>("/users/me/sessions");
+      return res.data.sessions || [];
+    } catch (err) {
+      console.error("Oturumlar yüklenemedi:", err);
+      return [];
+    }
+  },
+
+  terminateSession: async (sessionId: string) => {
+    await api.delete(`/users/me/sessions/${sessionId}`);
+  },
+
+  terminateOtherSessions: async () => {
+    await get().killSessions();
   },
 
   regenerateSecurityCode: async () => {

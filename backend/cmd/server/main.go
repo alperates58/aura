@@ -108,6 +108,7 @@ func main() {
 	chatRepo := database.NewChatRepository(db)
 	callRepo := database.NewCallRepository(db)
 	accessRepo := database.NewAccessRepository(db)
+	sessionRepo := database.NewSessionRepository(db)
 	pushRepo := database.NewPushRepository(db)
 	settingsRepo := database.NewSettingsRepository(db)
 	storyRepo := database.NewStoryRepository(db)
@@ -129,8 +130,8 @@ func main() {
 	previewService := preview.NewPreviewService(rdb)
 
 	// 7. Handlers
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)
-	userHandler := handlers.NewUserHandler(cfg, userRepo, storageService, presenceService, accessRepo, hub, rdb)
+	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, sessionRepo, settingsRepo, securityRepo, storyRepo)
+	userHandler := handlers.NewUserHandler(cfg, userRepo, storageService, presenceService, accessRepo, sessionRepo, hub, rdb)
 	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo, rdb)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)
 	callHandler := handlers.NewCallHandler(callRepo, chatRepo, userRepo, livekitService, hub, rdb, settingsRepo)
@@ -243,6 +244,9 @@ func main() {
 	users.Patch("/privacy", userHandler.UpdatePrivacy)
 	users.Post("/panic-password", userHandler.SetPanicPassword)
 	users.Post("/kill-sessions", userHandler.KillSessions)
+	users.Get("/me/sessions", userHandler.GetSessions)
+	users.Delete("/me/sessions/:sessionId", userHandler.TerminateSession)
+	users.Post("/me/sessions/terminate-others", userHandler.KillSessions)
 	users.Post("/regenerate-security-code", userHandler.RegenerateSecurityCode)
 	users.Get("/search", userHandler.SearchUsers)
 	users.Get("/access-logs", userHandler.GetAccessLogs)
