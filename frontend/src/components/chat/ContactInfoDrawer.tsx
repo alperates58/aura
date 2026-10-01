@@ -25,12 +25,16 @@ import {
   ArrowRight,
   Key,
   Palette,
+  Globe,
+  Youtube,
+  ExternalLink,
 } from "lucide-react";
 import { Conversation, Message } from "@/store/useChatStore";
 import { User } from "@/store/useAuthStore";
 import { api, resolveMediaUrl } from "@/lib/api";
 import { formatLastSeen, formatMessageTime } from "@/lib/utils";
 import { HighlightsBar } from "@/components/story/StoryHighlightModal";
+import MediaGalleryModal, { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
 
 interface Props {
   activeConv: Conversation;
@@ -59,6 +63,29 @@ type DrawerView = "main" | "media_links_docs" | "storage" | "starred";
 type MediaTab = "media" | "voices" | "links" | "docs";
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+interface LinkMetadata {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  site_name: string;
+}
+
+const previewCache = new Map<string, LinkMetadata>();
+const ytMetaCache = new Map<string, { title: string; author: string }>();
+
+function parseYouTubeUrl(url: string) {
+  const ytMusicRegex = /https?:\/\/music\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/i;
+  const ytRegex = /https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
+  const isMusic = ytMusicRegex.test(url);
+  const match = url.match(ytMusicRegex) || url.match(ytRegex);
+  return {
+    isYouTube: !!match,
+    isMusic,
+    videoId: match ? match[1] : null,
+  };
+}
 
 function formatBytes(bytes: number, decimals = 1) {
   if (!bytes || bytes <= 0) return "0 B";
@@ -168,6 +195,262 @@ function VoiceItemPlayer({
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// YouTube & YouTube Music Özel Kartı (Önizleme, Sanatçı/Şarkı & Oynat)
+// ─────────────────────────────────────────────────────────────
+function DrawerYouTubeCard({
+  url,
+  videoId,
+  isMusic,
+  messageId,
+  originalTitle,
+  onJumpToMessage,
+  onClose,
+}: {
+  url: string;
+  videoId: string;
+  isMusic: boolean;
+  messageId: string;
+  originalTitle: string;
+  onJumpToMessage?: (messageId: string) => void;
+  onClose: () => void;
+}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [meta, setMeta] = useState<{ title: string; author: string } | null>(() => ytMetaCache.get(videoId) || null);
+
+  useEffect(() => {
+    if (ytMetaCache.has(videoId)) return;
+    let isMounted = true;
+    fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data.title) {
+          const item = { title: data.title, author: data.author_name || "" };
+          ytMetaCache.set(videoId, item);
+          setMeta(item);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [url, videoId]);
+
+  const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  const displayTitle = meta?.title || originalTitle;
+  const artistName = meta?.author || (isMusic ? "YouTube Music Sanatçısı" : "YouTube Kanalı");
+
+  return (
+    <div className="p-3 bg-slate-900/90 rounded-2xl border border-white/10 space-y-2.5 overflow-hidden transition-all hover:border-grupo-accent/40 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center text-white shadow-sm">
+            {isMusic ? <Music className="w-3 h-3" /> : <Youtube className="w-3 h-3" />}
+          </div>
+          <span className="text-[11px] font-bold text-red-400">
+            {isMusic ? "YouTube Music" : "YouTube"}
+          </span>
+        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px] font-medium transition-colors"
+        >
+          <span>Aç</span>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+
+      {isPlaying ? (
+        <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-inner">
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
+            title="YouTube Player"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full border-0"
+          />
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <div
+            onClick={() => setIsPlaying(true)}
+            className="relative w-20 h-16 rounded-xl overflow-hidden bg-black flex-shrink-0 cursor-pointer group shadow-sm"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumbUrl}
+              alt="Thumbnail"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform opacity-85 group-hover:opacity-100"
+            />
+            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 flex items-center justify-center transition-colors">
+              <div className="w-7 h-7 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs font-bold text-white line-clamp-2 leading-snug">
+              {displayTitle}
+            </h4>
+            <p className="text-[11px] text-slate-400 truncate mt-0.5 font-medium">
+              {artistName}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
+        <button
+          type="button"
+          onClick={() => setIsPlaying(!isPlaying)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-600/15 hover:bg-red-600/25 text-red-400 font-bold transition-colors cursor-pointer"
+        >
+          {isPlaying ? (
+            <>
+              <Pause className="w-3 h-3 fill-current" />
+              <span>Durdur</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-3 h-3 fill-current ml-0.5" />
+              <span>Hemen Çal</span>
+            </>
+          )}
+        </button>
+
+        {onJumpToMessage && (
+          <button
+            type="button"
+            onClick={() => {
+              onJumpToMessage(messageId);
+              onClose();
+            }}
+            className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors cursor-pointer font-medium"
+          >
+            <span>Sohbette Göster</span>
+            <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Standart Web Bağlantıları Önizleme Kartı (OpenGraph)
+// ─────────────────────────────────────────────────────────────
+function DrawerWebLinkCard({
+  url,
+  domain,
+  messageId,
+  fallbackTitle,
+  onJumpToMessage,
+  onClose,
+}: {
+  url: string;
+  domain: string;
+  messageId: string;
+  fallbackTitle: string;
+  onJumpToMessage?: (messageId: string) => void;
+  onClose: () => void;
+}) {
+  const [meta, setMeta] = useState<LinkMetadata | null>(() => previewCache.get(url) || null);
+
+  useEffect(() => {
+    if (previewCache.has(url)) return;
+    let isMounted = true;
+    api
+      .post<LinkMetadata>("/media/link-preview", { url }, { timeout: 6000 })
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.data && (res.data.title || res.data.description || res.data.image)) {
+          previewCache.set(url, res.data);
+          setMeta(res.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [url]);
+
+  const displayTitle = meta?.title || fallbackTitle;
+  const displayImage = meta?.image;
+
+  return (
+    <div className="p-3 bg-slate-900/90 rounded-2xl border border-white/10 space-y-2 overflow-hidden transition-all hover:border-grupo-accent/40 shadow-sm">
+      <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center gap-1.5 text-grupo-accent font-medium truncate max-w-[200px]">
+          <Globe className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">{meta?.site_name || domain}</span>
+        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-slate-400 hover:text-white flex items-center gap-1 transition-colors flex-shrink-0"
+        >
+          <span>Aç</span>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+
+      <div className="flex items-start gap-3">
+        {displayImage && (
+          <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-950 flex-shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={displayImage}
+              alt="Önizleme"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = "none";
+              }}
+            />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-bold text-slate-200 hover:text-grupo-accent line-clamp-2 leading-snug transition-colors"
+          >
+            {displayTitle}
+          </a>
+          {meta?.description && (
+            <p className="text-[10px] text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+              {meta.description}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {onJumpToMessage && (
+        <div className="flex justify-end pt-1 border-t border-white/5">
+          <button
+            type="button"
+            onClick={() => {
+              onJumpToMessage(messageId);
+              onClose();
+            }}
+            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer font-medium"
+          >
+            <span>Sohbette Göster</span>
+            <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ContactInfoDrawer({
   activeConv,
   messages,
@@ -183,7 +466,6 @@ export default function ContactInfoDrawer({
   onOpenSafetyNumber,
   onOpenStory,
   onPreviewMedia,
-  onOpenGalleryAtIndex,
   onBlockToggle,
   onClearChat,
   onDeleteChat,
@@ -193,10 +475,11 @@ export default function ContactInfoDrawer({
   const [currentView, setCurrentView] = useState<DrawerView>("main");
   const [mediaTab, setMediaTab] = useState<MediaTab>("media");
   const [isBlocking, setIsBlocking] = useState(false);
+  const [drawerGalleryIndex, setDrawerGalleryIndex] = useState<number | null>(null);
 
   // Veritabanındaki tüm konuşma medyalarını sunucudan dinamik yükleme
   const [serverAssets, setServerAssets] = useState<Message[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [, setLoadingAssets] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -241,6 +524,25 @@ export default function ContactInfoDrawer({
           /\.(mp4|mov|webm|m4v|mkv|avi|3gp|png|jpg|jpeg|webp|gif)($|\?)/i.test(m.media_url || ""))
     );
   }, [allMessages]);
+
+  // Drawer için tam donanımlı Galeri Formatı
+  const drawerGalleryItems = useMemo<GalleryMediaItem[]>(() => {
+    return mediaItems.map((m) => {
+      const isVid =
+        m.message_type === "video" ||
+        /\.(mp4|mov|webm|m4v|mkv|avi|3gp)($|\?)/i.test(m.media_url || "");
+      const isMine = m.sender_id === currentUser?.id || m.is_mine;
+      return {
+        id: m.id,
+        url: resolveMediaUrl(m.media_url),
+        type: (isVid ? "video" : "image") as "image" | "video",
+        name: m.media_metadata?.file_name,
+        caption: m.content,
+        senderName: isMine ? "Sen" : activeConv?.other_user.display_name,
+        sentAt: m.sent_at || m.created_at,
+      };
+    });
+  }, [mediaItems, currentUser?.id, activeConv?.other_user.display_name]);
 
   // 2. Paylaşılan Ses Kayıtları (Voice Notes)
   const voiceItems = useMemo(() => {
@@ -861,17 +1163,7 @@ export default function ContactInfoDrawer({
                       return (
                         <div
                           key={m.id}
-                          onClick={() => {
-                            if (onOpenGalleryAtIndex) {
-                              onOpenGalleryAtIndex(idx);
-                            } else if (onPreviewMedia) {
-                              onPreviewMedia({
-                                url: finalUrl,
-                                type: isVid ? "video" : "image",
-                                name: m.media_metadata?.file_name || "Medya",
-                              });
-                            }
-                          }}
+                          onClick={() => setDrawerGalleryIndex(idx)}
                           className="aspect-square bg-grupo-dark-card relative cursor-pointer group overflow-hidden"
                         >
                           {isVid ? (
@@ -975,7 +1267,7 @@ export default function ContactInfoDrawer({
               </div>
             )}
 
-            {/* 3. Bağlantılar Sekmesi */}
+            {/* 3. Bağlantılar Sekmesi (Zengin YouTube Music & Web Önizlemeleri) */}
             {mediaTab === "links" && (
               <div className="flex-1">
                 {linkItems.length === 0 ? (
@@ -983,56 +1275,46 @@ export default function ContactInfoDrawer({
                     <LinkIcon className="w-12 h-12 stroke-[1.2] mb-2 text-slate-600" />
                     <p className="text-sm font-medium">Henüz bağlantı paylaşılmamış</p>
                     <p className="text-xs text-slate-600 mt-1">
-                      Paylaşılan web linkleri burada listelenecektir.
+                      Paylaşılan YouTube, müzik ve web linkleri burada listelenecektir.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4 py-2">
+                  <div className="space-y-4 py-2 px-3">
                     {groupedLinks.map(([monthKey, items]) => (
-                      <div key={monthKey} className="space-y-1">
-                        <div className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      <div key={monthKey} className="space-y-2.5">
+                        <div className="px-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           {monthKey}
                         </div>
-                        <div className="divide-y divide-grupo-dark-border bg-grupo-dark-card border-y border-grupo-dark-border">
-                          {items.map((item, idx) => (
-                            <div
-                              key={`${item.messageId}-${idx}`}
-                              className="p-3.5 flex items-start justify-between gap-3 hover:bg-slate-800/40 transition-colors"
-                            >
-                              <a
-                                href={item.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-start gap-3 min-w-0 flex-1 group"
-                              >
-                                <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
-                                  <LinkIcon className="w-4 h-4" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-semibold text-slate-200 line-clamp-2 group-hover:text-grupo-accent transition-colors">
-                                    {item.title}
-                                  </p>
-                                  <span className="text-[11px] text-slate-400 block mt-0.5 truncate">
-                                    {item.domain}
-                                  </span>
-                                </div>
-                              </a>
+                        <div className="space-y-2.5">
+                          {items.map((item, idx) => {
+                            const ytInfo = parseYouTubeUrl(item.url);
+                            if (ytInfo.isYouTube && ytInfo.videoId) {
+                              return (
+                                <DrawerYouTubeCard
+                                  key={`${item.messageId}-${idx}`}
+                                  url={item.url}
+                                  videoId={ytInfo.videoId}
+                                  isMusic={ytInfo.isMusic}
+                                  messageId={item.messageId}
+                                  originalTitle={item.title}
+                                  onJumpToMessage={onJumpToMessage}
+                                  onClose={onClose}
+                                />
+                              );
+                            }
 
-                              {onJumpToMessage && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onJumpToMessage(item.messageId);
-                                    onClose();
-                                  }}
-                                  title="Mesaja git"
-                                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
-                                >
-                                  <ChevronLeft className="w-4 h-4 rotate-180" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                            return (
+                              <DrawerWebLinkCard
+                                key={`${item.messageId}-${idx}`}
+                                url={item.url}
+                                domain={item.domain}
+                                messageId={item.messageId}
+                                fallbackTitle={item.title}
+                                onJumpToMessage={onJumpToMessage}
+                                onClose={onClose}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -1100,14 +1382,29 @@ export default function ContactInfoDrawer({
                                   </div>
                                 </a>
 
-                                <a
-                                  href={finalUrl}
-                                  download={fileName}
-                                  title="İndir"
-                                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
-                                >
-                                  <Download className="w-4 h-4" />
-                                </a>
+                                <div className="flex items-center gap-1">
+                                  {onJumpToMessage && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onJumpToMessage(m.id);
+                                        onClose();
+                                      }}
+                                      title="Mesaja git"
+                                      className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+                                    >
+                                      <ChevronLeft className="w-4 h-4 rotate-180" />
+                                    </button>
+                                  )}
+                                  <a
+                                    href={finalUrl}
+                                    download={fileName}
+                                    title="İndir"
+                                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </a>
+                                </div>
                               </div>
                             );
                           })}
@@ -1368,6 +1665,25 @@ export default function ContactInfoDrawer({
             )}
           </div>
         </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          5. ÇEKMECE İÇİ TAM EKRAN MEDYA GALERİSİ (LIGHTBOX)
+      ────────────────────────────────────────────────────────────── */}
+      {drawerGalleryIndex !== null && (
+        <MediaGalleryModal
+          isOpen={drawerGalleryIndex !== null}
+          initialIndex={drawerGalleryIndex}
+          items={drawerGalleryItems}
+          onClose={() => setDrawerGalleryIndex(null)}
+          onJumpToMessage={(msgId) => {
+            setDrawerGalleryIndex(null);
+            if (onJumpToMessage) {
+              onJumpToMessage(msgId);
+            }
+            onClose();
+          }}
+        />
       )}
     </aside>
   );

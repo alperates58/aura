@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 
 export interface GalleryMediaItem {
@@ -19,9 +19,16 @@ interface Props {
   initialIndex?: number;
   items: GalleryMediaItem[];
   onClose: () => void;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
-export default function MediaGalleryModal({ isOpen, initialIndex = 0, items, onClose }: Props) {
+export default function MediaGalleryModal({
+  isOpen,
+  initialIndex = 0,
+  items,
+  onClose,
+  onJumpToMessage,
+}: Props) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [zoomLevel, setZoomLevel] = useState(1);
 
@@ -112,6 +119,21 @@ export default function MediaGalleryModal({ isOpen, initialIndex = 0, items, onC
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* WhatsApp Stili: Sohbette Göster Butonu */}
+          {onJumpToMessage && currentItem.id && (
+            <button
+              onClick={() => {
+                onClose();
+                onJumpToMessage(currentItem.id);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-grupo-accent hover:text-white text-slate-200 transition-all text-xs font-semibold cursor-pointer border border-slate-700/60 shadow-md"
+              title="Bu mesajı sohbette göster"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Sohbette Göster</span>
+            </button>
+          )}
+
           {/* Zoom Kontrolleri (Görseller için) */}
           {currentItem.type === "image" && (
             <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 border border-slate-700/60">

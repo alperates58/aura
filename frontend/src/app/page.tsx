@@ -1262,13 +1262,27 @@ export default function HomePage() {
       await selectConversation(conversationId);
     }
     setShowContactDrawer(false);
+    setIsGalleryOpen(false);
     setHighlightedMessageId(messageId);
-    setTimeout(() => {
-      const el = document.getElementById(`msg-${messageId}`);
+
+    // 1. Doğrudan DOM kontrolü
+    let el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // 2. Mesaj henüz yüklenmemişse geçmişi aşamalı olarak çek
+    for (let i = 0; i < 5; i++) {
+      const hasMore = await useChatStore.getState().loadOlderMessages(conversationId);
+      await new Promise((r) => setTimeout(r, 120));
+      el = document.getElementById(`msg-${messageId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
+        break;
       }
-    }, 200);
+      if (!hasMore) break;
+    }
   };
 
   useEffect(() => {
@@ -2567,6 +2581,11 @@ export default function HomePage() {
         initialIndex={galleryInitialIndex}
         items={galleryItems}
         onClose={() => setIsGalleryOpen(false)}
+        onJumpToMessage={(msgId) => {
+          if (activeConv) {
+            handleJumpToMessage(activeConv.id, msgId);
+          }
+        }}
       />
 
       {/* GÜVENLİ PDF ÖNİZLEME MODALI */}
