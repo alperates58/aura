@@ -730,7 +730,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
       {/* AURA SOL ÇEKMECE PANELİ (WhatsApp Tarzı Kayan Çekmece) */}
       <div className="fixed inset-y-0 left-0 max-w-full flex z-[100]">
-        <div className="w-screen max-w-full md:max-w-3xl lg:max-w-4xl h-[100dvh] bg-[#0D0F14] border-r border-[#222631] shadow-2xl flex flex-col animate-in slide-in-from-left duration-250 text-slate-200 relative">
+        <div className="w-screen max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl h-[100dvh] bg-[#0D0F14] border-r border-[#222631] shadow-2xl flex flex-col animate-in slide-in-from-left duration-250 text-slate-200 relative">
           {/* Ayarlar Kaydedildi Kayan Toast Bildirimi */}
           {saveSuccess && (
             <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-emerald-600/95 text-white text-xs font-bold shadow-2xl shadow-emerald-950/80 border border-emerald-400/30 flex items-center gap-2 animate-in fade-in slide-in-from-top-3 duration-300 pointer-events-none backdrop-blur-md whitespace-nowrap">
@@ -1242,15 +1242,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
                     {/* MASAÜSTÜ & TABLET GÖRÜNÜM (Klasik Tablo) */}
                     <div className="hidden sm:block overflow-x-auto">
-                      <table className="w-full text-left text-xs min-w-[620px]">
+                      <table className="w-full text-left text-xs min-w-[780px]">
                         <thead className="bg-[#141720] border-b border-[#222631] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                           <tr>
-                            <th className="py-2.5 px-3 sm:px-3.5">Olay Türü</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">Hedef Kullanıcı</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">IP Adresi</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">Cihaz / Tarayıcı</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">Şiddet</th>
-                            <th className="py-2.5 px-3 sm:px-3.5 text-right">Tarih</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[150px]">Olay Türü</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[130px]">Hedef Kullanıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[170px]">IP Adresi</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 min-w-[150px]">Cihaz / Tarayıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[85px] text-center">Şiddet</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[145px] text-right">Tarih</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#1D212B]">
@@ -1276,7 +1276,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
                             return (
                               <tr key={log.id} className="hover:bg-[#151922] transition-colors">
-                                <td className="py-2.5 px-3 sm:px-3.5 font-semibold">
+                                <td className="py-2.5 px-3 sm:px-3.5 font-semibold whitespace-nowrap">
                                   {isUnknownUser ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 text-red-400 border border-red-500/30 text-[10px]">
                                       <ShieldAlert className="w-3 h-3" /> Kayıtsız Kullanıcı
@@ -1295,15 +1295,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-2.5 px-3 sm:px-3.5 font-mono font-bold text-white">
+                                <td className="py-2.5 px-3 sm:px-3.5 font-mono font-bold text-white whitespace-nowrap">
                                   @{attemptedUser}
                                 </td>
                                 <td className="py-2.5 px-3 sm:px-3.5">
-                                  <div className="font-mono text-red-300 text-xs font-semibold">{log.ip_address}</div>
+                                  <div className="font-mono text-red-300 text-xs font-semibold whitespace-nowrap">{log.ip_address}</div>
                                   {location ? (
                                     <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5" title={location}>
                                       <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                                      <span className="truncate max-w-[150px]">{location}</span>
+                                      <span className="truncate max-w-[140px]">{location}</span>
                                     </div>
                                   ) : (
                                     <div className="text-[10px] text-slate-500">Konum Yok</div>
@@ -1312,7 +1312,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 <td className="py-2.5 px-3 sm:px-3.5 text-slate-300 truncate max-w-[160px] sm:max-w-[200px]" title={log.device_info || log.user_agent}>
                                   {log.device_info || log.user_agent || "Bilinmeyen Cihaz"}
                                 </td>
-                                <td className="py-2.5 px-3 sm:px-3.5">
+                                <td className="py-2.5 px-3 sm:px-3.5 text-center whitespace-nowrap">
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                       severity === "critical"
@@ -2709,26 +2709,26 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
                     {/* MASAÜSTÜ GÖRÜNÜM (Tablo) */}
                     <div className="hidden sm:block overflow-x-auto">
-                      <table className="w-full text-left text-xs min-w-[500px]">
+                      <table className="w-full text-left text-xs min-w-[640px]">
                         <thead className="bg-[#141720] border-b border-[#222631] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                           <tr>
-                            <th className="py-2.5 px-3 sm:px-3.5">Kullanıcı</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">Cihaz & Tarayıcı</th>
-                            <th className="py-2.5 px-3 sm:px-3.5">IP Adresi</th>
-                            <th className="py-2.5 px-3 sm:px-3.5 text-right">Tarih</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 min-w-[150px]">Kullanıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 min-w-[170px]">Cihaz & Tarayıcı</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[140px]">IP Adresi</th>
+                            <th className="py-2.5 px-3 sm:px-3.5 w-[150px] text-right">Tarih</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#1D212B]">
                           {accessLogs.map((log) => (
                             <tr key={log.id} className="hover:bg-[#151922] transition-colors">
-                              <td className="py-2.5 px-3 sm:px-3.5 font-semibold text-white">
+                              <td className="py-2.5 px-3 sm:px-3.5 font-semibold text-white whitespace-nowrap">
                                 {log.display_name ? `${log.display_name} (@${log.username})` : `@${log.username}`}
                               </td>
-                              <td className="py-2.5 px-3 sm:px-3.5 text-slate-300 truncate max-w-[140px] sm:max-w-[200px]">
+                              <td className="py-2.5 px-3 sm:px-3.5 text-slate-300 truncate max-w-[180px] sm:max-w-[240px]">
                                 {log.device_info || "Bilinmeyen Cihaz"}
                               </td>
-                              <td className="py-2.5 px-3 sm:px-3.5 font-mono text-slate-400">{log.ip_address}</td>
-                              <td className="py-2.5 px-3 sm:px-3.5 text-right text-slate-500 whitespace-nowrap">
+                              <td className="py-2.5 px-3 sm:px-3.5 font-mono text-slate-400 whitespace-nowrap">{log.ip_address}</td>
+                              <td className="py-2.5 px-3 sm:px-3.5 text-right text-slate-400 whitespace-nowrap font-mono text-[11px]">
                                 {new Date(log.created_at).toLocaleString("tr-TR")}
                               </td>
                             </tr>
