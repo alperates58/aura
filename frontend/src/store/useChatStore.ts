@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import { useSocketStore } from "./useSocketStore";
-import { User } from "./useAuthStore";
+import { User, useAuthStore } from "./useAuthStore";
 import { notificationManager } from "@/lib/notifications";
 import { triggerReactionConfetti } from "@/lib/confetti";
 
@@ -571,14 +571,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   toggleReaction: async (messageId: string, emoji: string) => {
-    try {
-      if (["❤️", "🎉", "🔥", "🚀", "😍", "👏"].includes(emoji)) {
+    const currentUserId = useAuthStore.getState().user?.id;
+    if (!currentUserId) return;
+
+    // 1. İyimser Güncelleme (Optimistic UI)
+    let previousReactions: Record<string, string[]> | undefined;
+    const allMessages = get().messages;
+    for (const cid in allMessages) {
+      const found = allMessages[cid].find((m) => m.id === messageId);
+      if (found) {
+        previousReactions = found.reactions ? JSON.parse(JSON.stringify(found.reactions)) : {};
+        break;
+      }
+    }
+
+    if (previousReactions !== undefined) {
+      const optimisticReactions: Record<string, string[]> = JSON.parse(JSON.stringify(previousReactions));
+      const uidStr = String(currentUserId);
+
+      // Kullanıcı zaten bu emojiye basmış mı?
+      const alreadyHadSame = (optimisticReactions[emoji] || []).includes(uidStr);
+
+      // Kullanıcının önceki reaksiyonlarını tüm emojilerden temizle (tek tepki)
+      for (const e in optimisticReactions) {
+        optimisticReactions[e] = (optimisticReactions[e] || []).filter((u) => u !== uidStr);
+        if (optimisticReactions[e].length === 0) {
+          delete optimisticReactions[e];
+        }
+      }
+
+      // Aynı emojiye basmamışsa yeni emojiyi ekle (basmışsa kaldırılmış oldu)
+      if (!alreadyHadSame) {
+        if (!optimisticReactions[emoji]) {
+          optimisticReactions[emoji] = [];
+        }
+        optimisticReactions[emoji].push(uidStr);
+      }
+
+      get().onMessageReaction(messageId, optimisticReactions);
+
+      if (!alreadyHadSame && ["❤️", "🎉", "🔥", "🚀", "😍", "👏"].includes(emoji)) {
         triggerReactionConfetti(emoji);
       }
+    }
+
+    try {
       const res = await api.post(`/messages/${messageId}/reactions`, { emoji });
-      get().onMessageReaction(messageId, res.data.reactions);
+      if (res.data?.reactions) {
+        get().onMessageReaction(messageId, res.data.reactions);
+      }
     } catch (err) {
       console.error("Reaksiyon gönderilemedi:", err);
+      // Hata durumunda eski durumuna geri al
+      if (previousReactions !== undefined) {
+        get().onMessageReaction(messageId, previousReactions);
+      }
     }
   },
 
@@ -847,7 +894,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           m.id === messageId ? { ...m, reactions } : m
         );
       }
-      return { messages: newMessages };
+      const newStarred = state.starredMessages.map((m) =>
+        m.id === messageId ? { ...m, reactions } : m
+      );
+      return { messages: newMessages, starredMessages: newStarred };
     });
   },
 

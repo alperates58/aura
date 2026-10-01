@@ -224,10 +224,10 @@ func (r *UserRepository) UpdatePrivacy(ctx context.Context, userID uuid.UUID, se
 	}
 	query := `
 		UPDATE users
-		SET privacy_settings = $1, updated_at = NOW()
+		SET privacy_settings = $1::jsonb, updated_at = NOW()
 		WHERE id = $2
 	`
-	_, err = r.db.ExecContext(ctx, query, data, userID)
+	_, err = r.db.ExecContext(ctx, query, string(data), userID)
 	return err
 }
 

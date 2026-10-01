@@ -158,6 +158,7 @@ export default function MessageBubble({
   const menuRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
   const resolvedMediaUrl = resolveMediaUrl(message.media_url);
 
   // Menü ve mobil eylem butonları dışına tıklanınca, kaydırılınca veya pencere boyutu değişince kapat
@@ -178,7 +179,8 @@ export default function MessageBubble({
         bubbleRef.current &&
         !bubbleRef.current.contains(target) &&
         actionsRef.current &&
-        !actionsRef.current.contains(target)
+        !actionsRef.current.contains(target) &&
+        (!reactionPickerRef.current || !reactionPickerRef.current.contains(target))
       ) {
         setIsMobileActionsOpen(false);
         setShowReactions(false);
@@ -493,14 +495,18 @@ export default function MessageBubble({
     >
       {/* Hızlı Reaksiyon Çubuğu (Açıldığında) */}
       {showReactions && (
-        <ReactionPicker
-          messageId={message.id}
-          onSelect={() => {
-            setShowReactions(false);
-            setIsMobileActionsOpen(false);
-          }}
-          className={`absolute -top-10 ${message.is_mine ? "right-2" : "left-2"}`}
-        />
+        <div
+          ref={reactionPickerRef}
+          className={`absolute -top-10 z-40 ${message.is_mine ? "right-2" : "left-2"}`}
+        >
+          <ReactionPicker
+            messageId={message.id}
+            onSelect={() => {
+              setShowReactions(false);
+              setIsMobileActionsOpen(false);
+            }}
+          />
+        </div>
       )}
 
       {/* Mesaj Balonu ve Yan Menüsü */}
@@ -1074,6 +1080,18 @@ export default function MessageBubble({
             className="w-44 bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl p-1 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100 select-none"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Tepki Ver */}
+            <button
+              onClick={() => {
+                setShowMenu(false);
+                setShowReactions(true);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-left transition-colors cursor-pointer text-slate-200"
+            >
+              <Smile className="w-3.5 h-3.5 text-amber-400" />
+              <span>Tepki Ver</span>
+            </button>
+
             {/* Yanıtla (WhatsApp Style) */}
             <button
               onClick={() => {

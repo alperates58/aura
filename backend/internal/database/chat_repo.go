@@ -604,13 +604,27 @@ func (r *ChatRepository) ToggleReaction(ctx context.Context, messageID, userID u
 	}
 
 	reactions := make(map[string][]string)
-	if len(m.Reactions) > 0 {
+	if len(m.Reactions) > 0 && string(m.Reactions) != "null" {
 		_ = json.Unmarshal(m.Reactions, &reactions)
+	}
+	if reactions == nil {
+		reactions = make(map[string][]string)
 	}
 
 	uidStr := userID.String()
 
-	// Önce kullanıcının diğer emojilerden tepkisini kaldır
+	// Kullanıcı daha önce aynı emojiye basmış mı kontrol et
+	alreadyHadSame := false
+	if users, ok := reactions[emoji]; ok {
+		for _, u := range users {
+			if u == uidStr {
+				alreadyHadSame = true
+				break
+			}
+		}
+	}
+
+	// Kullanıcının önceki tepkisini tüm emojilerden temizle (bir kullanıcı tek tepki verebilsin)
 	for e, users := range reactions {
 		var filtered []string
 		for _, u := range users {
@@ -625,17 +639,7 @@ func (r *ChatRepository) ToggleReaction(ctx context.Context, messageID, userID u
 		}
 	}
 
-	// Eğer aynı emojiye basmadıysa yeni emojiyi ekle
-	alreadyHadSame := false
-	if users, ok := reactions[emoji]; ok {
-		for _, u := range users {
-			if u == uidStr {
-				alreadyHadSame = true
-				break
-			}
-		}
-	}
-
+	// Eğer aynı emojiye basmamışsa yeni emojiyi ekle (basmışsa zaten kaldırılmış oldu - toggle)
 	if !alreadyHadSame {
 		reactions[emoji] = append(reactions[emoji], uidStr)
 	}
@@ -645,7 +649,8 @@ func (r *ChatRepository) ToggleReaction(ctx context.Context, messageID, userID u
 		return nil, err
 	}
 
-	_, err = r.db.ExecContext(ctx, "UPDATE messages SET reactions = $1 WHERE id = $2", updatedBytes, messageID)
+	query := `UPDATE messages SET reactions = $1::jsonb WHERE id = $2`
+	_, err = r.db.ExecContext(ctx, query, string(updatedBytes), messageID)
 	if err != nil {
 		return nil, err
 	}
