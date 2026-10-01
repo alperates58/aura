@@ -1,4 +1,4 @@
-.PHONY: dev build down logs ps clean
+.PHONY: dev build down logs ps clean audit
 
 # Yerel ortamı başlatır
 dev:
@@ -23,3 +23,10 @@ ps:
 # Tüm volume ve container verilerini temizler
 clean:
 	docker compose down -v
+
+# Tedarik zinciri ve bağımlılık güvenlik taraması
+audit:
+	@echo "🔍 [1/2] Go Backend modülleri taranıyor..."
+	@cd backend && go vet ./...
+	@echo "🔍 [2/2] Frontend npm bağımlılıkları taranıyor..."
+	@cd frontend && npm audit --audit-level=high

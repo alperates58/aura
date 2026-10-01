@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # 1. Go Backend (go.mod & go.sum) Otomatik Zafiyet ve Yama Takibi
+  - package-ecosystem: "gomod"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "backend"
+
+  # 2. Next.js Frontend (package.json & package-lock.json) Otomatik Zafiyet ve Yama Takibi
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "frontend"
+
+  # 3. Docker Ana İmajları (golang:1.23-alpine, node:22-alpine, alpine:3.20)
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"

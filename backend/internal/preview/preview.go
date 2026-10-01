@@ -125,6 +125,14 @@ func ValidatePreviewURL(rawURL string) (*url.URL, error) {
 		return nil, errors.New("URL içinde kimlik bilgisi (kullanıcı adı/şifre) kabul edilmez")
 	}
 
+	// 2b. Port sınırlaması (Port taraması ve dahili servis problamayı engelle)
+	portStr := parsedURL.Port()
+	if portStr != "" {
+		if portStr != "80" && portStr != "443" && portStr != "8080" && portStr != "8443" {
+			return nil, fmt.Errorf("SSRF koruması: standart dışı web portuna erişim engellendi (%s)", portStr)
+		}
+	}
+
 	hostname := strings.TrimSpace(parsedURL.Hostname())
 	if hostname == "" {
 		return nil, errors.New("geçersiz sunucu adı (hostname boş)")

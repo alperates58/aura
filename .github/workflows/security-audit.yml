@@ -1,0 +1,64 @@
+name: Security Audit & Supply Chain Scan
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Her Pazartesi saat 04:00'te otomatik haftalık tarama
+    - cron: '0 4 * * 1'
+
+jobs:
+  backend-security:
+    name: Go Backend Zafiyet Analizi (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu Klonla
+        uses: actions/checkout@v4
+
+      - name: Go 1.23 Kur
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: govulncheck Kur ve Tara
+        working-directory: ./backend
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  frontend-security:
+    name: Frontend npm Bağımlılık Taraması
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu Klonla
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 Kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Kriptografik Bağımlılık Denetimi & Audit
+        working-directory: ./frontend
+        run: |
+          npm audit --audit-level=high
+
+  trivy-scan:
+    name: Trivy Kapsamlı Zafiyet & Gizli Bilgi (Secrets) Taraması
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu Klonla
+        uses: actions/checkout@v4
+
+      - name: Trivy Zafiyet ve Secret Tarayıcısını Çalıştır
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          severity: 'CRITICAL,HIGH'

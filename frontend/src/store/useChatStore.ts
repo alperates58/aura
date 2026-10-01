@@ -5,6 +5,13 @@ import { User, useAuthStore } from "./useAuthStore";
 import { useListenTogetherStore } from "./useListenTogetherStore";
 import { notificationManager } from "@/lib/notifications";
 import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
+import {
+  isE2EEEncrypted,
+  encryptE2EEMessage,
+  decryptE2EEMessage,
+  deriveConversationKey,
+  getCombinedSalt,
+} from "@/lib/e2ee";
 
 export interface Message {
   id: string;
@@ -43,6 +50,7 @@ export interface Message {
   is_edited: boolean;
   is_starred: boolean;
   is_deleted_for_all: boolean;
+  is_e2ee?: boolean;
   created_at: string;
 }
 
@@ -123,6 +131,49 @@ interface ChatState {
   clearConversation: (convId: string) => Promise<void>;
   startNewConversation: (recipientId: string) => Promise<string>;
   reset: () => void;
+}
+
+/**
+ * Mesaj listesindeki E2EE şifreli mesajları arka planda çözerek düz metne dönüştürür.
+ * Şifresiz veya sistem mesajlarına asla dokunmaz.
+ */
+async function decryptMessageList(convId: string, list: Message[]): Promise<Message[]> {
+  if (typeof window === "undefined" || !list || list.length === 0) return list;
+  const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
+  const currentUser = useAuthStore.getState().user;
+  if (!conv || !currentUser) return list;
+
+  const combinedSalt = getCombinedSalt(currentUser, conv.other_user);
+  const key = await deriveConversationKey(currentUser.id, conv.other_user.id, combinedSalt);
+  if (!key) return list;
+
+  return Promise.all(
+    list.map(async (msg) => {
+      if (isE2EEEncrypted(msg.content)) {
+        const plain = await decryptE2EEMessage(msg.content, key);
+        return { ...msg, content: plain, is_e2ee: true };
+      }
+      return msg;
+    })
+  );
+}
+
+/**
+ * Tek bir gelen mesajı E2EE şifresini çözerek döndürür.
+ */
+async function decryptSingleMessage(msg: Message): Promise<Message> {
+  if (!isE2EEEncrypted(msg.content) || typeof window === "undefined") return msg;
+
+  const conv = useChatStore.getState().conversations.find((c) => c.id === msg.conversation_id);
+  const currentUser = useAuthStore.getState().user;
+  if (!conv || !currentUser) return msg;
+
+  const combinedSalt = getCombinedSalt(currentUser, conv.other_user);
+  const key = await deriveConversationKey(currentUser.id, conv.other_user.id, combinedSalt);
+  if (!key) return msg;
+
+  const plain = await decryptE2EEMessage(msg.content, key);
+  return { ...msg, content: plain, is_e2ee: true };
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -248,7 +299,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadMessages: async (convId: string) => {
     try {
       const res = await api.get<Message[]>(`/conversations/${convId}/messages?limit=50`);
-      const fetchedList = res.data || [];
+      const rawFetchedList = res.data || [];
+      const fetchedList = await decryptMessageList(convId, rawFetchedList);
+
       set((state) => {
         const currentList = state.messages[convId] || [];
 
@@ -334,7 +387,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const res = await api.get<Message[]>(
         `/conversations/${convId}/messages?limit=50&before=${encodeURIComponent(oldestMsg.created_at || oldestMsg.sent_at)}`
       );
-      const olderMsgs = res.data || [];
+      const rawOlderMsgs = res.data || [];
+      const olderMsgs = await decryptMessageList(convId, rawOlderMsgs);
+
       set((state) => ({
         loadingOlderMessages: false,
         messages: {
@@ -384,25 +439,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   searchMessages: async (convId: string, query: string) => {
     try {
+      const q = query.trim().toLowerCase();
+      const currentList = get().messages[convId] || [];
+      const localMatches = currentList.filter(
+        (m) => m.content && m.content.toLowerCase().includes(q) && !m.is_deleted_for_all
+      );
+
       const res = await api.get<Message[]>(
         `/conversations/${convId}/search?q=${encodeURIComponent(query)}`
       );
-      return res.data || [];
+      const rawServerMsgs = res.data || [];
+      const serverMsgs = await decryptMessageList(convId, rawServerMsgs);
+
+      const merged = [...localMatches];
+      for (const sm of serverMsgs) {
+        if (!merged.some((m) => m.id === sm.id)) {
+          merged.push(sm);
+        }
+      }
+      return merged;
     } catch (err) {
       console.error("Mesaj araması yapılamadı:", err);
       return [];
     }
   },
 
-  sendMessage: (convId: string, content: string, replyToId?: string) => {
+  sendMessage: async (convId: string, content: string, replyToId?: string) => {
     const tempId = `temp_${Date.now()}`;
     const replying = get().replyingTo;
+
+    // E2EE Şifreleme Hazırlığı
+    const conv = get().conversations.find((c) => c.id === convId);
+    const currentUser = useAuthStore.getState().user;
+    let payloadContent = content;
+    let isE2EE = false;
+
+    if (conv && currentUser) {
+      const combinedSalt = getCombinedSalt(currentUser, conv.other_user);
+      const key = await deriveConversationKey(currentUser.id, conv.other_user.id, combinedSalt);
+      if (key) {
+        payloadContent = await encryptE2EEMessage(content, key);
+        isE2EE = true;
+      }
+    }
 
     const optimisticMsg: Message = {
       id: tempId,
       conversation_id: convId,
-      sender_id: "",
-      recipient_id: "",
+      sender_id: currentUser?.id || "",
+      recipient_id: conv?.other_user?.id || "",
       reply_to_id: replyToId || (replying ? replying.id : undefined),
       reply_to: replying
         ? {
@@ -416,6 +501,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         : undefined,
       message_type: "text",
       content,
+      is_e2ee: isE2EE,
       sent_at: new Date().toISOString(),
       tick_status: "pending",
       is_mine: true,
@@ -440,11 +526,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       triggerReactionConfetti(getPrimaryConfettiEmoji(trimmedContent));
     }
 
-    // WebSocket üzerinden ilet
+    // WebSocket üzerinden ilet (Aura E2EE: Sunucuya giden metin uçtan uca şifrelidir)
     useSocketStore.getState().sendAction("send_message", {
       conversation_id: convId,
       message_type: "text",
-      content,
+      content: payloadContent,
       reply_to_id: replyToId || (replying ? replying.id : undefined),
       temp_id: tempId,
     });
@@ -716,6 +802,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       let updated: Message[];
 
       if (hasTemp) {
+        const tempMsg = list.find((m) => m.id === tempId);
+        // E2EE: Eğer sunucudan gelen onay mesajı şifreli ise, yereldeki açık metni ve is_e2ee bayrağını koru
+        if (tempMsg && isE2EEEncrypted(confirmed.content)) {
+          confirmedWithTick.content = tempMsg.content;
+          confirmedWithTick.is_e2ee = true;
+        }
         updated = list.map((m) => (m.id === tempId ? confirmedWithTick : m));
       } else {
         const hasConfirmed = list.some((m) => m.id === confirmed.id);
@@ -745,29 +837,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  onNewMessage: (msg: Message) => {
-    const convExists = get().conversations.some((c) => c.id === msg.conversation_id);
+  onNewMessage: async (msg: Message) => {
+    let finalMsg = msg;
+    if (isE2EEEncrypted(msg.content)) {
+      finalMsg = await decryptSingleMessage(msg);
+    }
+
+    const convExists = get().conversations.some((c) => c.id === finalMsg.conversation_id);
     if (!convExists) {
       get().loadConversations();
     }
 
     // 1.3 Düzeltmesi: Aktif açık sohbete yeni mesaj düştüğünde anında okundu bilgisi gönder
-    if (get().activeConversationId === msg.conversation_id && !msg.is_mine) {
+    if (get().activeConversationId === finalMsg.conversation_id && !finalMsg.is_mine) {
       useSocketStore.getState().sendAction("read_ack", {
-        conversation_id: msg.conversation_id,
-        message_ids: [msg.id],
+        conversation_id: finalMsg.conversation_id,
+        message_ids: [finalMsg.id],
       });
     }
 
     set((state) => {
-      const convId = msg.conversation_id;
+      const convId = finalMsg.conversation_id;
       const list = state.messages[convId] || [];
       const isCurrentActive = state.activeConversationId === convId;
 
-      const alreadyExists = list.some((m) => m.id === msg.id);
+      const alreadyExists = list.some((m) => m.id === finalMsg.id);
       const updatedList = alreadyExists
-        ? list.map((m) => (m.id === msg.id ? { ...m, ...msg } : m))
-        : [...list, msg];
+        ? list.map((m) => (m.id === finalMsg.id ? { ...m, ...finalMsg } : m))
+        : [...list, finalMsg];
 
       // 6.1 Düzeltmesi: Yeni mesaj geldiğinde o konuşmayı listenin en başına (index 0) taşı
       const targetConv = state.conversations.find((c) => c.id === convId);
@@ -776,7 +873,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (targetConv) {
         const updatedTarget: Conversation = {
           ...targetConv,
-          last_message: msg,
+          last_message: finalMsg,
           unread_count: isCurrentActive
             ? 0
             : alreadyExists

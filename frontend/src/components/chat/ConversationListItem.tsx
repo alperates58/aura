@@ -6,6 +6,7 @@ import { useStoryStore } from "@/store/useStoryStore";
 import { resolveMediaUrl } from "@/lib/api";
 import { formatLastSeen } from "@/lib/utils";
 import { Trash2, Eraser, AlertCircle, MoreHorizontal } from "lucide-react";
+import { isE2EEEncrypted } from "@/lib/e2ee";
 
 interface Props {
   conversation: Conversation;
@@ -323,6 +324,8 @@ export default function ConversationListItem({
                     conversation.last_message.content ? `📄 ${conversation.last_message.content}` : "📄 Belge"
                   ) : conversation.last_message.message_type === "location" ? (
                     "📍 Konum"
+                  ) : isE2EEEncrypted(conversation.last_message.content) ? (
+                    "🔒 Şifreli Mesaj"
                   ) : (
                     conversation.last_message.content
                   )

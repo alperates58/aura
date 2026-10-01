@@ -64,6 +64,10 @@ func TestValidatePreviewURL(t *testing.T) {
 		{"Empty Hostname", "http:///path", true},
 		{"Internal Domain .local", "http://server.local/api", true},
 		{"Google Metadata Internal", "http://metadata.google.internal/computeMetadata/v1/", true},
+		{"Disallowed Port 6379 Redis", "http://example.com:6379/info", true},
+		{"Disallowed Port 5432 Postgres", "http://example.com:5432/db", true},
+		{"Disallowed Port 22 SSH", "http://example.com:22/ssh", true},
+		{"Allowed Web Port 8080", "http://example.com:8080/test", false},
 	}
 
 	for _, tt := range tests {
