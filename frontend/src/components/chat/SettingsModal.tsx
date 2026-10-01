@@ -13,6 +13,7 @@ import {
   sendTestPushNotification,
 } from "@/lib/push_notifications";
 import {
+  ArrowLeft,
   X,
   User as UserIcon,
   Shield,
@@ -44,7 +45,8 @@ export type SettingsTabType =
   | "security"
   | "sessions"
   | "notifications"
-  | "access_logs";
+  | "access_logs"
+  | null;
 
 interface Props {
   isOpen: boolean;
@@ -52,6 +54,57 @@ interface Props {
   onOpenAdmin?: (tab?: string) => void;
   initialTab?: string;
 }
+
+export const SETTINGS_NAV_ITEMS = [
+  {
+    id: "profile" as const,
+    label: "Profil & Hesap",
+    desc: "Görünen ad, biyografi ve avatar fotoğrafı",
+    icon: UserIcon,
+    color: "from-pink-600 to-rose-500",
+    badge: null as string | null,
+  },
+  {
+    id: "privacy" as const,
+    label: "Gizlilik & Tikler",
+    desc: "Okundu bilgisi (mavi tik), son görülme ve arama izinleri",
+    icon: Shield,
+    color: "from-emerald-600 to-teal-500",
+    badge: null as string | null,
+  },
+  {
+    id: "security" as const,
+    label: "Panik Modu & Güvenlik",
+    desc: "Sahte yönlendirme şifresi, panik kodu ve uçtan uca anahtarlar",
+    icon: Key,
+    color: "from-amber-600 to-orange-500",
+    badge: null as string | null,
+  },
+  {
+    id: "sessions" as const,
+    label: "Aktif Cihazlarım",
+    desc: "Bağlı telefon, tablet, bilgisayar oturumları ve uzaktan çıkış",
+    icon: Smartphone,
+    color: "from-blue-600 to-cyan-500",
+    badge: null as string | null,
+  },
+  {
+    id: "notifications" as const,
+    label: "Bildirimler & Sesler",
+    desc: "Web Push anlık bildirimleri ve mesaj ses efektleri",
+    icon: Bell,
+    color: "from-purple-600 to-indigo-500",
+    badge: null as string | null,
+  },
+  {
+    id: "access_logs" as const,
+    label: "Giriş Kayıtlarım",
+    desc: "Hesabınıza yapılan başarılı girişlerin güvenlik denetim günlüğü",
+    icon: History,
+    color: "from-indigo-600 to-violet-500",
+    badge: "Güvenlik Günlüğü" as string | null,
+  },
+];
 
 export default function SettingsModal({
   isOpen,
@@ -72,7 +125,7 @@ export default function SettingsModal({
   } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTabType>(
-    (initialTab as SettingsTabType) || "profile"
+    (initialTab as SettingsTabType) || null
   );
 
   // Profile form state
@@ -142,16 +195,11 @@ export default function SettingsModal({
   }, []);
 
   useEffect(() => {
-    if (initialTab && isOpen) {
-      if (
-        initialTab === "profile" ||
-        initialTab === "privacy" ||
-        initialTab === "security" ||
-        initialTab === "sessions" ||
-        initialTab === "notifications" ||
-        initialTab === "access_logs"
-      ) {
+    if (isOpen) {
+      if (initialTab) {
         setActiveTab(initialTab as SettingsTabType);
+      } else {
+        setActiveTab(null);
       }
     }
   }, [initialTab, isOpen]);
@@ -435,163 +483,192 @@ export default function SettingsModal({
         )}
 
         {/* Üst Başlık Barı (Header) */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[#222631] bg-[#12151C] flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 flex-shrink-0 font-bold">
-              ⚙️
+        <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4 border-b border-[#222631] bg-[#12151C] flex-shrink-0">
+          {activeTab === null ? (
+            <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+              <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 flex-shrink-0 font-bold">
+                ⚙️
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                    Ayarlar & Profil
+                  </h2>
+                  <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30 flex-shrink-0">
+                    Aura
+                  </span>
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
+                  Hesap, gizlilik, güvenlik kalkanı ve bildirim tercihleri
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-white tracking-wide truncate">
-                Ayarlar & Profil
-              </h2>
-              <p className="text-[11px] text-slate-400 truncate">
-                Hesap, gizlilik, güvenlik kalkanı ve bildirim tercihleri
-              </p>
+          ) : (
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab(null)}
+                className="p-1.5 sm:p-2 -ml-1 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800/80 transition-all flex items-center gap-1.5 cursor-pointer group"
+                title="Ayarlar Menüsüne Dön"
+              >
+                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform text-pink-400" />
+                <span className="text-xs font-bold text-slate-400 group-hover:text-white hidden sm:inline">Geri</span>
+              </button>
+              <div className="h-5 w-px bg-[#222631] mx-0.5 sm:mx-1" />
+              <div className="min-w-0">
+                <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                  {SETTINGS_NAV_ITEMS.find((n) => n.id === activeTab)?.label || "Ayarlar"}
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
+                  {SETTINGS_NAV_ITEMS.find((n) => n.id === activeTab)?.desc || "Hesap ve profil yapılandırması"}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-2">
             <button
               onClick={onClose}
               title="Kapat"
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Ana Gövde: Sol Sidebar Navigasyonu + Sağ İçerik Alanı */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          {/* 1. SÜTUN: Sol Kategori Menüsü */}
-          <div className="w-full md:w-60 bg-[#0F1218] border-b md:border-b-0 md:border-r border-[#222631] flex flex-row md:flex-col p-2.5 gap-1.5 md:gap-0 md:space-y-1 overflow-x-auto md:overflow-y-auto flex-shrink-0 no-scrollbar custom-scrollbar">
-            <div className="hidden md:block px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Ayarlar Menüsü
-            </div>
-
-            <button
-              onClick={() => setActiveTab("profile")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "profile"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <UserIcon
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "profile" ? "text-pink-400" : "text-slate-400"
-                }`}
-              />
-              <span>Profilim</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("privacy")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "privacy"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <Shield
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "privacy" ? "text-pink-400" : "text-slate-400"
-                }`}
-              />
-              <span>Gizlilik & Tikler</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("security")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "security"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <Key
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "security" ? "text-pink-400" : "text-slate-400"
-                }`}
-              />
-              <span>Panik & Güvenlik</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("sessions")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "sessions"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <Smartphone
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "sessions" ? "text-pink-400" : "text-slate-400"
-                }`}
-              />
-              <span>Aktif Cihazlarım</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("notifications")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "notifications"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <Bell
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "notifications"
-                    ? "text-pink-400"
-                    : "text-slate-400"
-                }`}
-              />
-              <span>Bildirimler & Sesler</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("access_logs")}
-              className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                activeTab === "access_logs"
-                  ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-              }`}
-            >
-              <History
-                className={`w-4 h-4 flex-shrink-0 ${
-                  activeTab === "access_logs"
-                    ? "text-pink-400"
-                    : "text-slate-400"
-                }`}
-              />
-              <span>Giriş Kayıtlarım</span>
-            </button>
-
-            {/* SİSTEM PARAMETRELERİNE GEÇİŞ BUTONU */}
-            {onOpenAdmin && (
-              <div className="pt-3 border-t border-[#222631] mt-auto">
+        {/* Ana Gövde */}
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 md:p-6 bg-[#0B0D12]">
+          {/* DİKEY ANA AYARLAR MENÜSÜ (activeTab === null) */}
+          {activeTab === null && (
+            <div className="space-y-4 max-w-3xl mx-auto">
+              {/* Profil Kartı Banner */}
+              <div className="p-4 rounded-2xl bg-[#12151E] border border-[#222635] flex items-center gap-4 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xl text-pink-400 flex-shrink-0">
+                  {user?.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
+                  ) : (
+                    user?.display_name?.charAt(0).toUpperCase() || "U"
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white truncate">{user?.display_name || user?.username}</h3>
+                    <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                      Çevrimiçi
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono truncate">@{user?.username}</p>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.bio || "Aura kullanıcısı"}</p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenAdmin();
-                  }}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 text-xs font-bold transition-all cursor-pointer shadow-sm group"
+                  onClick={() => setActiveTab("profile")}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <Sliders className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                    <span className="truncate">Sistem Parametreleri</span>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-amber-400/70" />
+                  Profili Düzenle
                 </button>
               </div>
-            )}
-          </div>
 
-          {/* 2. SÜTUN: Sağ İçerik Alanı */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#0B0D12]">
+              <div className="px-1 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>Hesap & Sistem Tercihleri</span>
+                <span className="text-[10px] text-slate-600 font-normal">{SETTINGS_NAV_ITEMS.length} Kategori</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {SETTINGS_NAV_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  let dynamicBadge = item.badge;
+                  if (item.id === "security" && hasPanicPassword) dynamicBadge = "Korumada";
+                  if (item.id === "sessions" && sessions.length > 0) dynamicBadge = `${sessions.length} Cihaz`;
+                  if (item.id === "notifications" && isPushSubscribed) dynamicBadge = "Push Aktif";
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveTab(item.id)}
+                      className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#12151E] hover:bg-[#181D29] active:bg-[#1E2333] border border-[#222635] hover:border-pink-500/30 transition-all duration-150 cursor-pointer text-left group shadow-xs hover:shadow-md"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${item.color} flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-105 transition-transform text-white`}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors truncate">
+                              {item.label}
+                            </span>
+                            {dynamicBadge && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 font-semibold border border-pink-500/20 whitespace-nowrap">
+                                {dynamicBadge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 line-clamp-1">
+                            {item.desc}
+                          </p>
+                        </div>
+                      </div>
+
+                      <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-pink-400 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+                    </button>
+                  );
+                })}
+
+                {/* SİSTEM PARAMETRELERİNE GEÇİŞ KARTI (Admin) */}
+                {onOpenAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenAdmin();
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:from-amber-500/20 hover:to-amber-500/10 active:bg-amber-500/25 border border-amber-500/30 hover:border-amber-500/50 transition-all duration-150 cursor-pointer text-left group shadow-xs hover:shadow-md mt-2"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-600 flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-105 transition-transform text-white">
+                        <Sliders className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-bold text-amber-300 group-hover:text-amber-200 transition-colors truncate">
+                            Sistem Parametreleri
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold border border-amber-500/30 whitespace-nowrap">
+                            Yönetici
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-200/70 line-clamp-1">
+                          Sistem temaları, kayıt izinleri, hız sınırları ve canlı telemetri
+                        </p>
+                      </div>
+                    </div>
+
+                    <ChevronRight className="w-5 h-5 text-amber-400/80 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+                  </button>
+                )}
+              </div>
+
+              {/* Alt Bilgi ve Çıkış Butonu */}
+              <div className="pt-4 border-t border-[#1C202C] mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Aura Güvenli Oturum: Aktif</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 transition-all cursor-pointer font-semibold text-xs"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Hesaptan Çıkış Yap</span>
+                </button>
+              </div>
+            </div>
+          )}
             {/* 1. PROFİL DÜZENLEME */}
             {activeTab === "profile" && (
               <div className="space-y-5 max-w-xl">
@@ -1135,15 +1212,15 @@ export default function SettingsModal({
                                       }
                                     }}
                                     disabled={isTerminating}
-                                    title="Bu Oturumu Kapat"
-                                    className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                                    title="Bu cihazdaki oturumu uzaktan sonlandır"
+                                    className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
                                   >
                                     {isTerminating ? (
-                                      <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
                                     ) : (
                                       <>
-                                        <Trash2 className="w-4 h-4" />
-                                        <span className="hidden sm:inline">Kapat</span>
+                                        <LogOut className="w-3.5 h-3.5" />
+                                        <span className="text-[11px] sm:text-xs">Oturumu Kapat</span>
                                       </>
                                     )}
                                   </button>
@@ -1310,6 +1387,5 @@ export default function SettingsModal({
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
 }
