@@ -259,6 +259,7 @@ func main() {
 	conversations.Post("/", chatHandler.StartConversation)
 	conversations.Get("/", chatHandler.GetConversations)
 	conversations.Get("/:id/messages", chatHandler.GetMessages)
+	conversations.Get("/:id/media", chatHandler.GetConversationMedia)
 	conversations.Get("/:id/search", chatHandler.SearchMessages)
 	conversations.Post("/:id/block", chatHandler.BlockConversation)
 	conversations.Post("/:id/unblock", chatHandler.UnblockConversation)

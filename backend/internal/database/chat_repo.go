@@ -965,6 +965,59 @@ func (r *ChatRepository) GetMessageSenders(ctx context.Context, messageIDs []uui
 	return senders, nil
 }
 
+// GetConversationAssets konuşmaya ait tüm medya, ses, link, belge ve yıldızlı mesajları döner
+func (r *ChatRepository) GetConversationAssets(ctx context.Context, conversationID, userID uuid.UUID) ([]models.MessageResponse, error) {
+	allowed, conv, err := r.CanUserAccessConversation(ctx, conversationID, userID)
+	if err != nil || !allowed || conv == nil {
+		return nil, errors.New("bu konuşmaya erişim yetkiniz yok")
+	}
+
+	clearedAt := conv.UserTwoClearedAt
+	if conv.UserOneID == userID {
+		clearedAt = conv.UserOneClearedAt
+	}
+
+	query := `
+		SELECT id, conversation_id, sender_id, recipient_id, reply_to_id, message_type, content, media_url, media_metadata,
+		       sent_at, delivered_at, read_at, is_edited, is_starred, is_deleted_for_all, reactions, created_at
+		FROM messages
+		WHERE conversation_id = $1
+		  AND created_at > $2
+		  AND is_deleted_for_all = FALSE
+		  AND NOT ($3 = ANY(deleted_for_users))
+		  AND (
+		      (media_url != '' AND media_url IS NOT NULL)
+		      OR message_type IN ('image', 'video', 'voice', 'file', 'doodle')
+		      OR content ~* 'https?://'
+		      OR is_starred = TRUE
+		  )
+		ORDER BY created_at DESC
+		LIMIT 1000
+	`
+	rows, err := r.db.QueryContext(ctx, query, conversationID, clearedAt, userID)
+	if err != nil {
+		return nil, fmt.Errorf("medyalar getirilemedi: %w", err)
+	}
+	defer rows.Close()
+
+	var list []models.MessageResponse
+	for rows.Next() {
+		var m models.Message
+		if err := rows.Scan(
+			&m.ID, &m.ConversationID, &m.SenderID, &m.RecipientID, &m.ReplyToID, &m.MessageType, &m.Content,
+			&m.MediaURL, &m.MediaMetadata, &m.SentAt, &m.DeliveredAt, &m.ReadAt, &m.IsEdited, &m.IsStarred,
+			&m.IsDeletedForAll, &m.Reactions, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, m.ToResponse(userID))
+	}
+	if list == nil {
+		list = []models.MessageResponse{}
+	}
+	return list, nil
+}
+
 // Unused import warning prevention helper
 var _ = pgx.ErrNoRows
 var _ = stdlib.GetDefaultDriver

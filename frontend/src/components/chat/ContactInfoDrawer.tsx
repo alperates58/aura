@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { Conversation, Message } from "@/store/useChatStore";
 import { User } from "@/store/useAuthStore";
-import { resolveMediaUrl } from "@/lib/api";
+import { api, resolveMediaUrl } from "@/lib/api";
 import { formatLastSeen, formatMessageTime } from "@/lib/utils";
 import { HighlightsBar } from "@/components/story/StoryHighlightModal";
 
@@ -194,9 +194,44 @@ export default function ContactInfoDrawer({
   const [mediaTab, setMediaTab] = useState<MediaTab>("media");
   const [isBlocking, setIsBlocking] = useState(false);
 
+  // Veritabanındaki tüm konuşma medyalarını sunucudan dinamik yükleme
+  const [serverAssets, setServerAssets] = useState<Message[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!activeConv?.id) return;
+    setLoadingAssets(true);
+    api
+      .get<Message[]>(`/conversations/${activeConv.id}/media`)
+      .then((res) => {
+        if (isMounted && res.data) {
+          setServerAssets(res.data);
+        }
+      })
+      .catch((err) => {
+        console.error("Konuşma medyaları yüklenirken hata:", err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingAssets(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeConv?.id]);
+
+  // Hem bellekteki canlı mesajları hem de sunucudan çekilen tüm arşivi birleştir
+  const allMessages = useMemo(() => {
+    const map = new Map<string, Message>();
+    serverAssets.forEach((m) => map.set(m.id, m));
+    messages.forEach((m) => map.set(m.id, m));
+    return Array.from(map.values());
+  }, [serverAssets, messages]);
+
   // 1. Paylaşılan Medyalar (Fotoğraf, Video & Çizimler)
   const mediaItems = useMemo(() => {
-    return messages.filter(
+    return allMessages.filter(
       (m) =>
         !m.is_deleted_for_all &&
         m.media_url &&
@@ -205,22 +240,22 @@ export default function ContactInfoDrawer({
           m.message_type === "doodle" ||
           /\.(mp4|mov|webm|m4v|mkv|avi|3gp|png|jpg|jpeg|webp|gif)($|\?)/i.test(m.media_url || ""))
     );
-  }, [messages]);
+  }, [allMessages]);
 
   // 2. Paylaşılan Ses Kayıtları (Voice Notes)
   const voiceItems = useMemo(() => {
-    return messages.filter(
+    return allMessages.filter(
       (m) =>
         !m.is_deleted_for_all &&
         m.media_url &&
         (m.message_type === "voice" ||
           /\.(webm|mp3|ogg|wav|m4a|aac)($|\?)/i.test(m.media_url || ""))
     );
-  }, [messages]);
+  }, [allMessages]);
 
   // 3. Paylaşılan Belgeler
   const docItems = useMemo(() => {
-    return messages.filter(
+    return allMessages.filter(
       (m) =>
         !m.is_deleted_for_all &&
         (m.message_type === "file" ||
@@ -229,7 +264,7 @@ export default function ContactInfoDrawer({
               m.media_url || ""
             )))
     );
-  }, [messages]);
+  }, [allMessages]);
 
   // 4. Paylaşılan Bağlantılar (Mesaj içerisindeki URL'ler)
   const linkItems = useMemo(() => {
@@ -242,11 +277,12 @@ export default function ContactInfoDrawer({
       content: string;
     }[] = [];
 
-    messages.forEach((m) => {
+    allMessages.forEach((m) => {
       if (m.is_deleted_for_all || !m.content) return;
       const matches = m.content.match(URL_REGEX);
       if (matches) {
-        matches.forEach((u) => {
+        matches.forEach((rawUrl) => {
+          const u = rawUrl.replace(/[.,;:!?]+$/, "");
           let domain = "";
           try {
             domain = new URL(u).hostname.replace(/^www\./, "");
@@ -266,12 +302,12 @@ export default function ContactInfoDrawer({
     });
 
     return list;
-  }, [messages]);
+  }, [allMessages]);
 
   // 5. Yıldızlı Mesajlar (Bu sohbete ait)
   const starredItems = useMemo(() => {
-    return messages.filter((m) => m.is_starred && !m.is_deleted_for_all);
-  }, [messages]);
+    return allMessages.filter((m) => m.is_starred && !m.is_deleted_for_all);
+  }, [allMessages]);
 
   // 6. Depolama İstatistikleri
   const storageStats = useMemo(() => {
@@ -284,7 +320,7 @@ export default function ContactInfoDrawer({
     let audioSize = 0;
     let audioCount = 0;
 
-    messages.forEach((m) => {
+    allMessages.forEach((m) => {
       if (m.is_deleted_for_all) return;
       const size = m.media_metadata?.file_size || (m.media_url ? 150 * 1024 : 0);
 
@@ -330,7 +366,7 @@ export default function ContactInfoDrawer({
       audioSize,
       audioCount,
     };
-  }, [messages]);
+  }, [allMessages]);
 
   // Medya / Ses / Bağlantı / Belge toplam sayısı
   const totalMediaLinksDocsCount =

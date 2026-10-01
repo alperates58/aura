@@ -616,3 +616,20 @@ func (h *ChatHandler) GetActiveListenTogetherSession(c *fiber.Ctx) error {
 	})
 }
 
+// GetConversationMedia konuşmaya ait tüm medya, ses, link ve belgeleri döner
+func (h *ChatHandler) GetConversationMedia(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+	convID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Geçersiz konuşma ID."})
+	}
+
+	messages, err := h.chatRepo.GetConversationAssets(c.Context(), convID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(messages)
+}
+
+
