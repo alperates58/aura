@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -17,6 +17,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Login ekranına gelindiğinde eski kilitlenme damgasını temizle
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aura_inactive_since");
+    }
+  }, []);
 
   const siteName = settings?.site_info?.site_name || "Aura";
   const allowRegistration = settings?.site_info?.allow_registration !== false;
@@ -43,14 +50,13 @@ export default function LoginPage() {
         window.location.replace(target);
         return;
       }
-      const bp = getBasePath();
-      if (process.env.NEXT_PUBLIC_BASE_PATH) {
-        router.push("/");
-      } else if (bp) {
-        window.location.href = `${bp}/`;
-      } else {
-        router.push("/");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aura_inactive_since");
+        localStorage.setItem("aura_last_active", Date.now().toString());
       }
+      const bp = getBasePath();
+      const targetUrl = bp ? `${bp}/` : "/";
+      window.location.href = targetUrl;
     } catch (err: any) {
       const msg = err.response?.data?.error || "Giriş yapılırken bir hata oluştu.";
       setError(msg);

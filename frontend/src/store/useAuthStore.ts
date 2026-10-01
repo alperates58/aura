@@ -72,7 +72,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user?.privacy_settings?.sound_alerts !== undefined) {
       soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
     }
-    set({ user, isAuthenticated: true });
+    set({ user, isAuthenticated: true, isLoading: false });
     return res.data;
   },
 
@@ -87,7 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user?.privacy_settings?.sound_alerts !== undefined) {
       soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
     }
-    set({ user, isAuthenticated: true });
+    set({ user, isAuthenticated: true, isLoading: false });
   },
 
   logout: async () => {

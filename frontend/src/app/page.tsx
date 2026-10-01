@@ -809,6 +809,15 @@ export default function HomePage() {
       return;
     }
 
+    // Sayfa ön planda açıldıysa ve süre aşımı yoksa kalkanı kaldır
+    if (typeof document !== "undefined" && !document.hidden) {
+      hideShieldSynchronously();
+      setIsPrivacyCurtainActive(false);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aura_inactive_since");
+      }
+    }
+
     const markUserActive = registerUserActivity;
 
     // İlk kez açılıyorsa başlangıç damgasını vur
