@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface Props {
   conversationId?: string | null;
@@ -54,6 +55,8 @@ export default function ListenTogetherIsland({
   const toggleIslandExpanded = useListenTogetherStore((state) => state.toggleIslandExpanded);
   const toggleShowVideo = useListenTogetherStore((state) => state.toggleShowVideo);
   const stopSession = useListenTogetherStore((state) => state.stopSession);
+  const closeLocally = useListenTogetherStore((state) => state.closeLocally);
+  const currentUser = useAuthStore((state) => state.user);
 
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
@@ -193,14 +196,14 @@ export default function ListenTogetherIsland({
             <ChevronDown className="w-3.5 h-3.5" />
           </div>
 
-          {/* Kapat / Ayrıl Butonu */}
+          {/* Hızlı Kapat Butonu (Item 6.4: Kullanıcı istediği an müziği gecikmesiz kapatır) */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              stopSession();
+              closeLocally();
             }}
-            title="Birlikte Dinlemeyi Kapat"
+            title="Müziği Kapat"
             className="p-1 rounded-full text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition shrink-0 cursor-pointer -mr-1"
           >
             <X className="w-3.5 h-3.5" />
@@ -229,7 +232,17 @@ export default function ListenTogetherIsland({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {session.startedById === currentUser?.id && (
+                <button
+                  type="button"
+                  onClick={stopSession}
+                  title="Oturumu Herkese Kapat"
+                  className="px-2 py-0.5 text-[10px] rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition cursor-pointer font-medium"
+                >
+                  Herkese Kapat
+                </button>
+              )}
               <button
                 type="button"
                 onClick={toggleIslandExpanded}
@@ -240,8 +253,8 @@ export default function ListenTogetherIsland({
               </button>
               <button
                 type="button"
-                onClick={stopSession}
-                title="Oturumu Sonlandır"
+                onClick={closeLocally}
+                title="Müziği Kapat"
                 className="p-1 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />

@@ -14,6 +14,7 @@ import (
 	auraredis "aura/internal/redis"
 	"strings"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type Hub struct {
@@ -30,6 +31,9 @@ type Hub struct {
 	presenceService *auraredis.PresenceService
 	typingService   *auraredis.TypingService
 	settingsRepo    *database.SettingsRepository
+	storyRepo       *database.StoryRepository
+	rdb             *redis.Client
+	instanceID      string
 }
 
 func NewHub(
@@ -40,6 +44,8 @@ func NewHub(
 	presenceService *auraredis.PresenceService,
 	typingService *auraredis.TypingService,
 	settingsRepo *database.SettingsRepository,
+	storyRepo *database.StoryRepository,
+	rdb *redis.Client,
 ) *Hub {
 	return &Hub{
 		clients:         make(map[*Client]bool),
@@ -54,6 +60,9 @@ func NewHub(
 		presenceService: presenceService,
 		typingService:   typingService,
 		settingsRepo:    settingsRepo,
+		storyRepo:       storyRepo,
+		rdb:             rdb,
+		instanceID:      uuid.New().String(),
 	}
 }
 
@@ -62,6 +71,10 @@ func (h *Hub) RegisterClient(client *Client) {
 }
 
 func (h *Hub) Run() {
+	if h.rdb != nil {
+		go h.listenRedisEvents()
+	}
+
 	for {
 		select {
 		case client := <-h.register:
@@ -79,7 +92,10 @@ func (h *Hub) Run() {
 			}
 
 			// Kullanıcı bağlandığında, henüz teslim edilmemiş bekleyen mesajları ilet
-			go h.deliverPendingMessages(client.userID)
+			// Panik modundaki oturumlara gizlilik koruması gereği bekleyen mesajlar iletilmez
+			if !client.isPanicMode {
+				go h.deliverPendingMessages(client)
+			}
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -102,16 +118,8 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(h.clients, client)
-				}
-			}
-			h.mu.RUnlock()
+			h.broadcastToLocal(message)
+			h.publishRedisEvent("broadcast", nil, nil, message)
 		}
 	}
 }
@@ -121,10 +129,27 @@ func (h *Hub) onUserOnline(userID uuid.UUID) {
 	_ = h.presenceService.SetUserOnline(ctx, userID)
 	_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 1)
 
+	lastSeenAt := time.Now()
+	status := 1
+
+	if h.userRepo != nil {
+		user, _ := h.userRepo.GetUserByID(ctx, userID)
+		if user != nil && len(user.PrivacySettings) > 0 {
+			var ps models.PrivacySettings
+			if err := json.Unmarshal(user.PrivacySettings, &ps); err == nil {
+				if !ps.LastSeen {
+					// 4.4 Düzeltmesi: Son görülme kapalıysa online durumu ve saat sızdırılmaz
+					lastSeenAt = time.Time{}
+					status = 0
+				}
+			}
+		}
+	}
+
 	payload, _ := NewWSMessage("presence_update", PresenceUpdatePayload{
 		UserID:     userID,
-		Status:     1,
-		LastSeenAt: time.Now(),
+		Status:     status,
+		LastSeenAt: lastSeenAt,
 	})
 	h.BroadcastToAll(payload)
 	log.Printf("🟢 [Online] Kullanıcı bağlandı: %s", userID)
@@ -192,16 +217,34 @@ func (h *Hub) onUserOffline(userID uuid.UUID) {
 	_ = h.presenceService.SetUserOffline(ctx, userID)
 	_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
 
+	lastSeenAt := time.Now()
+	if h.userRepo != nil {
+		user, _ := h.userRepo.GetUserByID(ctx, userID)
+		if user != nil && len(user.PrivacySettings) > 0 {
+			var ps models.PrivacySettings
+			if err := json.Unmarshal(user.PrivacySettings, &ps); err == nil {
+				if !ps.LastSeen {
+					// 4.4 Düzeltmesi: Son görülme kapalıysa çıkış zamanı sızdırılmaz
+					lastSeenAt = time.Time{}
+				}
+			}
+		}
+	}
+
 	payload, _ := NewWSMessage("presence_update", PresenceUpdatePayload{
 		UserID:     userID,
 		Status:     0,
-		LastSeenAt: time.Now(),
+		LastSeenAt: lastSeenAt,
 	})
 	h.BroadcastToAll(payload)
 	log.Printf("🔴 [Offline] Kullanıcı ayrıldı: %s", userID)
 }
 
-func (h *Hub) deliverPendingMessages(recipientID uuid.UUID) {
+func (h *Hub) deliverPendingMessages(client *Client) {
+	if client == nil || client.isPanicMode {
+		return
+	}
+	recipientID := client.userID
 	ctx := context.Background()
 	pending, err := h.chatRepo.GetUndeliveredMessagesForUser(ctx, recipientID)
 	if err != nil || len(pending) == 0 {
@@ -223,16 +266,25 @@ func (h *Hub) deliverPendingMessages(recipientID uuid.UUID) {
 			MessageIDs:  updatedIDs,
 			DeliveredAt: deliveredAt,
 		})
-		h.BroadcastToActiveSenders(updatedIDs, deliveredPayload)
+		h.NotifySendersDelivered(ctx, updatedIDs, deliveredPayload)
 	}
 }
 
 func (h *Hub) SendToUser(userID uuid.UUID, message []byte) {
+	h.sendToLocalUser(userID, message)
+	h.publishRedisEvent("user", &userID, nil, message)
+}
+
+func (h *Hub) sendToLocalUser(userID uuid.UUID, message []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	if clients, ok := h.userClients[userID]; ok {
 		for client := range clients {
+			if client.isPanicMode {
+				// 4.3 Düzeltmesi: Panik modundaki oturumlara gizlilik ihlali olmaması için gerçek sohbet ve arama paketleri iletilmez
+				continue
+			}
 			select {
 			case client.send <- message:
 			default:
@@ -284,9 +336,17 @@ func (h *Hub) HasActiveSessionExcluding(userID uuid.UUID, excludeSessionID strin
 }
 
 func (h *Hub) BroadcastToAll(message []byte) {
+	h.broadcastToLocal(message)
+	h.publishRedisEvent("broadcast", nil, nil, message)
+}
+
+func (h *Hub) broadcastToLocal(message []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
+		if client.isPanicMode {
+			continue
+		}
 		select {
 		case client.send <- message:
 		default:
@@ -294,9 +354,21 @@ func (h *Hub) BroadcastToAll(message []byte) {
 	}
 }
 
+func (h *Hub) NotifySendersDelivered(ctx context.Context, messageIDs []uuid.UUID, payload []byte) {
+	if len(messageIDs) == 0 {
+		return
+	}
+	senders, err := h.chatRepo.GetMessageSenders(ctx, messageIDs)
+	if err != nil || len(senders) == 0 {
+		return
+	}
+	for _, sID := range senders {
+		h.SendToUser(sID, payload)
+	}
+}
+
 func (h *Hub) BroadcastToActiveSenders(messageIDs []uuid.UUID, payload []byte) {
-	// Teslim edilen mesajların gönderenlerine Çift Gri Tik basmak için
-	h.BroadcastToAll(payload)
+	h.NotifySendersDelivered(context.Background(), messageIDs, payload)
 }
 
 func (h *Hub) SendWebPushToUser(userID uuid.UUID, title, body, icon, url string) {
@@ -338,7 +410,7 @@ func (h *Hub) SendWebPushToUser(userID uuid.UUID, title, body, icon, url string)
 }
 
 func (h *Hub) BroadcastStoryNotification(authorID uuid.UUID, authorName, authorAvatar, caption, audience string) {
-	// 1. WebSocket Broadcast to active clients (close_friends ise sadece yazar ve arkadaşlarına ileride filtrelenebilir, genel bildirim güvenli tutulur)
+	// 1. WebSocket Broadcast
 	payload := map[string]interface{}{
 		"action": "new_story",
 		"payload": map[string]interface{}{
@@ -351,8 +423,22 @@ func (h *Hub) BroadcastStoryNotification(authorID uuid.UUID, authorName, authorA
 	}
 	jsonBytes, err := json.Marshal(payload)
 	if err == nil {
-		h.BroadcastToAll(jsonBytes)
-		log.Printf("📢 [Story Hub] 'new_story' bildirimi %d soket istemcisine yayınlandı (Yazar: %s)", len(h.clients), authorName)
+		if audience == "close_friends" {
+			// 5.4 Düzeltmesi: Yakın arkadaşlar hikayesi sızdırılmadan yalnızca yazara ve arkadaşlarına iletilir
+			h.SendToUser(authorID, jsonBytes)
+			if h.storyRepo != nil {
+				friends, err := h.storyRepo.GetCloseFriends(context.Background(), authorID)
+				if err == nil {
+					for _, f := range friends {
+						h.SendToUser(f.ID, jsonBytes)
+					}
+				}
+			}
+			log.Printf("📢 [Story Hub] 'new_story' (Yakın Arkadaşlar) bildirimi iletildi (Yazar: %s)", authorName)
+		} else {
+			h.BroadcastToAll(jsonBytes)
+			log.Printf("📢 [Story Hub] 'new_story' bildirimi %d soket istemcisine yayınlandı (Yazar: %s)", len(h.clients), authorName)
+		}
 	}
 
 	// 2. Web Push Notification: close_friends ise genel kitleye push atma
@@ -535,6 +621,63 @@ func (h *Hub) SendSecurityNotificationMessage(targetUserID *uuid.UUID, content s
 			}
 		}
 	}()
+}
+
+// listenRedisEvents Redis Pub/Sub üzerinden diğer podlardan gelen sohbet eventlerini dinler (Item 7.1)
+func (h *Hub) listenRedisEvents() {
+	ctx := context.Background()
+	pubsub := h.rdb.Subscribe(ctx, "aura_chat_events")
+	defer pubsub.Close()
+
+	ch := pubsub.Channel()
+	for msg := range ch {
+		var evt struct {
+			Type      string          `json:"type"`
+			TargetID  *uuid.UUID      `json:"target_id,omitempty"`
+			TargetIDs []uuid.UUID     `json:"target_ids,omitempty"`
+			Payload   json.RawMessage `json:"payload"`
+			SenderPod string          `json:"sender_pod"`
+		}
+		if err := json.Unmarshal([]byte(msg.Payload), &evt); err != nil {
+			continue
+		}
+		if evt.SenderPod == h.instanceID {
+			continue // Kendi podumuzun yayınladığı paketi tekrar basma
+		}
+
+		switch evt.Type {
+		case "user":
+			if evt.TargetID != nil {
+				h.sendToLocalUser(*evt.TargetID, evt.Payload)
+			}
+		case "broadcast":
+			h.broadcastToLocal(evt.Payload)
+		case "senders":
+			for _, id := range evt.TargetIDs {
+				h.sendToLocalUser(id, evt.Payload)
+			}
+		}
+	}
+}
+
+// publishRedisEvent yerel sunucuda oluşan bir olayı Redis Pub/Sub üzerinden diğer podlara yayar (Item 7.1)
+func (h *Hub) publishRedisEvent(evtType string, targetID *uuid.UUID, targetIDs []uuid.UUID, payload []byte) {
+	if h.rdb == nil {
+		return
+	}
+	evt := map[string]interface{}{
+		"type":       evtType,
+		"target_id":  targetID,
+		"target_ids": targetIDs,
+		"payload":    json.RawMessage(payload),
+		"sender_pod": h.instanceID,
+	}
+	data, err := json.Marshal(evt)
+	if err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = h.rdb.Publish(ctx, "aura_chat_events", data).Err()
+		cancel()
+	}
 }
 
 

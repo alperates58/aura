@@ -852,7 +852,6 @@ func (r *ChatRepository) CanUserAccessMedia(ctx context.Context, userID uuid.UUI
 		JOIN conversations c ON c.id = m.conversation_id
 		WHERE (m.media_url LIKE '%' || $1 || '%')
 		  AND (m.sender_id = $2 OR m.recipient_id = $2)
-		  AND c.is_blocked = FALSE
 		LIMIT 1
 	`
 	var exists int
@@ -864,25 +863,32 @@ func (r *ChatRepository) CanUserAccessMedia(ctx context.Context, userID uuid.UUI
 	// 5. Hikayeler (stories) kontrolü:
 	// Eğer dosya bir hikayeye aitse:
 	// a) Yazar her zaman görebilir
-	// b) Süresi dolmamış olmalı (expires_at > NOW())
+	// b) Süresi dolmamış olmalı (veya Öne Çıkanlar'a eklenmiş olmalı)
 	// c) Kullanıcı ile hikaye sahibi birbirini bloklamamış olmalı
 	// d) Eğer hedef kitle close_friends ise kullanıcı yazar veya yakın arkadaş olmalı
+	var storyID uuid.UUID
 	var storyAuthorID uuid.UUID
 	var storyExpiresAt time.Time
 	var storyAudience string
 	storyQuery := `
-		SELECT user_id, expires_at, COALESCE(audience, 'everyone')
+		SELECT id, user_id, expires_at, COALESCE(audience, 'everyone')
 		FROM stories
 		WHERE media_url LIKE '%' || $1 || '%'
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
-	if sErr := r.db.QueryRowContext(ctx, storyQuery, baseObj).Scan(&storyAuthorID, &storyExpiresAt, &storyAudience); sErr == nil {
+	if sErr := r.db.QueryRowContext(ctx, storyQuery, baseObj).Scan(&storyID, &storyAuthorID, &storyExpiresAt, &storyAudience); sErr == nil {
 		if storyAuthorID == userID {
 			return true, nil
 		}
+
+		// 5.1 Düzeltmesi: Hikaye süresi dolsa bile Öne Çıkanlar (Story Highlights) albümündeyse erişime izin ver
 		if time.Now().After(storyExpiresAt) {
-			return false, nil
+			var inHighlight bool
+			_ = r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM story_highlight_items WHERE story_id = $1)`, storyID).Scan(&inHighlight)
+			if !inHighlight {
+				return false, nil
+			}
 		}
 
 		// Blok kontrolü: İki kullanıcı arasında bloklu sohbet var mı?
@@ -927,6 +933,28 @@ func (r *ChatRepository) IncrementSafetyNumberVersion(ctx context.Context, conve
 		RETURNING safety_number_version
 	`, conversationID).Scan(&newVer)
 	return newVer, err
+}
+
+// GetMessageSenders teslim edilen mesajların gönderen kullanıcı ID'lerini döner
+func (r *ChatRepository) GetMessageSenders(ctx context.Context, messageIDs []uuid.UUID) ([]uuid.UUID, error) {
+	if len(messageIDs) == 0 {
+		return nil, nil
+	}
+	query := `SELECT DISTINCT sender_id FROM messages WHERE id = ANY($1)`
+	rows, err := r.db.QueryContext(ctx, query, pq.Array(messageIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var senders []uuid.UUID
+	for rows.Next() {
+		var sID uuid.UUID
+		if err := rows.Scan(&sID); err == nil {
+			senders = append(senders, sID)
+		}
+	}
+	return senders, nil
 }
 
 // Unused import warning prevention helper

@@ -21,6 +21,7 @@ import {
   extractYouTubePlaylistId,
   MediaMeta,
 } from "@/lib/youtube";
+import { getBasePath } from "@/lib/api";
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
 
 interface ListenTogetherModalProps {
@@ -102,7 +103,7 @@ export default function ListenTogetherModal({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/youtube/search?q=${encodeURIComponent(trimmed)}`
+          `${getBasePath()}/api/youtube/search?q=${encodeURIComponent(trimmed)}`
         );
         if (res.ok) {
           const data = await res.json();

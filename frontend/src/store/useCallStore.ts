@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "@/lib/api";
 import { soundEffects } from "@/lib/sounds";
 import { useSocketStore } from "./useSocketStore";
+import { useChatStore } from "./useChatStore";
 
 export type CallState = "idle" | "outgoing" | "incoming" | "connected" | "ended";
 export type CallType = "audio" | "video";
@@ -97,10 +98,21 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   initiateCall: async (conversationId: string, callType: CallType) => {
     try {
       clearRingingTimer();
+      // 3.1 Düzeltmesi: Arayan tarafın ekranında aranan kişinin adı ve profil resmi gösterilir
+      const conv = useChatStore.getState().conversations.find((c) => c.id === conversationId);
+      const calleeInfo: CallerInfo | null = conv?.other_user
+        ? {
+            id: conv.other_user.id,
+            display_name: conv.other_user.display_name,
+            avatar_url: conv.other_user.avatar_url,
+          }
+        : null;
+
       set({
         callState: "outgoing",
         callType,
         conversationId,
+        caller: calleeInfo,
         duration: 0,
         isPiPMinimized: false,
       });

@@ -155,6 +155,7 @@ func (h *WSHandler) UpgradeMiddleware() fiber.Handler {
 			c.Locals("username", claims.Username)
 			c.Locals("token_version", claims.TokenVersion)
 			c.Locals("session_id", sessionID)
+			c.Locals("is_panic_mode", claims.IsPanicMode)
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
@@ -168,8 +169,9 @@ func (h *WSHandler) HandleConnection() fiber.Handler {
 		username := conn.Locals("username").(string)
 		tokenVersion, _ := conn.Locals("token_version").(int)
 		sessionID, _ := conn.Locals("session_id").(string)
+		isPanicMode, _ := conn.Locals("is_panic_mode").(bool)
 
-		client := auraws.NewClient(h.hub, conn, userID, username, sessionID, tokenVersion)
+		client := auraws.NewClient(h.hub, conn, userID, username, sessionID, tokenVersion, isPanicMode)
 		h.hub.RegisterClient(client)
 
 		go client.WritePump()

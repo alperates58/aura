@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "@/lib/api";
 import { useSocketStore } from "./useSocketStore";
 import { User, useAuthStore } from "./useAuthStore";
+import { useListenTogetherStore } from "./useListenTogetherStore";
 import { notificationManager } from "@/lib/notifications";
 import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
 
@@ -116,6 +117,7 @@ interface ChatState {
   onMessageReaction: (messageId: string, reactions: Record<string, string[]>) => void;
   onConversationBlocked: (convId: string) => void;
   onConversationUnblocked: (convId: string) => void;
+  onConversationCleared: (convId: string) => void;
 
   deleteConversation: (convId: string) => Promise<void>;
   clearConversation: (convId: string) => Promise<void>;
@@ -167,9 +169,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     notificationManager.stopFlash();
     await get().loadMessages(convId);
 
-    // Açılan sohbetteki okunmamış mesajlar için read_ack gönder
+    // 1.3 Düzeltmesi: Açılan sohbetteki okunmamış mesajların ID'leri ile read_ack gönder
+    const unreadMsgIds = (get().messages[convId] || [])
+      .filter((m) => !m.is_mine && !m.read_at && m.id && !m.id.startsWith("temp_"))
+      .map((m) => m.id);
+
     useSocketStore.getState().sendAction("read_ack", {
       conversation_id: convId,
+      message_ids: unreadMsgIds,
     });
 
     // Unread count'u sıfırla
@@ -178,6 +185,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         c.id === convId ? { ...c, unread_count: 0 } : c
       ),
     }));
+
+    // 6.4: Eğer aktif bir oturum yoksa, Redis'te devam eden bir oturum olup olmadığını kontrol et (F5 / ilk yüklemede geri getirme)
+    const currentLtSession = useListenTogetherStore.getState().session;
+    if (!currentLtSession) {
+      api.get<{ active: boolean; session?: any }>(`/conversations/${convId}/listen-together`)
+        .then((res) => {
+          if (res.data?.active && res.data?.session && res.data.session.action_type !== "stop") {
+            useListenTogetherStore.getState().handleRemoteSync(res.data.session);
+          }
+        })
+        .catch(() => {});
+    }
   },
 
   deselectConversation: () => {
@@ -707,9 +726,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      const updatedConvs = state.conversations.map((c) =>
-        c.id === convId ? { ...c, last_message: confirmedWithTick } : c
-      );
+      // 6.1 Düzeltmesi: Mesaj gönderildiğinde o konuşmayı listenin en başına (index 0) taşı
+      const targetConv = state.conversations.find((c) => c.id === convId);
+      const otherConvs = state.conversations.filter((c) => c.id !== convId);
+      let updatedConvs = state.conversations;
+      if (targetConv) {
+        const updatedTarget: Conversation = {
+          ...targetConv,
+          last_message: confirmedWithTick,
+        };
+        updatedConvs = [updatedTarget, ...otherConvs];
+      }
 
       return {
         messages: { ...state.messages, [convId]: updated },
@@ -724,6 +751,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       get().loadConversations();
     }
 
+    // 1.3 Düzeltmesi: Aktif açık sohbete yeni mesaj düştüğünde anında okundu bilgisi gönder
+    if (get().activeConversationId === msg.conversation_id && !msg.is_mine) {
+      useSocketStore.getState().sendAction("read_ack", {
+        conversation_id: msg.conversation_id,
+        message_ids: [msg.id],
+      });
+    }
+
     set((state) => {
       const convId = msg.conversation_id;
       const list = state.messages[convId] || [];
@@ -734,20 +769,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? list.map((m) => (m.id === msg.id ? { ...m, ...msg } : m))
         : [...list, msg];
 
-      const updatedConvs = state.conversations.map((c) => {
-        if (c.id === convId) {
-          return {
-            ...c,
-            last_message: msg,
-            unread_count: isCurrentActive
-              ? 0
-              : alreadyExists
-              ? c.unread_count
-              : c.unread_count + 1,
-          };
-        }
-        return c;
-      });
+      // 6.1 Düzeltmesi: Yeni mesaj geldiğinde o konuşmayı listenin en başına (index 0) taşı
+      const targetConv = state.conversations.find((c) => c.id === convId);
+      const otherConvs = state.conversations.filter((c) => c.id !== convId);
+      let updatedConvs = state.conversations;
+      if (targetConv) {
+        const updatedTarget: Conversation = {
+          ...targetConv,
+          last_message: msg,
+          unread_count: isCurrentActive
+            ? 0
+            : alreadyExists
+            ? targetConv.unread_count
+            : targetConv.unread_count + 1,
+        };
+        updatedConvs = [updatedTarget, ...otherConvs];
+      }
 
       return {
         messages: { ...state.messages, [convId]: updatedList },
@@ -922,6 +959,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       conversations: state.conversations.map((c) =>
         c.id === convId ? { ...c, is_blocked: false } : c
+      ),
+    }));
+  },
+
+  onConversationCleared: (convId: string) => {
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [convId]: [],
+      },
+      conversations: state.conversations.map((c) =>
+        c.id === convId ? { ...c, last_message: undefined } : c
       ),
     }));
   },

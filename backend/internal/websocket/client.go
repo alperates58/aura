@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -26,13 +27,14 @@ type Client struct {
 	username     string
 	sessionID    string
 	tokenVersion int
+	isPanicMode  bool
 
 	// Rate limiting / Flood control
 	lastWindowStart time.Time
 	msgsInWindow    int
 }
 
-func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessionID string, tokenVersion int) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessionID string, tokenVersion int, isPanicMode bool) *Client {
 	return &Client{
 		hub:          hub,
 		conn:         conn,
@@ -41,6 +43,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessi
 		username:     username,
 		sessionID:    sessionID,
 		tokenVersion: tokenVersion,
+		isPanicMode:  isPanicMode,
 	}
 }
 
@@ -169,6 +172,24 @@ func (c *Client) handleAction(msg WSMessage) {
 			return
 		}
 
+		// 2.1: Idempotency kontrolü - temp_id daha önce işlenmişse mükerrer kayıt oluşturma
+		if p.TempID != "" && c.hub.rdb != nil {
+			idempKey := fmt.Sprintf("idemp:msg:%s:%s", c.userID.String(), p.TempID)
+			if existingID, err := c.hub.rdb.Get(ctx, idempKey).Result(); err == nil && existingID != "" {
+				if eUUID, pErr := uuid.Parse(existingID); pErr == nil {
+					if exMsg, gErr := c.hub.chatRepo.GetMessageByID(ctx, eUUID); gErr == nil && exMsg != nil {
+						sentRes := exMsg.ToResponse(c.userID)
+						sentPayload, _ := NewWSMessage("message_sent", MessageSentPayload{
+							TempID:  p.TempID,
+							Message: sentRes,
+						})
+						c.send <- sentPayload
+						return
+					}
+				}
+			}
+		}
+
 		recipientID := conv.UserTwoID
 		if conv.UserOneID != c.userID {
 			recipientID = conv.UserOneID
@@ -191,6 +212,12 @@ func (c *Client) handleAction(msg WSMessage) {
 			return
 		}
 
+		// 2.1: Idempotency anahtarını Redis'e yaz (2 dakika TTL)
+		if p.TempID != "" && c.hub.rdb != nil {
+			idempKey := fmt.Sprintf("idemp:msg:%s:%s", c.userID.String(), p.TempID)
+			_ = c.hub.rdb.Set(ctx, idempKey, msgModel.ID.String(), 2*time.Minute).Err()
+		}
+
 		// 3. Gönderene Tek Gri Tik onayı (message_sent)
 		sentRes := msgModel.ToResponse(c.userID)
 		sentPayload, _ := NewWSMessage("message_sent", MessageSentPayload{
@@ -199,23 +226,15 @@ func (c *Client) handleAction(msg WSMessage) {
 		})
 		c.send <- sentPayload
 
-		// 4. Alıcı online mı?
+		// 4. 1.1: Alıcı online ise paketi ilet
 		recipientOnline := c.hub.IsUserConnected(recipientID)
 		if recipientOnline {
-			// Alıcıya yeni mesajı bas
+			// Alıcıya yeni mesajı bas.
+			// DİKKAT (1.1): Sunucu erken çift gri tik basmaz; alıcı cihaz mesajı soketten aldığında
+			// otomatik delivered_ack dönecek ve çift gri tik o zaman üretilecek.
 			newMsgForRecipient := msgModel.ToResponse(recipientID)
 			newMsgPayload, _ := NewWSMessage("new_message", newMsgForRecipient)
 			c.hub.SendToUser(recipientID, newMsgPayload)
-
-			// Otomatik teslim edildi olarak işaretle ve gönderene Çift Gri Tik bas!
-			deliveredIDs, deliveredAt, _ := c.hub.chatRepo.MarkMessagesAsDelivered(ctx, recipientID, []uuid.UUID{msgModel.ID})
-			if len(deliveredIDs) > 0 {
-				deliveredPayload, _ := NewWSMessage("message_delivered", MessageDeliveredPayload{
-					MessageIDs:  deliveredIDs,
-					DeliveredAt: deliveredAt,
-				})
-				c.hub.SendToUser(c.userID, deliveredPayload)
-			}
 		} else {
 			// Alıcı sokete bağlı değil -> VAPID Web Push Bildirimi Gönder!
 			title := c.username
@@ -259,8 +278,8 @@ func (c *Client) handleAction(msg WSMessage) {
 				MessageIDs:  updatedIDs,
 				DeliveredAt: deliveredAt,
 			})
-			// İlgili mesajların gönderenlerine ilet
-			c.hub.BroadcastToActiveSenders(updatedIDs, deliveredPayload)
+			// 1.2 Düzeltmesi: Tüm kullanıcılara sızdırmadan yalnızca ilgili mesajların gönderenlerine ilet
+			c.hub.NotifySendersDelivered(ctx, updatedIDs, deliveredPayload)
 		}
 
 	case "read_ack":
@@ -277,20 +296,38 @@ func (c *Client) handleAction(msg WSMessage) {
 			return
 		}
 
+		otherUserID := conv.UserTwoID
+		if conv.UserOneID != c.userID {
+			otherUserID = conv.UserOneID
+		}
+
+		// 1.4 Düzeltmesi: Okuyan veya gönderen read_receipts kapatmışsa mavi tik basılmaz
+		allowReceipts := true
+		if reader, err := c.hub.userRepo.GetUserByID(ctx, c.userID); err == nil && reader != nil && len(reader.PrivacySettings) > 0 {
+			var ps models.PrivacySettings
+			if err := json.Unmarshal(reader.PrivacySettings, &ps); err == nil && !ps.ReadReceipts {
+				allowReceipts = false
+			}
+		}
+		if allowReceipts {
+			if sender, err := c.hub.userRepo.GetUserByID(ctx, otherUserID); err == nil && sender != nil && len(sender.PrivacySettings) > 0 {
+				var ps models.PrivacySettings
+				if err := json.Unmarshal(sender.PrivacySettings, &ps); err == nil && !ps.ReadReceipts {
+					allowReceipts = false
+				}
+			}
+		}
+
 		updatedIDs, readAt, err := c.hub.chatRepo.MarkMessagesAsRead(ctx, p.ConversationID, c.userID, p.MessageIDs)
 		if err == nil && len(updatedIDs) > 0 {
-			readPayload, _ := NewWSMessage("message_read", MessageReadPayload{
-				ConversationID: p.ConversationID,
-				MessageIDs:     updatedIDs,
-				ReadAt:         readAt,
-			})
-
-			// Konuşmadaki diğer tarafa (gönderene) Çift Mavi Tik bas
-			otherUserID := conv.UserTwoID
-			if conv.UserOneID != c.userID {
-				otherUserID = conv.UserOneID
+			if allowReceipts {
+				readPayload, _ := NewWSMessage("message_read", MessageReadPayload{
+					ConversationID: p.ConversationID,
+					MessageIDs:     updatedIDs,
+					ReadAt:         readAt,
+				})
+				c.hub.SendToUser(otherUserID, readPayload)
 			}
-			c.hub.SendToUser(otherUserID, readPayload)
 		}
 
 	case "typing_start":
@@ -373,5 +410,16 @@ func (c *Client) handleAction(msg WSMessage) {
 		p.SenderID = c.userID
 		syncPayload, _ := NewWSMessage("listen_together_sync", p)
 		c.hub.SendToUser(otherUserID, syncPayload)
+
+		// 6.4: Redis Ephemeral Session Key (TTL 4 saat)
+		if c.hub.rdb != nil {
+			rKey := fmt.Sprintf("listen_together:%s", p.ConversationID.String())
+			if p.ActionType == "stop" {
+				_ = c.hub.rdb.Del(ctx, rKey).Err()
+			} else {
+				sessBytes, _ := json.Marshal(p)
+				_ = c.hub.rdb.Set(ctx, rKey, sessBytes, 4*time.Hour).Err()
+			}
+		}
 	}
 }

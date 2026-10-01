@@ -14,6 +14,7 @@ import (
 	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type ChatHandler struct {
@@ -23,6 +24,7 @@ type ChatHandler struct {
 	storage         *storage.StorageService
 	hub             *auraws.Hub
 	settingsRepo    *database.SettingsRepository
+	rdb             *redis.Client
 }
 
 func NewChatHandler(
@@ -32,6 +34,7 @@ func NewChatHandler(
 	storage *storage.StorageService,
 	hub *auraws.Hub,
 	settingsRepo *database.SettingsRepository,
+	rdb *redis.Client,
 ) *ChatHandler {
 	return &ChatHandler{
 		chatRepo:        chatRepo,
@@ -40,6 +43,7 @@ func NewChatHandler(
 		storage:         storage,
 		hub:             hub,
 		settingsRepo:    settingsRepo,
+		rdb:             rdb,
 	}
 }
 
@@ -162,6 +166,14 @@ func (h *ChatHandler) ClearHistory(c *fiber.Ctx) error {
 		})
 	}
 
+	// 6.2 Düzeltmesi: Kullanıcının tüm açık sekmelerine sohbet geçmişinin temizlendiğini bildir
+	if h.hub != nil {
+		clearPayload, _ := auraws.NewWSMessage("conversation_cleared", fiber.Map{
+			"conversation_id": convID,
+		})
+		h.hub.SendToUser(userID, clearPayload)
+	}
+
 	return c.JSON(fiber.Map{
 		"message": "Sohbet geçmişi başarıyla temizlendi.",
 	})
@@ -268,6 +280,20 @@ func (h *ChatHandler) DeleteMessage(c *fiber.Ctx) error {
 	// Sadece benden sil
 	if err := h.chatRepo.DeleteMessageForMe(c.Context(), msgID, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Mesaj silinemedi."})
+	}
+
+	// 6.2 Düzeltmesi: Kullanıcının diğer açık sekmelerine mesajın benden silindiğini bildir
+	if h.hub != nil {
+		convID := uuid.Nil
+		msg, _ := h.chatRepo.GetMessageByID(c.Context(), msgID)
+		if msg != nil {
+			convID = msg.ConversationID
+		}
+		delPayload, _ := auraws.NewWSMessage("message_deleted_for_me", fiber.Map{
+			"message_id":      msgID,
+			"conversation_id": convID,
+		})
+		h.hub.SendToUser(userID, delPayload)
 	}
 
 	return c.JSON(fiber.Map{"message": "Mesaj sizden silindi."})
@@ -462,6 +488,11 @@ func (h *ChatHandler) CreateMessage(c *fiber.Ctx) error {
 
 	// Alıcı online ise WebSocket ile ilet
 	if h.hub != nil {
+		// 1.6 Düzeltmesi: Gönderenin diğer açık sekmelerine de yeni mesajı bildir
+		newMsgForSender := msgModel.ToResponse(userID)
+		senderPayload, _ := auraws.NewWSMessage("new_message", newMsgForSender)
+		h.hub.SendToUser(userID, senderPayload)
+
 		recipientOnline := h.hub.IsUserConnected(recipientID)
 		if recipientOnline {
 			newMsgForRecipient := msgModel.ToResponse(recipientID)
@@ -558,6 +589,30 @@ func (h *ChatHandler) UnblockConversation(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Engel kaldırıldı.", "is_blocked": false})
 }
 
-// Unused warning prevention
-var _ = json.Marshal
+// GetActiveListenTogetherSession aktif Birlikte Dinle oturumunu Redis'ten getirir (Item 6.4)
+func (h *ChatHandler) GetActiveListenTogetherSession(c *fiber.Ctx) error {
+	convID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Geçersiz konuşma ID."})
+	}
+	if h.rdb == nil {
+		return c.JSON(fiber.Map{"active": false})
+	}
+
+	key := "listen_together:" + convID.String()
+	val, err := h.rdb.Get(c.Context(), key).Result()
+	if err != nil || val == "" {
+		return c.JSON(fiber.Map{"active": false})
+	}
+
+	var session auraws.ListenTogetherSyncPayload
+	if err := json.Unmarshal([]byte(val), &session); err != nil {
+		return c.JSON(fiber.Map{"active": false})
+	}
+
+	return c.JSON(fiber.Map{
+		"active":  true,
+		"session": session,
+	})
+}
 

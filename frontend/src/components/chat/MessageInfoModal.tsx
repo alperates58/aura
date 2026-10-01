@@ -1,13 +1,38 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useChatStore } from "@/store/useChatStore";
-import { X, Check, CheckCheck, Clock } from "lucide-react";
+import { api } from "@/lib/api";
+import { X, Check, CheckCheck, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
 export default function MessageInfoModal() {
   const selectedMessage = useChatStore((state) => state.selectedMessageInfo);
   const setSelectedMessageInfo = useChatStore((state) => state.setSelectedMessageInfo);
+  const [liveInfo, setLiveInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedMessage?.id || selectedMessage.id.startsWith("temp_")) {
+      setLiveInfo(null);
+      return;
+    }
+    setLoading(true);
+    api
+      .get(`/messages/${selectedMessage.id}/info`)
+      .then((res) => {
+        if (res.data) {
+          setLiveInfo(res.data);
+        }
+      })
+      .catch((err) => {
+        console.error("Güncel mesaj bilgisi alınamadı:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [selectedMessage?.id]);
 
   if (!selectedMessage) return null;
 
@@ -20,9 +45,10 @@ export default function MessageInfoModal() {
     }
   };
 
-  const sentTime = formatDate(selectedMessage.sent_at || selectedMessage.created_at);
-  const deliveredTime = formatDate(selectedMessage.delivered_at);
-  const readTime = formatDate(selectedMessage.read_at);
+  const display = liveInfo ? { ...selectedMessage, ...liveInfo } : selectedMessage;
+  const sentTime = formatDate(display.sent_at || display.created_at);
+  const deliveredTime = formatDate(display.delivered_at);
+  const readTime = formatDate(display.read_at);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in select-none">

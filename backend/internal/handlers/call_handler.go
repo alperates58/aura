@@ -150,15 +150,17 @@ func (h *CallHandler) InitiateCall(c *fiber.Ctx) error {
 	h.redisClient.Set(c.Context(), inCallKey, callLog.ID.String(), 60*time.Second)
 	h.redisClient.Set(c.Context(), callerInCall, callLog.ID.String(), 60*time.Second)
 
-	// Canlı SFU URL'sini belirle: Tek domain kurulumlarında alt domain DNS yoksa istek hostunu kullan
+	// Canlı SFU URL'sini belirle: localhost veya IP üzerinde çalışırken :7880 portunu koru (Item 3.5)
 	livekitURL := h.livekitService.GetPublicURL()
 	reqHost := c.Hostname()
-	if livekitURL == "" || livekitURL == "http://localhost:7880" || livekitURL == fmt.Sprintf("https://livekit.%s", reqHost) || livekitURL == fmt.Sprintf("http://livekit.%s", reqHost) {
+	if livekitURL == "" || livekitURL == fmt.Sprintf("https://livekit.%s", reqHost) || livekitURL == fmt.Sprintf("http://livekit.%s", reqHost) {
 		proto := "https"
+		port := ""
 		if c.Protocol() == "http" && (reqHost == "localhost" || reqHost == "127.0.0.1") {
 			proto = "http"
+			port = ":7880"
 		}
-		livekitURL = fmt.Sprintf("%s://%s", proto, reqHost)
+		livekitURL = fmt.Sprintf("%s://%s%s", proto, reqHost, port)
 	}
 
 	// 8. WebSocket ile Alıcıya incoming_call Sinyali Bas
@@ -300,13 +302,22 @@ func (h *CallHandler) RejectCall(c *fiber.Ctx) error {
 			}
 		}
 
-		_ = h.chatRepo.SaveMessage(c.Context(), &models.Message{
+		callMsg := &models.Message{
 			ConversationID: req.ConversationID,
 			SenderID:       senderID,
 			RecipientID:    recipientID,
 			MessageType:    "call_log",
 			Content:        content,
-		})
+		}
+		if err := h.chatRepo.SaveMessage(c.Context(), callMsg); err == nil && h.hub != nil {
+			// 3.2 Düzeltmesi: Reddedilen/cevapsız arama kaydını anında WebSocket üzerinden ilet
+			senderResp := callMsg.ToResponse(senderID)
+			recvResp := callMsg.ToResponse(recipientID)
+			sPayload, _ := auraws.NewWSMessage("new_message", senderResp)
+			rPayload, _ := auraws.NewWSMessage("new_message", recvResp)
+			h.hub.SendToUser(senderID, sPayload)
+			h.hub.SendToUser(recipientID, rPayload)
+		}
 	}
 
 	return c.JSON(fiber.Map{"status": "rejected"})
@@ -332,6 +343,23 @@ func (h *CallHandler) EndCall(c *fiber.Ctx) error {
 	}
 	if callLog.CallerID != enderID && callLog.ReceiverID != enderID {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Bu aramayı sonlandırma yetkiniz yok."})
+	}
+
+	// 3.3 Düzeltmesi: İstemcinin ilettiği duration_seconds değerini sunucu tarafında doğrula
+	maxDuration := 0
+	if callLog.StartedAt != nil {
+		maxDuration = int(time.Since(*callLog.StartedAt).Seconds()) + 10
+	} else {
+		maxDuration = int(time.Since(callLog.CreatedAt).Seconds()) + 10
+	}
+	if maxDuration < 0 {
+		maxDuration = 0
+	}
+	if req.DurationSeconds < 0 || req.DurationSeconds > maxDuration {
+		req.DurationSeconds = maxDuration - 10
+		if req.DurationSeconds < 0 {
+			req.DurationSeconds = 0
+		}
 	}
 
 	_ = h.callRepo.UpdateCallStatus(c.Context(), req.CallID, "completed", req.DurationSeconds)
@@ -381,13 +409,22 @@ func (h *CallHandler) EndCall(c *fiber.Ctx) error {
 			}
 		}
 
-		_ = h.chatRepo.SaveMessage(c.Context(), &models.Message{
+		callMsg := &models.Message{
 			ConversationID: req.ConversationID,
 			SenderID:       senderID,
 			RecipientID:    recipientID,
 			MessageType:    "call_log",
 			Content:        content,
-		})
+		}
+		if err := h.chatRepo.SaveMessage(c.Context(), callMsg); err == nil && h.hub != nil {
+			// 3.2 Düzeltmesi: Sonlanan görüşme kaydını anında WebSocket üzerinden ilet
+			senderResp := callMsg.ToResponse(senderID)
+			recvResp := callMsg.ToResponse(recipientID)
+			sPayload, _ := auraws.NewWSMessage("new_message", senderResp)
+			rPayload, _ := auraws.NewWSMessage("new_message", recvResp)
+			h.hub.SendToUser(senderID, sPayload)
+			h.hub.SendToUser(recipientID, rPayload)
+		}
 	}
 
 	return c.JSON(fiber.Map{"status": "ended"})

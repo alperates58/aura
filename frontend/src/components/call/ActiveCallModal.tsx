@@ -8,10 +8,11 @@ import {
   RoomAudioRenderer,
   useTracks,
   useLocalParticipant,
+  useRoomContext,
   VideoTrack,
   isTrackReference,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 import {
   PhoneOff,
   Mic,
@@ -196,6 +197,31 @@ function ActiveCallConnectedInterface({
     isCameraEnabled,
     isScreenShareEnabled,
   } = useLocalParticipant();
+
+  const room = useRoomContext();
+
+  // 3.4 Düzeltmesi: Karşı taraf görüşmeden ayrıldığında veya bağlantı koptuğunda aramayı anında sonlandır
+  useEffect(() => {
+    if (!room) return;
+
+    const handleDisconnect = () => {
+      console.log("[LiveKit] Room disconnected, ending call cleanly...");
+      onEndCall();
+    };
+
+    const handleParticipantDisconnect = (p: any) => {
+      console.log("[LiveKit] Participant disconnected:", p.identity);
+      onEndCall();
+    };
+
+    room.on(RoomEvent.Disconnected, handleDisconnect);
+    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnect);
+
+    return () => {
+      room.off(RoomEvent.Disconnected, handleDisconnect);
+      room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnect);
+    };
+  }, [room, onEndCall]);
 
   const toggleMic = async () => {
     try {

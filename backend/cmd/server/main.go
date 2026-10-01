@@ -110,6 +110,9 @@ func main() {
 	accessRepo := database.NewAccessRepository(db)
 	pushRepo := database.NewPushRepository(db)
 	settingsRepo := database.NewSettingsRepository(db)
+	storyRepo := database.NewStoryRepository(db)
+	securityRepo := database.NewSecurityRepository(db)
+	_ = securityRepo.EnsureSecurityBot(context.Background())
 
 	// VAPID Web Push Servisi
 	vapidService := push.NewVAPIDService()
@@ -117,23 +120,18 @@ func main() {
 	// LiveKit SFU Servisi
 	livekitService := livekit.NewLiveKitService(cfg.LiveKitAPIKey, cfg.LiveKitAPISecret, cfg.LiveKitPublicURL)
 
-	// 6. WebSocket Hub Motoru
-	hub := auraws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo)
+	// 6. WebSocket Hub Motoru (Redis Pub/Sub ve Yakın Arkadaşlar ile genişletilmiş)
+	hub := auraws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo, storyRepo, rdb)
 	go hub.Run()
 	log.Println("⚡ [WS Hub] Gerçek zamanlı WebSocket Hub motoru başlatıldı.")
 
 	// Preview Servisi
 	previewService := preview.NewPreviewService(rdb)
 
-	// Repositories
-	storyRepo := database.NewStoryRepository(db)
-	securityRepo := database.NewSecurityRepository(db)
-	_ = securityRepo.EnsureSecurityBot(context.Background())
-
 	// 7. Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, settingsRepo, securityRepo, storyRepo)
 	userHandler := handlers.NewUserHandler(cfg, userRepo, storageService, presenceService, accessRepo, hub, rdb)
-	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo)
+	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo, rdb)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)
 	callHandler := handlers.NewCallHandler(callRepo, chatRepo, userRepo, livekitService, hub, rdb, settingsRepo)
 	wsHandler := handlers.NewWSHandler(cfg, hub, rdb, userRepo)
@@ -265,6 +263,7 @@ func main() {
 	conversations.Post("/:id/block", chatHandler.BlockConversation)
 	conversations.Post("/:id/unblock", chatHandler.UnblockConversation)
 	conversations.Post("/:id/messages", chatHandler.CreateMessage)
+	conversations.Get("/:id/listen-together", chatHandler.GetActiveListenTogetherSession)
 	conversations.Delete("/:id/clear", chatHandler.ClearHistory)
 	conversations.Delete("/:id", chatHandler.ClearHistory)
 

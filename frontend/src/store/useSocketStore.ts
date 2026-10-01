@@ -96,6 +96,13 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         console.log("⚠️ [Aura Network] İnternet bağlantısı koptu.");
         set({ isConnected: false });
       });
+
+      // 2.2 Düzeltmesi: Sekmeler arası outbox sayacını senkronize et
+      window.addEventListener("storage", (e) => {
+        if (e.key === OUTBOX_STORAGE_KEY) {
+          set({ pendingQueueCount: loadOutbox().length });
+        }
+      });
     }
 
     let wsUrl = process.env.NEXT_PUBLIC_WS_URL;
@@ -296,12 +303,28 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               chatStore.onMessageDeleted(data.payload.message_id, data.payload.is_deleted_for_all);
               break;
 
+            case "message_deleted_for_me":
+              chatStore.onMessageDeleted(data.payload.message_id, false);
+              break;
+
             case "messages_batch_deleted":
               chatStore.onMessagesBatchDeleted(
                 data.payload.conversation_id,
                 data.payload.message_ids || [],
                 data.payload.is_deleted_for_all
               );
+              break;
+
+            case "messages_batch_deleted_for_me":
+              chatStore.onMessagesBatchDeleted(
+                data.payload.conversation_id,
+                data.payload.message_ids || [],
+                false
+              );
+              break;
+
+            case "conversation_cleared":
+              chatStore.onConversationCleared(data.payload.conversation_id);
               break;
 
             case "message_reaction": {
@@ -519,6 +542,17 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     const isOnline = typeof navigator === "undefined" || navigator.onLine;
     const ws = get().socket;
     if (!ws || ws.readyState !== WebSocket.OPEN || !isOnline) return;
+
+    // 2.2 Düzeltmesi: Çoklu sekmelerde aynı anda mükerrer outbox flush işlemini engelle
+    if (typeof window !== "undefined") {
+      const lockKey = "aura_outbox_flush_lock";
+      const now = Date.now();
+      const currentLock = parseInt(localStorage.getItem(lockKey) || "0", 10);
+      if (currentLock > now) {
+        return;
+      }
+      localStorage.setItem(lockKey, (now + 5000).toString());
+    }
 
     const queue = loadOutbox();
     if (queue.length === 0) return;

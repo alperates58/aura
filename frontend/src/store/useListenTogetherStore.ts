@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useSocketStore } from "./useSocketStore";
 import { useAuthStore } from "./useAuthStore";
+import { getBasePath } from "@/lib/api";
 
 export interface PlaylistTrackItem {
   id: string;
@@ -69,6 +70,7 @@ interface ListenTogetherState {
   selectTrackByIndex: (index: number) => void;
   setTracks: (tracks: PlaylistTrackItem[]) => void;
   stopSession: () => void;
+  closeLocally: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
   setVolume: (vol: number) => void;
@@ -144,7 +146,7 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
 
     // Eğer playlistId var ama tracks boşsa, arka planda parça listesini çek ve oturuma ekle
     if (meta.playlistId && (!meta.tracks || meta.tracks.length === 0)) {
-      fetch(`/api/youtube/info?playlistId=${encodeURIComponent(meta.playlistId)}`)
+      fetch(`${getBasePath()}/api/youtube/info?playlistId=${encodeURIComponent(meta.playlistId)}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.tracks && data.tracks.length > 0) {
@@ -397,6 +399,15 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
     });
   },
 
+  closeLocally: () => {
+    // 6.4 Düzeltmesi: Müziği sadece kullanıcının kendi tarafında anında durdurur ve adayı kapatır
+    set({
+      session: null,
+      isIslandExpanded: false,
+      syncTrigger: { type: "stop", time: 0, timestamp: Date.now() },
+    });
+  },
+
   setCurrentTime: (time) => {
     const s = get().session;
     if (s) {
@@ -541,7 +552,7 @@ export const useListenTogetherStore = create<ListenTogetherState>((set, get) => 
 
       // Alıcı için de parçaları arka planda otomatik çek
       if (playlist_id && (!newSession.tracks || newSession.tracks.length === 0)) {
-        fetch(`/api/youtube/info?playlistId=${encodeURIComponent(playlist_id)}`)
+        fetch(`${getBasePath()}/api/youtube/info?playlistId=${encodeURIComponent(playlist_id)}`)
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
             if (data && data.tracks && data.tracks.length > 0) {

@@ -29,6 +29,10 @@ export default function AudioRecorder({ conversationId, onCancel, onComplete }: 
   const streamRef = useRef<MediaStream | null>(null);
   const mimeTypeRef = useRef<string>("audio/webm");
   const extRef = useRef<string>("webm");
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const peaksRef = useRef<number[]>([]);
+  const peakIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     startRecording();
@@ -36,10 +40,22 @@ export default function AudioRecorder({ conversationId, onCancel, onComplete }: 
     return () => {
       stopTracks();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (peakIntervalRef.current) clearInterval(peakIntervalRef.current);
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+        audioCtxRef.current.close().catch(() => {});
+      }
     };
   }, []);
 
   const stopTracks = () => {
+    if (peakIntervalRef.current) {
+      clearInterval(peakIntervalRef.current);
+      peakIntervalRef.current = null;
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -49,10 +65,41 @@ export default function AudioRecorder({ conversationId, onCancel, onComplete }: 
   const startRecording = async () => {
     setError(null);
     audioChunksRef.current = [];
+    peaksRef.current = [];
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      // 5.2 Düzeltmesi: Web Audio API ile gerçek zamanlı mikrofon ses seviyelerini örnekle
+      try {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          const actx = new AudioCtxClass();
+          audioCtxRef.current = actx;
+          const analyser = actx.createAnalyser();
+          analyser.fftSize = 128;
+          analyserRef.current = analyser;
+          const src = actx.createMediaStreamSource(stream);
+          src.connect(analyser);
+
+          const dataArr = new Uint8Array(analyser.frequencyBinCount);
+          peakIntervalRef.current = setInterval(() => {
+            if (analyserRef.current) {
+              analyserRef.current.getByteFrequencyData(dataArr);
+              let sum = 0;
+              for (let i = 0; i < dataArr.length; i++) {
+                sum += dataArr[i];
+              }
+              const avg = sum / dataArr.length;
+              const normalized = Math.min(Math.max(avg / 128, 0.08), 1.0);
+              peaksRef.current.push(Number(normalized.toFixed(2)));
+            }
+          }, 100);
+        }
+      } catch (e) {
+        console.warn("AudioContext dalga formu analizi başlatılamadı:", e);
+      }
 
       let chosenMimeType = "";
       let chosenExt = "webm";
@@ -119,6 +166,7 @@ export default function AudioRecorder({ conversationId, onCancel, onComplete }: 
     }
     stopTracks();
     audioChunksRef.current = [];
+    peaksRef.current = [];
     setIsRecording(false);
     onCancel();
   };
@@ -141,11 +189,26 @@ export default function AudioRecorder({ conversationId, onCancel, onComplete }: 
         return;
       }
 
+      // 5.2 Düzeltmesi: Gerçek zamanlı toplanan ses dalga formunu örnekle ve ekle
+      const rawPeaks = peaksRef.current;
+      const targetCount = 36;
+      let finalWaveform: number[] = [];
+      if (rawPeaks.length <= targetCount) {
+        finalWaveform = rawPeaks.length > 0 ? rawPeaks : [0.2, 0.4, 0.6, 0.3, 0.5];
+      } else {
+        const step = rawPeaks.length / targetCount;
+        for (let i = 0; i < targetCount; i++) {
+          const idx = Math.min(Math.floor(i * step), rawPeaks.length - 1);
+          finalWaveform.push(rawPeaks[idx]);
+        }
+      }
+
       try {
         const formData = new FormData();
         formData.append("file", recordedBlob, `voice_message.${ext}`);
         formData.append("category", "voice");
         formData.append("duration", seconds.toString());
+        formData.append("waveform", JSON.stringify(finalWaveform));
 
         const res = await api.post("/media/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },

@@ -1,6 +1,7 @@
 /**
  * YouTube & YouTube Music URL yardımcıları ve Meta Veri Çıkarıcı
  */
+import { getBasePath } from "./api";
 
 export interface PlaylistTrack {
   id: string;
@@ -85,7 +86,7 @@ export async function fetchMediaMetadata(inputUrl: string): Promise<MediaMeta> {
   // 1. Çalma Listesi Kontrolü (URL'de list= varsa her zaman playlist olarak ele al)
   if (playlistId) {
     try {
-      const res = await fetch(`/api/youtube/info?playlistId=${encodeURIComponent(playlistId)}`);
+      const res = await fetch(`${getBasePath()}/api/youtube/info?playlistId=${encodeURIComponent(playlistId)}`);
       if (res.ok) {
         const info = await res.json();
         if (info && info.title) {

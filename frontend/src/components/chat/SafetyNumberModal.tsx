@@ -68,11 +68,20 @@ export default function SafetyNumberModal({
 
   if (!isOpen) return null;
 
+  // 4.5 Düzeltmesi: Her iki tarafta da aynı güvenlik numarasının üretilmesi için simetrik birleşim
+  const saltA = currentUser?.security_number_salt || "";
+  const saltB = otherUser.security_number_salt || "";
+  const sortedUsers = [
+    { id: currentUser?.id || "", salt: saltA },
+    { id: otherUser.id || "", salt: saltB },
+  ].sort((a, b) => a.id.localeCompare(b.id));
+  const combinedSalt = `${sortedUsers[0].salt}:${sortedUsers[1].salt}`;
+
   const safetyNumber = generateSafetyNumber(
     currentUser?.id || "",
     otherUser.id,
     conversation.safety_number_version || 1,
-    otherUser.security_number_salt || currentUser?.security_number_salt || ""
+    combinedSalt
   );
 
   const handleCopy = () => {

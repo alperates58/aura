@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { useListenTogetherStore } from "@/store/useListenTogetherStore";
+import { useAuthStore } from "@/store/useAuthStore";
 
 declare global {
   interface Window {
@@ -139,9 +140,18 @@ export default function ListenTogetherController() {
               } else if (event.data === 2 && useListenTogetherStore.getState().session?.isPlaying) {
                 pause();
               } else if (event.data === 0) {
-                // Şarkı bitti (ENDED) -> Otomatik sıradaki şarkıya geç
-                console.log("[ListenTogether] Şarkı sona erdi (ENDED), sonraki parçaya geçiliyor...");
-                useListenTogetherStore.getState().nextTrack();
+                // 6.3 Düzeltmesi: Yalnızca oturumu başlatan kişi (Host) parça ilerletir ve 2s debounce uygulanır
+                const currentSession = useListenTogetherStore.getState().session;
+                const currentUserId = useAuthStore.getState().user?.id;
+                const isHost = currentSession?.startedById === currentUserId;
+                if (isHost && !hasAutoAdvancedRef.current) {
+                  hasAutoAdvancedRef.current = true;
+                  setTimeout(() => {
+                    hasAutoAdvancedRef.current = false;
+                  }, 2000);
+                  console.log("[ListenTogether] Host şarkıyı tamamladı (ENDED), sonraki parçaya geçiliyor...");
+                  useListenTogetherStore.getState().nextTrack();
+                }
               }
 
               // Çalma listesinde şarkı değiştikçe başlığı güncelle
