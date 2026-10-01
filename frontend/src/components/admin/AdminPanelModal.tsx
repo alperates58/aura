@@ -17,6 +17,7 @@ import { useSettingsStore, applyThemeToDocument } from "@/store/useSettingsStore
 import { getContrastTextColor, getMutedTextColor } from "@/lib/utils";
 import {
   ShieldAlert,
+  ArrowLeft,
   Users,
   Sliders,
   MessageSquare,
@@ -209,7 +210,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onClose,
   initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab || "users");
+  const [activeTab, setActiveTab] = useState<TabType | null>(initialTab || null);
   const [isLoading, setIsLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
@@ -266,8 +267,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   // Handle initialTab changes when opening
   useEffect(() => {
-    if (initialTab && isOpen) {
-      setActiveTab(initialTab);
+    if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      } else {
+        setActiveTab(null);
+      }
     }
   }, [initialTab, isOpen]);
 
@@ -276,13 +281,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     if (!isOpen) return;
 
     loadSettings();
+    loadUsers();
+    adminApi.getSecurityStats().then(setSecurityStats).catch(() => {});
+    adminApi.getActiveCalls().then((res) => setActiveCalls(res.active_calls || [])).catch(() => {});
+
     if (activeTab === "users") loadUsers();
     if (activeTab === "stats") loadStats();
     if (activeTab === "calls") loadCallsData();
     if (activeTab === "logs") loadLogs();
     if (activeTab === "security_logs") loadSecurityLogs();
-    // Pre-fetch security stats for tab badge
-    adminApi.getSecurityStats().then(setSecurityStats).catch(() => {});
   }, [isOpen, activeTab, securityEventTypeFilter]);
 
   const handleApplyPreset = (preset: (typeof THEME_PRESETS)[0]) => {
@@ -636,21 +643,80 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   if (!isOpen) return null;
 
-  const NAV_ITEMS = [
-    { id: "users", label: `Kullanıcılar (${totalUsers})`, icon: Users },
+  const NAV_ITEMS: {
+    id: NonNullable<TabType>;
+    label: string;
+    desc: string;
+    icon: any;
+    color: string;
+    badge?: string;
+  }[] = [
+    {
+      id: "users",
+      label: `Kullanıcı Yönetimi`,
+      desc: "Kullanıcı hesapları, roller, yetkiler, şifre sıfırlama ve banlama",
+      icon: Users,
+      color: "from-blue-600 to-indigo-600 text-blue-300",
+      badge: `${totalUsers} Kullanıcı`,
+    },
     {
       id: "security_logs",
-      label: "Güvenlik Günlükleri",
+      label: "Güvenlik Günlükleri & Alarmlar",
+      desc: "Kaba kuvvet, şüpheli oturumlar ve canlı tehdit kalkanı logları",
       icon: ShieldAlert,
-      badge: securityStats && securityStats.last_24h_logs > 0 ? `${securityStats.last_24h_logs} yeni` : undefined,
+      color: "from-rose-600 to-red-600 text-rose-300",
+      badge: securityStats && securityStats.last_24h_logs > 0 ? `${securityStats.last_24h_logs} yeni ihlal` : undefined,
     },
-    { id: "security", label: "Güvenlik & Ekran Kilidi", icon: Lock },
-    { id: "theme", label: "Tema & Renkler", icon: Palette },
-    { id: "general", label: "Genel & Markalama", icon: Globe },
-    { id: "chat", label: "Sohbet & Medya", icon: MessageSquare },
-    { id: "calls", label: "Arama & WebRTC", icon: PhoneCall },
-    { id: "logs", label: "Erişim Günlükleri", icon: FileText },
-    { id: "stats", label: "Sistem Sağlığı", icon: Activity },
+    {
+      id: "security",
+      label: "Güvenlik & Kalkan Parametreleri",
+      desc: "Kaba kuvvet eşikleri, oturum süreleri ve mesaj hız limitleri",
+      icon: Lock,
+      color: "from-amber-600 to-orange-600 text-amber-300",
+    },
+    {
+      id: "theme",
+      label: "Tema, Renkler & Görünüm",
+      desc: "Grupo Chat hazır renk paletleri, mesaj balonları ve CSS stilleri",
+      icon: Palette,
+      color: "from-pink-600 to-rose-600 text-pink-300",
+    },
+    {
+      id: "general",
+      label: "Genel Sistem & Markalama",
+      desc: "Platform adı, logo, kayıt olma izinleri ve bakım modu",
+      icon: Globe,
+      color: "from-emerald-600 to-teal-600 text-emerald-300",
+    },
+    {
+      id: "chat",
+      label: "Sohbet & Medya Limitleri",
+      desc: "Maksimum dosya boyutu, mesaj düzenleme ve herkesten silme süreleri",
+      icon: MessageSquare,
+      color: "from-cyan-600 to-blue-600 text-cyan-300",
+    },
+    {
+      id: "calls",
+      label: "Arama & WebRTC Telemetrisi",
+      desc: "LiveKit SFU sunucusu, sesli ve görüntülü arama izinleri",
+      icon: PhoneCall,
+      color: "from-purple-600 to-violet-600 text-purple-300",
+      badge: activeCalls.length > 0 ? `${activeCalls.length} canlı görüşme` : undefined,
+    },
+    {
+      id: "logs",
+      label: "Erişim & Konum Kayıtları",
+      desc: "Kullanıcı giriş IP'leri, cihaz bilgileri ve coğrafi konum geçmişi",
+      icon: FileText,
+      color: "from-slate-600 to-zinc-600 text-slate-300",
+    },
+    {
+      id: "stats",
+      label: "Sistem Sağlığı & Depolama",
+      desc: "PostgreSQL, Redis, MinIO S3 ve sunucu yük durumu telemetrisi",
+      icon: Activity,
+      color: "from-green-600 to-emerald-600 text-green-300",
+    },
   ];
 
   return (
@@ -661,7 +727,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         className="fixed inset-0 bg-black/80 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
       />
 
-      {/* AURA SOL ÇEKMECE PANELİ (Left Sidebar Drawer - Tamamen Responsive) */}
+      {/* AURA SOL ÇEKMECE PANELİ (WhatsApp Tarzı Kayan Çekmece) */}
       <div className="fixed inset-y-0 left-0 max-w-full flex z-[100]">
         <div className="w-screen max-w-full md:max-w-3xl lg:max-w-4xl h-[100dvh] bg-[#0D0F14] border-r border-[#222631] shadow-2xl flex flex-col animate-in slide-in-from-left duration-250 text-slate-200 relative">
           {/* Ayarlar Kaydedildi Kayan Toast Bildirimi */}
@@ -674,24 +740,47 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
           {/* Çekmece Üst Başlığı (Header) */}
           <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4 border-b border-[#222631] bg-[#12151C] flex-shrink-0">
-            <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-              <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 flex-shrink-0">
-                <ShieldAlert className="w-4 sm:w-5 h-4 sm:h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
-                    Sistem Yönetim & Parametreleri
-                  </h2>
-                  <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30 flex-shrink-0">
-                    Aura
-                  </span>
+            {activeTab === null ? (
+              <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+                <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 flex-shrink-0">
+                  <ShieldAlert className="w-4 sm:w-5 h-4 sm:h-5" />
                 </div>
-                <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
-                  Yapılandırma, temalar, izinler ve limitler
-                </p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                      Sistem Yönetim & Parametreleri
+                    </h2>
+                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30 flex-shrink-0">
+                      Aura
+                    </span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
+                    Yapılandırma, temalar, izinler ve limitler
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(null)}
+                  className="p-1.5 sm:p-2 -ml-1 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800/80 transition-all flex items-center gap-1.5 cursor-pointer group"
+                  title="Ana Menüye Dön"
+                >
+                  <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform text-pink-400" />
+                  <span className="text-xs font-bold text-slate-400 group-hover:text-white hidden sm:inline">Geri</span>
+                </button>
+                <div className="h-5 w-px bg-[#222631] mx-0.5 sm:mx-1" />
+                <div className="min-w-0">
+                  <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                    {NAV_ITEMS.find((n) => n.id === activeTab)?.label || "Yönetim Paneli"}
+                  </h2>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
+                    {NAV_ITEMS.find((n) => n.id === activeTab)?.desc || "Sistem yapılandırma alanı"}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-2">
               {saveSuccess && (
@@ -710,50 +799,62 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
           </div>
 
-          {/* Ana Gövde: Mobilde Yatay Tab Bar / Masaüstünde Aura Dikey Menü */}
-          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-            
-            {/* 1. SÜTUN: Sol Kategori Menüsü (Mobilde yatay kaydırılabilir, Masaüstünde dikey rail) */}
-            <div className="w-full md:w-56 bg-[#0F1218] border-b md:border-b-0 md:border-r border-[#222631] flex flex-row md:flex-col p-2 gap-1.5 md:gap-0 md:space-y-1 overflow-x-auto md:overflow-y-auto flex-shrink-0 no-scrollbar">
-              <div className="hidden md:block px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Menü Grupları
-              </div>
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id as TabType)}
-                    className={`flex-shrink-0 flex items-center justify-between gap-2 px-3 py-2 md:py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left whitespace-nowrap ${
-                      isActive
-                        ? "bg-pink-600/15 text-pink-400 border border-pink-500/30 shadow-xs"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-pink-400" : "text-slate-400"}`} />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-                    {item.badge && (
-                      <span className="hidden md:inline-block text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+          {/* Ana Gövde */}
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 md:p-6 bg-[#0B0D12]">
+            {/* WHATSAPP TARZI DİKEY ANA MENÜ (activeTab === null) */}
+            {activeTab === null && (
+              <div className="space-y-4 max-w-3xl mx-auto">
+                <div className="px-1 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                  <span>Yönetim ve Yapılandırma Modülleri</span>
+                  <span className="text-[10px] text-slate-600 font-normal">{NAV_ITEMS.length} Modül</span>
+                </div>
 
-              <div className="hidden md:flex mt-auto pt-4 border-t border-[#222631]/60 px-3">
-                <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                  <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-                  <span>Sunucu: Çevrimiçi</span>
+                <div className="space-y-2.5">
+                  {NAV_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setActiveTab(item.id)}
+                        className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#12151E] hover:bg-[#181D29] active:bg-[#1E2333] border border-[#222635] hover:border-pink-500/30 transition-all duration-150 cursor-pointer text-left group shadow-xs hover:shadow-md"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          <div className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${item.color} flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
+                            <Icon className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors truncate">
+                                {item.label}
+                              </span>
+                              {item.badge && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 font-semibold border border-pink-500/20 whitespace-nowrap">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400 line-clamp-1">
+                              {item.desc}
+                            </p>
+                          </div>
+                        </div>
+
+                        <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-pink-400 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-4 border-t border-[#1C202C] mt-6 flex items-center justify-between text-xs text-slate-500 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Aura Çekirdek Sistemi: Çevrimiçi</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-slate-600">v1.0.0</span>
                 </div>
               </div>
-            </div>
-
-            {/* 2. SÜTUN: Sağ İçerik & Parametre Form Alanı */}
-            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 md:p-6 bg-[#0B0D12]">
+            )}
               
               {/* TAB 1: KULLANICI YÖNETİMİ */}
               {activeTab === "users" && (
@@ -2751,7 +2852,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               )}
 
             </div>
-          </div>
 
         </div>
       </div>
