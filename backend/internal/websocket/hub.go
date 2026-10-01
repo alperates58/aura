@@ -12,6 +12,7 @@ import (
 	"aura/internal/models"
 	"aura/internal/push"
 	auraredis "aura/internal/redis"
+	"strings"
 	"github.com/google/uuid"
 )
 
@@ -244,6 +245,42 @@ func (h *Hub) IsUserConnected(userID uuid.UUID) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.userClients[userID]) > 0
+}
+
+// HasActiveSessionExcluding kullanıcının halihazırda farklı bir cihazda/tarayıcıda açık ve canlı bir WebSocket oturumu olup olmadığını denetler.
+func (h *Hub) HasActiveSessionExcluding(userID uuid.UUID, excludeSessionID string, currentIP string) (bool, string, string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	clients, ok := h.userClients[userID]
+	if !ok || len(clients) == 0 {
+		return false, "", ""
+	}
+
+	for c := range clients {
+		// Aynı tarayıcı/cihaz oturum kimliği ise eşzamanlı ikinci cihaz DEĞİLDİR
+		if excludeSessionID != "" && c.sessionID != "" && c.sessionID == excludeSessionID {
+			continue
+		}
+
+		clientIP := ""
+		if c.conn != nil && c.conn.RemoteAddr() != nil {
+			clientIP = c.conn.RemoteAddr().String()
+			if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+				clientIP = clientIP[:idx]
+			}
+		}
+
+		// Oturum kimliği gönderilmemiş olsa bile aynı IP adresi ise aynı yerel ağ/cihazdır
+		if excludeSessionID == "" && clientIP != "" && currentIP != "" && clientIP == currentIP {
+			continue
+		}
+
+		deviceInfo := "Aktif Oturum (Masaüstü / Mobil)"
+		return true, deviceInfo, clientIP
+	}
+
+	return false, "", ""
 }
 
 func (h *Hub) BroadcastToAll(message []byte) {

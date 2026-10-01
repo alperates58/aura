@@ -701,7 +701,7 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 		eventType := "concurrent_session_login"
 		nowStr := time.Now().Format("15:04:05")
 
-		prevDevice := "Aktif Oturum (Masaüstü / Mobil)"
+		prevDevice := "Diğer Aktif Cihaz (Masaüstü / Mobil)"
 		prevIP := ""
 		if prevAccess != nil {
 			if prevAccess.DeviceInfo != "" {
@@ -710,20 +710,20 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 			prevIP = prevAccess.IPAddress
 		}
 
-		// 1. Veritabanına Güvenlik Olayını Kaydet
+		// 1. Veritabanına Güvenlik Olayını Kaydet (Admin audit için)
 		if h.securityRepo != nil {
 			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, user.Username, newIP, ua, newDeviceInfo, map[string]interface{}{
 				"location":    location,
 				"prev_device": prevDevice,
 				"prev_ip":     prevIP,
-				"note":        "Eşzamanlı iki oturum açıldı (ikinci cihazdan giriş)",
+				"note":        "Eşzamanlı iki aktif oturum tespit edildi (ikinci cihazdan giriş)",
 			})
 		}
 
-		// 2. Canlı WebSocket Güvenlik Uyarısı Yayınla (banner)
+		// 2. Canlı WebSocket Güvenlik Uyarısını Yalnızca İlgili Kullanıcıya Gönder (Tüm siteye değil!)
 		if h.hub != nil {
-			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Çoklu Oturum (İkinci Cihaz): @%s hesabında ikinci bir cihazdan giriş yapıldı! (Yeni Cihaz: %s, Konum: %s)", user.Username, newDeviceInfo, location)
-			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+			alertMsg := fmt.Sprintf("⚠️ Eşzamanlı Oturum: Hesabınızda başka bir cihazdan giriş yapıldı! (Cihaz: %s, Konum: %s)", newDeviceInfo, location)
+			alertPayload, err := auraws.NewWSMessage("security_alert", models.SecurityAlertPayload{
 				EventType:      eventType,
 				AttemptedLogin: user.Username,
 				IPAddress:      newIP,
@@ -733,47 +733,18 @@ func (h *AuthHandler) handleConcurrentLoginBreach(c *fiber.Ctx, user *models.Use
 				Severity:       "high",
 				CreatedAt:      time.Now(),
 			})
-		}
-
-		// 3. Hikaye Paylaş (Aura Güvenlik)
-		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
-			caption := fmt.Sprintf(
-				"🛡️ GÜVENLİK ALARMI ⚠️\nÇoklu Oturum Tespiti (İkinci Cihaz)!\n👤 Kullanıcı: @%s\n🔍 Sebep: İkinci Cihazdan Giriş\n🌐 Yeni IP: %s\n📍 Konum: %s\n📱 Yeni Cihaz: %s\n⏰ Zaman: %s\nAynı anda iki oturum açıldı (ikinci cihaz).",
-				user.Username, newIP, location, newDeviceInfo, nowStr,
-			)
-
-			securityStory := models.Story{
-				UserID:          database.SecurityBotID,
-				MediaType:       "text",
-				BackgroundColor: "from-amber-950 via-slate-900 to-black",
-				Caption:         caption,
-				DurationSeconds: 10,
-				Audience:        "everyone",
-				ExpiresAt:       time.Now().Add(24 * time.Hour),
-			}
-
-			if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil {
-				if h.hub != nil {
-					h.hub.BroadcastStoryNotification(
-						database.SecurityBotID,
-						"Aura Güvenlik",
-						"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
-						securityStory.Caption,
-						"everyone",
-					)
-				}
-			} else {
-				log.Printf("❌ [Security Story Error] Çoklu oturum hikayesi eklenemedi: %v", err)
+			if err == nil {
+				h.hub.SendToUser(user.ID, alertPayload)
 			}
 		}
 
-		// 4. Sitedeki Tüm Kullanıcılara Aura Güvenlik Botundan Doğrudan Mesaj Gönder!
+		// 3. Yalnızca İlgili Kullanıcıya Aura Güvenlik Botundan Özel Bilgilendirme Mesajı Gönder (Tüm siteye değil!)
 		if h.hub != nil {
 			chatMsg := fmt.Sprintf(
-				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\n@%s hesabında eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Oturum:** %s\n\nAura Tehdit Kalkanı çoklu oturumu doğruladı ve güvenlik bildirimini yayınladı.",
-				user.Username, newDeviceInfo, newIP, location, nowStr, prevDevice,
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ**\n\nHesabınızda eşzamanlı **ikinci bir oturum** açıldı!\n\n📱 **Yeni Giriş Yapan Cihaz:** %s\n🌐 **IP Adresi:** %s\n📍 **Konum:** %s\n⏰ **Zaman:** %s\n💻 **Önceki Aktif Cihaz:** %s\n\nBu giriş size ait değilse, Ayarlar > Güvenlik menüsünden **'Diğer Tüm Oturumları Kapat'** seçeneğini kullanarak diğer cihazların erişimini hemen kesebilirsiniz.",
+				newDeviceInfo, newIP, location, nowStr, prevDevice,
 			)
-			h.hub.SendSecurityNotificationMessage(nil, chatMsg)
+			h.hub.SendSecurityNotificationMessage(&user.ID, chatMsg)
 		}
 	}(user, currentIP, currentUA, currentDeviceInfo, prevAccess)
 }
@@ -955,17 +926,24 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// 3. Eşzamanlı Oturum / İkinci Cihazdan Giriş Denetimi
-	isAlreadyOnline := false
-	if h.presenceService != nil {
-		isAlreadyOnline = h.presenceService.IsUserOnline(c.Context(), user.ID)
-	}
-	if !isAlreadyOnline && h.hub != nil {
-		isAlreadyOnline = h.hub.IsUserConnected(user.ID)
+	// Yalnızca halihazırda farklı bir cihazdan/oturumdan açık ve canlı bir WebSocket bağlantısı varsa tespit et.
+	// Aynı cihaz/tarayıcı (aynı X-Session-ID veya aynı IP) ya da geçmiş erişim kayıtları asla eşzamanlı oturum sayılmaz.
+	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+	isConcurrent := false
+	var otherDevInfo, otherDevIP string
+	if h.hub != nil {
+		isConcurrent, otherDevInfo, otherDevIP = h.hub.HasActiveSessionExcluding(user.ID, currentSessionID, currentIP)
 	}
 
-	isConcurrent := isAlreadyOnline || (lastAccess != nil && (lastAccess.IPAddress != currentIP || lastAccess.DeviceInfo != currentDeviceInfo) && time.Since(lastAccess.CreatedAt) < 24*time.Hour)
 	if !isPanic && isConcurrent {
-		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, lastAccess)
+		prevAccessInfo := &models.AccessLog{
+			DeviceInfo: otherDevInfo,
+			IPAddress:  otherDevIP,
+		}
+		if otherDevIP == "" && lastAccess != nil {
+			prevAccessInfo = lastAccess
+		}
+		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, prevAccessInfo)
 	}
 
 	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, isPanic)
