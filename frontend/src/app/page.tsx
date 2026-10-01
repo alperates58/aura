@@ -172,7 +172,7 @@ export default function HomePage() {
   }, []);
 
   const handleOpenSettings = useCallback((tab?: string) => {
-    setSettingsInitialTab(tab || "profile");
+    setSettingsInitialTab(tab);
     setIsSettingsOpen(true);
   }, []);
 
@@ -1695,14 +1695,14 @@ export default function HomePage() {
         onTabChange={(tab) => {
           setActiveTab(tab);
           if (tab === "settings") {
-            handleOpenSettings("profile");
+            handleOpenSettings();
           }
         }}
         unreadCount={totalUnreadCount}
         starredCount={combinedStarredMessages.length}
         isConnected={isConnected}
         user={user}
-        onOpenSettings={() => handleOpenSettings("profile")}
+        onOpenSettings={() => handleOpenSettings()}
         onOpenAdmin={(tab?: string) => handleOpenAdmin(tab)}
         onLogout={handleLogout}
       />
@@ -1717,7 +1717,7 @@ export default function HomePage() {
         <div className="p-3.5 sm:p-4 border-b border-grupo-dark-border flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <button
-              onClick={() => handleOpenSettings("profile")}
+              onClick={() => handleOpenSettings()}
               className="relative flex-shrink-0 cursor-pointer"
             >
               <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-grupo-accent overflow-hidden">
@@ -1994,12 +1994,12 @@ export default function HomePage() {
             onTabChange={(tab) => {
               setActiveTab(tab);
               if (tab === "settings") {
-                handleOpenSettings("profile");
+                handleOpenSettings();
               }
             }}
             unreadCount={totalUnreadCount}
             starredCount={combinedStarredMessages.length}
-            onOpenSettings={() => handleOpenSettings("profile")}
+            onOpenSettings={() => handleOpenSettings()}
             onOpenAdmin={(tab?: string) => handleOpenAdmin(tab)}
           />
         )}
