@@ -419,23 +419,10 @@ export default function SettingsModal({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {onOpenAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenAdmin();
-                }}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Sistem Parametreleri</span>
-              </button>
-            )}
             <button
               onClick={onClose}
               title="Kapat"
-              className="p-1.5 sm:p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

@@ -252,6 +252,22 @@ func (h *StoryHandler) AddStoryReaction(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 
+// GetStoryReactions - Hikayeye ait emoji reaksiyonlarını döner
+func (h *StoryHandler) GetStoryReactions(c *fiber.Ctx) error {
+	storyIDStr := c.Params("id")
+	storyID, err := uuid.Parse(storyIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Geçersiz hikaye ID'si."})
+	}
+
+	reactions, err := h.storyRepo.GetStoryReactions(c.Context(), storyID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"reactions": reactions})
+}
+
 // GetCloseFriends - Yakın arkadaşlar listesini döner
 func (h *StoryHandler) GetCloseFriends(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)

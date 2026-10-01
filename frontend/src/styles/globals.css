@@ -77,3 +77,30 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.4);
 }
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-40px) scale(1.1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-160px) translateX(-12px) scale(1);
+  }
+  80% {
+    opacity: 0.6;
+    transform: translateY(-280px) translateX(10px) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-380px) translateX(-6px) scale(0.85);
+  }
+}
+
+.animate-float-up {
+  animation: floatUp 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}

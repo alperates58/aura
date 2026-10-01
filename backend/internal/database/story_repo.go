@@ -284,10 +284,13 @@ func (r *StoryRepository) GetStoryViewers(ctx context.Context, storyID uuid.UUID
 	}
 
 	query := `
-		SELECT u.id, u.username, u.display_name, u.avatar_url, sv.viewed_at
+		SELECT u.id, u.username, u.display_name, u.avatar_url, sv.viewed_at,
+		       COALESCE(ARRAY_AGG(sr.reaction) FILTER (WHERE sr.reaction IS NOT NULL), '{}') AS reactions
 		FROM story_views sv
 		JOIN users u ON sv.user_id = u.id
+		LEFT JOIN story_reactions sr ON sr.story_id = sv.story_id AND sr.user_id = sv.user_id
 		WHERE sv.story_id = $1
+		GROUP BY u.id, u.username, u.display_name, u.avatar_url, sv.viewed_at
 		ORDER BY sv.viewed_at DESC NULLS LAST, u.display_name ASC
 	`
 	rows, err := r.db.QueryContext(ctx, query, storyID)
@@ -299,7 +302,7 @@ func (r *StoryRepository) GetStoryViewers(ctx context.Context, storyID uuid.UUID
 	var viewers []models.StoryViewerDetail
 	for rows.Next() {
 		var a models.StoryViewerDetail
-		if err := rows.Scan(&a.ID, &a.Username, &a.DisplayName, &a.AvatarURL, &a.ViewedAt); err == nil {
+		if err := rows.Scan(&a.ID, &a.Username, &a.DisplayName, &a.AvatarURL, &a.ViewedAt, pq.Array(&a.Reactions)); err == nil {
 			viewers = append(viewers, a)
 		}
 	}
@@ -308,6 +311,35 @@ func (r *StoryRepository) GetStoryViewers(ctx context.Context, storyID uuid.UUID
 		viewers = []models.StoryViewerDetail{}
 	}
 	return viewers, nil
+}
+
+// GetStoryReactions - Hikayeye ait tüm emoji reaksiyonlarını getirir
+func (r *StoryRepository) GetStoryReactions(ctx context.Context, storyID uuid.UUID) ([]models.StoryReactionDetail, error) {
+	query := `
+		SELECT sr.id, sr.story_id, sr.user_id, sr.reaction, sr.created_at,
+		       u.username, u.display_name, u.avatar_url
+		FROM story_reactions sr
+		JOIN users u ON sr.user_id = u.id
+		WHERE sr.story_id = $1
+		ORDER BY sr.created_at ASC
+	`
+	rows, err := r.db.QueryContext(ctx, query, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions []models.StoryReactionDetail
+	for rows.Next() {
+		var d models.StoryReactionDetail
+		if err := rows.Scan(&d.ID, &d.StoryID, &d.UserID, &d.Reaction, &d.CreatedAt, &d.Username, &d.DisplayName, &d.AvatarURL); err == nil {
+			reactions = append(reactions, d)
+		}
+	}
+	if reactions == nil {
+		reactions = []models.StoryReactionDetail{}
+	}
+	return reactions, nil
 }
 
 // UpdateStory - Mevcut hikayeyi günceller (süre, müzik aralığı, metin, çıkartmalar)

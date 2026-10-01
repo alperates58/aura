@@ -50,6 +50,7 @@ type StoryViewerDetail struct {
 	DisplayName string     `json:"display_name"`
 	AvatarURL   string     `json:"avatar_url"`
 	ViewedAt    *time.Time `json:"viewed_at"`
+	Reactions   []string   `json:"reactions,omitempty"`
 }
 
 type StoryReaction struct {
@@ -58,6 +59,17 @@ type StoryReaction struct {
 	UserID    uuid.UUID `json:"user_id"`
 	Reaction  string    `json:"reaction"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type StoryReactionDetail struct {
+	ID          uuid.UUID `json:"id"`
+	StoryID     uuid.UUID `json:"story_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Reaction    string    `json:"reaction"`
+	Username    string    `json:"username"`
+	DisplayName string    `json:"display_name"`
+	AvatarURL   string    `json:"avatar_url"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type StoryReactionRequest struct {

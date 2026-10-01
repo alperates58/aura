@@ -715,20 +715,21 @@ export default function ContactInfoDrawer({
       {currentView === "main" && (
         <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-grupo-dark-card/90 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-3.5 sm:px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={onClose}
-              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Geri"
             >
-              <ChevronLeft className="w-5 h-5 -ml-1" />
-              <span>Geri</span>
+              <ChevronLeft className="w-5 h-5" />
             </button>
-            <h2 className="text-sm font-bold text-white tracking-wide">Kişi bilgisi</h2>
+            <h2 className="text-sm font-bold text-white tracking-wide">Kişi Bilgisi</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Kapat"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
@@ -1077,19 +1078,20 @@ export default function ContactInfoDrawer({
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setCurrentView("main")}
-                className="flex items-center gap-1 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
+                className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                title="Geri"
               >
-                <ChevronLeft className="w-5 h-5 -ml-1" />
-                <span>Geri</span>
+                <ChevronLeft className="w-5 h-5" />
               </button>
-              <span className="text-xs font-bold text-slate-300">
+              <span className="text-xs font-bold text-slate-200 truncate max-w-[180px]">
                 {activeConv.other_user.display_name}
               </span>
               <button
                 onClick={onClose}
-                className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                title="Kapat"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1430,20 +1432,21 @@ export default function ContactInfoDrawer({
       {currentView === "storage" && (
         <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar bg-grupo-dark-bg">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-3.5 sm:px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={() => setCurrentView("main")}
-              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Geri"
             >
-              <ChevronLeft className="w-5 h-5 -ml-1" />
-              <span>Geri</span>
+              <ChevronLeft className="w-5 h-5" />
             </button>
             <h2 className="text-sm font-bold text-white tracking-wide">Depolama</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Kapat"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
@@ -1553,20 +1556,21 @@ export default function ContactInfoDrawer({
       {currentView === "starred" && (
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-grupo-dark-bg">
           {/* Üst Bar */}
-          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
+          <div className="sticky top-0 z-20 bg-grupo-dark-card/95 backdrop-blur-md px-3.5 sm:px-4 h-14 border-b border-grupo-dark-border flex items-center justify-between">
             <button
               onClick={() => setCurrentView("main")}
-              className="flex items-center gap-1.5 text-grupo-accent hover:opacity-80 font-medium text-sm transition-opacity cursor-pointer py-1"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Geri"
             >
-              <ChevronLeft className="w-5 h-5 -ml-1" />
-              <span>Geri</span>
+              <ChevronLeft className="w-5 h-5" />
             </button>
             <h2 className="text-sm font-bold text-white tracking-wide">Yıldızlı Mesajlar</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+              title="Kapat"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 

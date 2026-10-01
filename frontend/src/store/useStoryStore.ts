@@ -30,6 +30,18 @@ export interface StoryAuthor {
   display_name: string;
   avatar_url: string;
   viewed_at?: string;
+  reactions?: string[];
+}
+
+export interface StoryReactionItem {
+  id: string;
+  story_id: string;
+  user_id: string;
+  reaction: string;
+  username: string;
+  display_name: string;
+  avatar_url: string;
+  created_at: string;
 }
 
 export interface UserStoriesGroup {
@@ -78,6 +90,7 @@ interface StoryStoreState {
   deleteStory: (storyId: string) => Promise<void>;
   removeStoryById: (storyId: string, authorId?: string) => void;
   getStoryViewers: (storyId: string) => Promise<StoryAuthor[]>;
+  getStoryReactions: (storyId: string) => Promise<StoryReactionItem[]>;
   sendReaction: (storyId: string, reaction: string) => Promise<void>;
   getCloseFriends: () => Promise<StoryAuthor[]>;
   addCloseFriend: (friendId: string) => Promise<void>;
@@ -249,6 +262,16 @@ export const useStoryStore = create<StoryStoreState>((set, get) => ({
       return res.data.viewers || [];
     } catch (err) {
       console.error("Görüntüleyenler alınamadı:", err);
+      return [];
+    }
+  },
+
+  getStoryReactions: async (storyId: string) => {
+    try {
+      const res = await api.get<{ reactions: StoryReactionItem[] }>(`/stories/${storyId}/reactions`);
+      return res.data.reactions || [];
+    } catch (err) {
+      console.error("Hikaye tepkileri alınamadı:", err);
       return [];
     }
   },

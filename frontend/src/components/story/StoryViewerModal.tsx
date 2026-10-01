@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useStoryStore, StoryAuthor } from "@/store/useStoryStore";
+import { useStoryStore, StoryAuthor, StoryReactionItem } from "@/store/useStoryStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -101,6 +101,7 @@ export default function StoryViewerModal() {
     markStoryViewed,
     deleteStory,
     getStoryViewers,
+    getStoryReactions,
     storyGroups,
     openViewer,
   } = useStoryStore();
@@ -121,6 +122,25 @@ export default function StoryViewerModal() {
   const [burstEmoji, setBurstEmoji] = useState<string | null>(null);
   const [isHighlightModalOpen, setIsHighlightModalOpen] = useState(false);
 
+  // Canlı Yorumlar & Instagram Tarzı Canlı Kalp / Tepki Parçacıkları State'leri
+  const [liveReactions, setLiveReactions] = useState<StoryReactionItem[]>([]);
+  const [liveComments, setLiveComments] = useState<{
+    id: string;
+    userId: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string;
+    text: string;
+    timestamp: number;
+  }[]>([]);
+  const [floatingHearts, setFloatingHearts] = useState<{
+    id: string;
+    emoji: string;
+    left: number;
+    size: number;
+    delay: number;
+  }[]>([]);
+
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -137,6 +157,22 @@ export default function StoryViewerModal() {
       closeViewer();
     }
   }, [closeViewer]);
+
+  // Instagram Tarzı Yüzen Kalp/Emoji Parçacıkları Tetikleyici
+  const triggerHeartBurst = useCallback((emoji: string) => {
+    const count = 8;
+    const newHearts = Array.from({ length: count }).map((_, i) => ({
+      id: `${Date.now()}-${Math.random()}-${i}`,
+      emoji,
+      left: 65 + Math.random() * 25,
+      size: 22 + Math.random() * 18,
+      delay: i * 70,
+    }));
+    setFloatingHearts((prev) => [...prev, ...newHearts]);
+    setTimeout(() => {
+      setFloatingHearts((prev) => prev.filter((h) => !newHearts.some((nh) => nh.id === h.id)));
+    }, 2200);
+  }, []);
 
   // Hikaye süresi: Video için gerçek video süresi varsa o (maksimum 60s), yoksa duration_seconds (varsayılan 10s)
   const storyDuration =
@@ -359,6 +395,34 @@ export default function StoryViewerModal() {
     }
   }, [currentStory?.id, currentStory?.media_type]);
 
+  // Hikaye tepkilerini yükle
+  useEffect(() => {
+    if (!currentStory?.id) {
+      setLiveReactions([]);
+      setLiveComments([]);
+      return;
+    }
+    setLiveComments([]);
+    getStoryReactions(currentStory.id).then((reactions) => {
+      setLiveReactions(reactions || []);
+    });
+  }, [currentStory?.id, getStoryReactions]);
+
+  // Canlı Hikaye Tepkilerini Dinle (WebSocket veya CustomEvent)
+  useEffect(() => {
+    const handleStoryReactionEvent = (e: any) => {
+      const detail = e.detail;
+      if (detail?.storyId === currentStory?.id && detail?.reaction) {
+        setLiveReactions((prev) => [detail.reaction, ...prev.slice(0, 19)]);
+        triggerHeartBurst(detail.reaction.reaction || "❤️");
+      }
+    };
+    window.addEventListener("aura:story_reaction" as any, handleStoryReactionEvent);
+    return () => {
+      window.removeEventListener("aura:story_reaction" as any, handleStoryReactionEvent);
+    };
+  }, [currentStory?.id, triggerHeartBurst]);
+
   // 1.5s aktif görüntüleme eşiği (Hemen geçilen hikayeler görüldü sayılmaz)
   useEffect(() => {
     if (!currentStory || isOwnStory || currentStory.has_viewed) return;
@@ -447,6 +511,7 @@ export default function StoryViewerModal() {
     e.preventDefault();
     if (!replyText.trim() || isSendingReply) return;
 
+    const trimmedText = replyText.trim();
     setIsSendingReply(true);
     try {
       // 1. Karşı tarafla konuşmayı bul veya oluştur
@@ -456,7 +521,7 @@ export default function StoryViewerModal() {
       const conversationId = convRes.data.id;
 
       // 2. Mesaj metnini hazırla
-      const storyContext = `📸 [Hikaye Yanıtı]: ${currentStory.caption || "Hikaye"}\n${replyText.trim()}`;
+      const storyContext = `📸 [Hikaye Yanıtı]: ${currentStory.caption || "Hikaye"}\n${trimmedText}`;
 
       // 3. Tek bir kanal üzerinden mesaj gönder (WebSocket bağlıysa soketten, değilse HTTP Fallback - ASLA ikisi birden değil)
       const isSocketConnected = useSocketStore.getState().isConnected;
@@ -469,7 +534,19 @@ export default function StoryViewerModal() {
         });
       }
 
-      // 4. Konuşma listesini arka planda tazele
+      // 4. Canlı Yorum Akışına Ekle (Instagram Canlı Yorum Balonu)
+      const newComment = {
+        id: `comment-${Date.now()}-${Math.random()}`,
+        userId: user?.id || "",
+        username: user?.username || "",
+        displayName: user?.display_name || user?.username || "Sen",
+        avatarUrl: user?.avatar_url,
+        text: trimmedText,
+        timestamp: Date.now(),
+      };
+      setLiveComments((prev) => [...prev.slice(-9), newComment]);
+
+      // 5. Konuşma listesini arka planda tazele
       useChatStore.getState().loadConversations();
 
       setReplyText("");
@@ -568,6 +645,22 @@ export default function StoryViewerModal() {
     setBurstEmoji(emoji);
     setTimeout(() => setBurstEmoji(null), 1800);
 
+    // Canlı yüzen kalp/emoji parçacıkları patlaması
+    triggerHeartBurst(emoji);
+
+    // Yerel canlı tepkiler listesine ekle
+    const newRxItem: StoryReactionItem = {
+      id: `local-${Date.now()}`,
+      story_id: currentStory.id,
+      user_id: user?.id || "",
+      reaction: emoji,
+      username: user?.username || "",
+      display_name: user?.display_name || "Sen",
+      avatar_url: user?.avatar_url || "",
+      created_at: new Date().toISOString(),
+    };
+    setLiveReactions((prev) => [newRxItem, ...prev.slice(0, 19)]);
+
     try {
       // 1. Hikaye tepkisi API'si
       await useStoryStore.getState().sendReaction(currentStory.id, emoji);
@@ -660,6 +753,23 @@ export default function StoryViewerModal() {
             </div>
           </div>
         )}
+
+        {/* Yüzen Canlı Kalp / Emoji Parçacıkları (Instagram Live Tarzı) */}
+        <div className="absolute inset-0 pointer-events-none z-35 overflow-hidden">
+          {floatingHearts.map((fh) => (
+            <div
+              key={fh.id}
+              className="absolute bottom-28 animate-float-up pointer-events-none select-none drop-shadow-md text-2xl"
+              style={{
+                left: `${fh.left}%`,
+                fontSize: `${fh.size}px`,
+                animationDelay: `${fh.delay}ms`,
+              }}
+            >
+              {fh.emoji}
+            </div>
+          ))}
+        </div>
 
         {/* 1. ÜST BAR: Progress Barlar & Yazar Bilgisi */}
         <div className="absolute top-0 inset-x-0 z-30 p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
@@ -1196,6 +1306,45 @@ export default function StoryViewerModal() {
             viewersModalOpen ? "opacity-0 pointer-events-none" : "opacity-100"
           }`}
         >
+          {/* Canlı Yorumlar ve Hızlı Tepkiler Akışı (Instagram Live Tarzı) */}
+          {(liveComments.length > 0 || liveReactions.length > 0) && (
+            <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto px-1 pointer-events-none mb-1 scrollbar-none">
+              {/* Son Canlı Yorumlar */}
+              {liveComments.slice(-3).map((c) => (
+                <div
+                  key={c.id}
+                  className="self-start flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/15 text-white text-xs shadow-lg animate-in slide-in-from-bottom-2 duration-200 pointer-events-auto max-w-[90%]"
+                >
+                  <div className="w-5 h-5 rounded-full bg-pink-500/30 border border-pink-400/40 flex items-center justify-center text-[10px] font-bold text-pink-300 overflow-hidden shrink-0">
+                    {c.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolveMediaUrl(c.avatarUrl)} alt={c.displayName} className="w-full h-full object-cover" />
+                    ) : (
+                      c.displayName.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <span className="font-semibold text-pink-300 text-[11px] shrink-0">@{c.username}:</span>
+                  <span className="text-[11px] text-white/95 break-words truncate">{c.text}</span>
+                </div>
+              ))}
+
+              {/* Canlı Tepki Balonları */}
+              {liveReactions.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap pointer-events-auto">
+                  {liveReactions.slice(0, 5).map((r, idx) => (
+                    <div
+                      key={`${r.id || idx}-${r.reaction}`}
+                      className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[10px] text-white/90 shadow-sm animate-in zoom-in-75 duration-200"
+                    >
+                      <span className="text-sm">{r.reaction}</span>
+                      <span className="text-white/80 font-medium max-w-[85px] truncate">{r.display_name || r.username || "Biri"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Görsel/Video Hikayesi için Altyazı */}
           {(currentStory.media_type === "image" || currentStory.media_type === "video") &&
             currentStory.caption && (
@@ -1350,9 +1499,18 @@ export default function StoryViewerModal() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium flex-shrink-0 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        <Eye className="w-3 h-3" />
-                        <span>{viewer.viewed_at ? formatStoryTime(viewer.viewed_at) : "Gördü"}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {viewer.reactions && viewer.reactions.length > 0 && (
+                          <div className="flex items-center gap-0.5 bg-pink-500/15 border border-pink-500/30 px-2 py-0.5 rounded-full">
+                            {viewer.reactions.map((rx, idx) => (
+                              <span key={idx} className="text-xs">{rx}</span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          <Eye className="w-3 h-3" />
+                          <span>{viewer.viewed_at ? formatStoryTime(viewer.viewed_at) : "Gördü"}</span>
+                        </div>
                       </div>
                     </div>
                   ))

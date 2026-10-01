@@ -292,6 +292,7 @@ func main() {
 	stories.Patch("/:id", storyHandler.UpdateStory)
 	stories.Post("/:id/view", storyHandler.MarkStoryViewed)
 	stories.Get("/:id/viewers", storyHandler.GetStoryViewers)
+	stories.Get("/:id/reactions", storyHandler.GetStoryReactions)
 	stories.Post("/:id/reactions", storyHandler.AddStoryReaction)
 	stories.Delete("/:id", storyHandler.DeleteStory)
 
