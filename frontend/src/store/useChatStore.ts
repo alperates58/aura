@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { useSocketStore } from "./useSocketStore";
 import { User, useAuthStore } from "./useAuthStore";
 import { notificationManager } from "@/lib/notifications";
-import { triggerReactionConfetti } from "@/lib/confetti";
+import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
 
 export interface Message {
   id: string;
@@ -17,6 +17,7 @@ export interface Message {
     content: string;
     message_type: string;
     is_mine?: boolean;
+    is_deleted_for_all?: boolean;
   };
   message_type: string; // text, voice, image, video, file, call_log
   content: string;
@@ -390,6 +391,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sender_id: replying.sender_id,
             content: replying.content,
             message_type: replying.message_type,
+            is_mine: replying.is_mine,
+            is_deleted_for_all: replying.is_deleted_for_all,
           }
         : undefined,
       message_type: "text",
@@ -411,6 +414,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       replyingTo: null,
     }));
+
+    // Mesaj tek başına veya tekrar eden özel konfeti emojisi ise ekranda konfeti patlat
+    const trimmedContent = content.trim();
+    if (isSpecialConfettiEmoji(trimmedContent)) {
+      triggerReactionConfetti(getPrimaryConfettiEmoji(trimmedContent));
+    }
 
     // WebSocket üzerinden ilet
     useSocketStore.getState().sendAction("send_message", {
@@ -610,8 +619,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       get().onMessageReaction(messageId, optimisticReactions);
 
-      if (!alreadyHadSame && ["❤️", "🎉", "🔥", "🚀", "😍", "👏"].includes(emoji)) {
-        triggerReactionConfetti(emoji);
+      if (!alreadyHadSame && isSpecialConfettiEmoji(emoji)) {
+        triggerReactionConfetti(getPrimaryConfettiEmoji(emoji));
       }
     }
 

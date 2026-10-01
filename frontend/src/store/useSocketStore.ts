@@ -3,7 +3,7 @@ import { useChatStore } from "./useChatStore";
 import { useAuthStore } from "./useAuthStore";
 import { soundEffects } from "@/lib/sounds";
 import { notificationManager } from "@/lib/notifications";
-import { triggerReactionConfetti } from "@/lib/confetti";
+import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
 import { getOrCreateSessionId, getBasePath, getLoginUrl } from "@/lib/api";
 
 interface QueuedAction {
@@ -224,6 +224,14 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               // Sadece ilk kez alındığında ses çal
               if (!isDuplicate) {
                 soundEffects.playReceived();
+                // Gelen mesaj özel bir konfeti emojisi ise ekranda konfeti patlat
+                if (
+                  data.payload.message_type === "text" &&
+                  data.payload.content &&
+                  isSpecialConfettiEmoji(data.payload.content)
+                ) {
+                  triggerReactionConfetti(getPrimaryConfettiEmoji(data.payload.content));
+                }
               }
 
               // Mesajın ulaştığını onayla
@@ -302,8 +310,8 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               if (data.payload?.reactions) {
                 const emojis = Object.keys(data.payload.reactions);
                 const lastEmoji = emojis[emojis.length - 1];
-                if (lastEmoji && ["❤️", "🎉", "🔥", "🚀", "😍", "👏"].includes(lastEmoji)) {
-                  triggerReactionConfetti(lastEmoji);
+                if (lastEmoji && isSpecialConfettiEmoji(lastEmoji)) {
+                  triggerReactionConfetti(getPrimaryConfettiEmoji(lastEmoji));
                 }
               }
               break;

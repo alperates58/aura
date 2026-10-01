@@ -3,7 +3,25 @@
 import { useChatStore } from "@/store/useChatStore";
 import { useAuthStore } from "@/store/useAuthStore";
 
-const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const EMOJIS = [
+  "👍",
+  "❤️",
+  "😘",
+  "🥰",
+  "😍",
+  "🔥",
+  "🎉",
+  "🥳",
+  "🚀",
+  "👏",
+  "⭐",
+  "💯",
+  "💎",
+  "😂",
+  "😮",
+  "😢",
+  "🙏",
+];
 
 interface ReactionPickerProps {
   messageId: string;
@@ -26,7 +44,7 @@ export function ReactionPicker({ messageId, onSelect, className = "" }: Reaction
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
-      className={`flex items-center gap-1 p-1 bg-slate-900/95 border border-slate-700/80 rounded-full shadow-2xl backdrop-blur-md z-40 select-none animate-in fade-in zoom-in-95 duration-100 ${className}`}
+      className={`flex items-center gap-1.5 p-1.5 bg-slate-900/95 border border-slate-700/80 rounded-full shadow-2xl backdrop-blur-md z-40 select-none max-w-[92vw] overflow-x-auto scrollbar-none animate-in fade-in zoom-in-95 duration-100 ${className}`}
     >
       {EMOJIS.map((emoji) => (
         <button

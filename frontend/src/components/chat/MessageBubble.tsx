@@ -37,6 +37,7 @@ import { useSettingsStore } from "@/store/useSettingsStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import CodeSnippetBox from "./CodeSnippetBox";
 import LocationMessageCard from "./LocationMessageCard";
+import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
 
 interface Props {
   message: Message;
@@ -655,7 +656,7 @@ export default function MessageBubble({
                 </div>
                 <div className="text-[11px] opacity-85 line-clamp-2 break-all overflow-hidden">
                   {targetRepliedMessage
-                    ? targetRepliedMessage.is_deleted_for_all
+                    ? (targetRepliedMessage as any)?.is_deleted_for_all
                       ? "🚫 Bu mesaj silindi"
                       : targetRepliedMessage.message_type === "voice"
                       ? "🎤 Sesli Mesaj"
@@ -980,6 +981,34 @@ export default function MessageBubble({
                       </div>
                     );
                   })()
+                ) : isSpecialConfettiEmoji(message.content) ? (
+                  <div className="flex flex-col items-center">
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerReactionConfetti(getPrimaryConfettiEmoji(message.content), e.clientX, e.clientY);
+                      }}
+                      className="text-4xl sm:text-5xl py-1 inline-block cursor-pointer hover:scale-115 active:scale-95 transition-transform duration-200 select-none"
+                      title="Dokunarak efekti tekrar oynat"
+                    >
+                      {message.content}
+                    </span>
+                    <span
+                      style={{
+                        color: message.is_mine
+                          ? "var(--outgoing-text-muted, rgba(255,255,255,0.75))"
+                          : "var(--incoming-text-muted, rgba(248,250,252,0.70))",
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] self-end mt-0.5 select-none flex-shrink-0"
+                    >
+                      {message.is_starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
+                      {message.is_edited && !message.is_deleted_for_all && (
+                        <span className="text-[9px] opacity-75 mr-0.5">(düzenlendi)</span>
+                      )}
+                      <span>{formattedTime}</span>
+                      {renderTicks()}
+                    </span>
+                  </div>
                 ) : (
                   <div className="whitespace-pre-wrap break-words leading-relaxed">
                     {renderFormattedContent(message.content)}
