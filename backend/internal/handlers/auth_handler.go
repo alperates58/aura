@@ -11,6 +11,7 @@ import (
 	"net/mail"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1099,7 +1100,223 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	})
 }
 
+type InactivityAlertRequest struct {
+	Username       string  `json:"username"`
+	TimeoutMinutes int     `json:"timeout_minutes"`
+	ElapsedMinutes float64 `json:"elapsed_minutes"`
+	RedirectURL    string  `json:"redirect_url"`
+	Reason         string  `json:"reason"`
+}
+
+var inactivityAlertThrottle sync.Map // map[string]time.Time (15 saniye içinde aynı kullanıcı için mükerrer gönderimleri engeller)
+
+func (h *AuthHandler) handleInactivityTimeoutBreach(username, realIP, ua, deviceInfo string, timeoutMinutes int, elapsedMinutes float64, targetURL string) {
+	throttleKey := strings.ToLower(username)
+	if val, ok := inactivityAlertThrottle.Load(throttleKey); ok {
+		if lastTime, ok := val.(time.Time); ok && time.Since(lastTime) < 15*time.Second {
+			return
+		}
+	}
+	inactivityAlertThrottle.Store(throttleKey, time.Now())
+
+	go func() {
+		ctx := context.Background()
+		location := ResolveIPLocation(realIP)
+		nowStr := time.Now().Format("15:04:05")
+		eventType := "inactivity_timeout_redirect"
+
+		// 1. Veritabanına Güvenlik Olayını Kaydet
+		if h.securityRepo != nil {
+			_, _ = h.securityRepo.LogSecurityEvent(ctx, eventType, username, realIP, ua, deviceInfo, map[string]interface{}{
+				"timeout_minutes": timeoutMinutes,
+				"elapsed_minutes": elapsedMinutes,
+				"redirect_url":    targetURL,
+				"location":        location,
+				"action":          "session_terminated_and_redirected",
+			})
+		}
+
+		// 2. Canlı WebSocket Güvenlik Uyarısı (Tüm online kullanıcılara/adminlere banner)
+		if h.hub != nil {
+			alertMsg := fmt.Sprintf("⏱️ Hareketsizlik Zaman Aşımı: @%s belirlenen süreyi (%d dk) aştı ve %s adresine yönlendirildi.", username, timeoutMinutes, targetURL)
+			h.hub.BroadcastSecurityAlert(models.SecurityAlertPayload{
+				EventType:      eventType,
+				AttemptedLogin: username,
+				IPAddress:      realIP,
+				Location:       location,
+				DeviceInfo:     deviceInfo,
+				Message:        alertMsg,
+				Severity:       "warning",
+				CreatedAt:      time.Now(),
+			})
+		}
+
+		// 3. Aura Güvenlik Hikayesi Paylaş (Herkese Açık)
+		if h.storyRepo != nil && h.securityRepo != nil && h.securityRepo.CanPublishSecurityStory(ctx, 2*time.Second) {
+			caption := fmt.Sprintf(
+				"🛡️ GÜVENLİK PROTOKOLÜ ⚠️\nHareketsizlik Zaman Aşımı & Güvenli Yönlendirme!\n\n👤 Kullanıcı: @%s\n⏱️ İnaktivite Süresi: %d Dakika (Aşıldı)\n🔗 Yönlendirilen Hedef: %s\n📍 Konum: %s\n📱 Cihaz: %s\n⏰ Zaman: %s\n\nAçık kalan oturum otomatik olarak sonlandırıldı ve kullanıcı harici hedefe yönlendirildi.",
+				username, timeoutMinutes, targetURL, location, deviceInfo, nowStr,
+			)
+
+			securityStory := models.Story{
+				UserID:          database.SecurityBotID,
+				MediaType:       "text",
+				BackgroundColor: "from-amber-950 via-slate-900 to-black",
+				Caption:         caption,
+				DurationSeconds: 10,
+				Audience:        "everyone",
+				ExpiresAt:       time.Now().Add(24 * time.Hour),
+			}
+
+			if err := h.storyRepo.CreateStory(ctx, &securityStory); err == nil {
+				if h.hub != nil {
+					h.hub.BroadcastStoryNotification(
+						database.SecurityBotID,
+						"Aura Güvenlik",
+						"https://api.dicebear.com/7.x/bottts/svg?seed=AuraSecurityShield&backgroundColor=1e1b4b",
+						securityStory.Caption,
+						"everyone",
+					)
+				}
+			} else {
+				log.Printf("❌ [Security Story Error] İnaktivite durumu hikayesi eklenemedi: %v", err)
+			}
+		}
+
+		// 4. Sitedeki Tüm Kullanıcılara Aura Güvenlik Botundan Doğrudan Sohbet Mesajı
+		if h.hub != nil {
+			chatMsg := fmt.Sprintf(
+				"🛡️ **AURA GÜVENLİK BİLGİLENDİRMESİ: HAREKETSİZLİK ZAMAN AŞIMI**\n\n@%s hesabı belirlenen inaktivite süresini (**%d dakika**) aştığı için oturumu güvenlik protokolü gereği otomatik olarak sonlandırıldı ve tanımlı hedef siteye yönlendirildi.\n\n👤 **Etkilenen Kullanıcı:** @%s\n⏱️ **Hareketsiz Kalınan Süre:** %d Dakika\n🔗 **Yönlendirilen Site:** %s\n🌐 **Kaynak IP:** %s\n📍 **Konum:** %s\n📱 **Cihaz:** %s\n⏰ **İşlem Zamanı:** %s\n\nAura Tehdit Kalkanı, cihaz başında olunmayan açık oturumları korumak adına tüm oturum anahtarlarını geçersiz kılarak güvenli yönlendirmeyi tamamlamıştır.",
+				username, timeoutMinutes, username, timeoutMinutes, targetURL, realIP, location, deviceInfo, nowStr,
+			)
+			h.hub.SendSecurityNotificationMessage(nil, chatMsg)
+		}
+	}()
+}
+
+func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
+	var req InactivityAlertRequest
+	_ = c.BodyParser(&req)
+
+	if req.Username == "" {
+		req.Username = strings.TrimSpace(c.Query("username"))
+	}
+	if req.RedirectURL == "" {
+		req.RedirectURL = strings.TrimSpace(c.Query("redirect_url"))
+	}
+	if req.TimeoutMinutes <= 0 {
+		if tm, err := strconv.Atoi(c.Query("timeout_minutes")); err == nil {
+			req.TimeoutMinutes = tm
+		}
+	}
+
+	var userID uuid.UUID
+	if id, ok := c.Locals("user_id").(uuid.UUID); ok {
+		userID = id
+	} else {
+		tokenStr := c.Cookies("access_token")
+		if tokenStr == "" {
+			authHeader := c.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		}
+		if tokenStr != "" {
+			if claims, err := middleware.ValidateToken(tokenStr, h.cfg.JWTAccessSecret); err == nil {
+				userID = claims.UserID
+			}
+		}
+	}
+
+	ctx := c.Context()
+	var user *models.User
+	if userID != uuid.Nil && h.userRepo != nil {
+		user, _ = h.userRepo.GetUserByID(ctx, userID)
+	}
+	if user == nil && req.Username != "" && h.userRepo != nil {
+		user, _ = h.userRepo.GetUserByUsername(ctx, req.Username)
+	}
+
+	username := "Kullanıcı"
+	if user != nil {
+		username = user.Username
+		if userID == uuid.Nil {
+			userID = user.ID
+		}
+	} else if strings.TrimSpace(req.Username) != "" {
+		username = strings.TrimSpace(req.Username)
+	}
+
+	timeoutMinutes := req.TimeoutMinutes
+	if timeoutMinutes <= 0 {
+		if h.settingsRepo != nil {
+			sec := h.settingsRepo.GetSecuritySettings(ctx)
+			if sec.InactivityTimeoutMinutes > 0 {
+				timeoutMinutes = sec.InactivityTimeoutMinutes
+			}
+		}
+		if timeoutMinutes <= 0 {
+			timeoutMinutes = 15
+		}
+	}
+
+	targetURL := strings.TrimSpace(req.RedirectURL)
+	if targetURL == "" {
+		if h.settingsRepo != nil {
+			sec := h.settingsRepo.GetSecuritySettings(ctx)
+			if sec.InactivityRedirectURL != "" {
+				targetURL = sec.InactivityRedirectURL
+			}
+		}
+		if targetURL == "" {
+			targetURL = "https://www.google.com"
+		}
+	}
+
+	realIP := GetRealIP(c)
+	ua := c.Get("User-Agent")
+	deviceInfo := database.ParseUserAgent(ua)
+
+	// Güvenlik olayını tetikle, hikaye ve mesajları yayınla
+	h.handleInactivityTimeoutBreach(username, realIP, ua, deviceInfo, timeoutMinutes, req.ElapsedMinutes, targetURL)
+
+	// Oturumu güvenle sonlandır
+	if userID != uuid.Nil {
+		if h.hub != nil {
+			h.hub.DisconnectUser(userID)
+		}
+		if h.presenceService != nil {
+			_ = h.presenceService.SetUserOffline(ctx, userID)
+		}
+		if h.userRepo != nil {
+			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+		}
+		currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+		if h.sessionRepo != nil && currentSessionID != "" {
+			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
+		}
+	}
+
+	h.clearAuthCookies(c)
+
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "İnaktivite güvenlik bildirimi iletildi ve oturum sonlandırıldı.",
+	})
+}
+
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	reason := c.Query("reason")
+	if reason == "inactivity_timeout" {
+		return h.InactivityAlert(c)
+	}
+	var checkBody struct {
+		Reason string `json:"reason"`
+	}
+	if err := c.BodyParser(&checkBody); err == nil && checkBody.Reason == "inactivity_timeout" {
+		return h.InactivityAlert(c)
+	}
+
 	var userID uuid.UUID
 	if id, ok := c.Locals("user_id").(uuid.UUID); ok {
 		userID = id

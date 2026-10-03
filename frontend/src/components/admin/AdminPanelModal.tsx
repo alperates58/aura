@@ -1141,6 +1141,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         const isUnknownUser = log.event_type === "unknown_user_login" || log.event_type === "unknown_user_attempt";
                         const isFailedPassword = log.event_type === "failed_password_login" || log.event_type === "failed_password_attempt";
                         const isConcurrent = log.event_type === "concurrent_session_login";
+                        const isInactivity = log.event_type === "inactivity_timeout_redirect";
 
                         let location = "";
                         if (log.details) {
@@ -1174,6 +1175,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 ) : isConcurrent ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
                                     <Smartphone className="w-3 h-3" /> Çoklu Oturum
+                                  </span>
+                                ) : isInactivity ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30 text-[10px] font-semibold">
+                                    <Clock className="w-3 h-3" /> İnaktivite Zaman Aşımı
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-semibold">
@@ -1258,6 +1263,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             const isUnknownUser = log.event_type === "unknown_user_login" || log.event_type === "unknown_user_attempt";
                             const isFailedPassword = log.event_type === "failed_password_login" || log.event_type === "failed_password_attempt";
                             const isConcurrent = log.event_type === "concurrent_session_login";
+                            const isInactivity = log.event_type === "inactivity_timeout_redirect";
 
                             let location = "";
                             if (log.details) {
@@ -1288,6 +1294,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   ) : isConcurrent ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px]">
                                       <Smartphone className="w-3 h-3" /> Çoklu Oturum
+                                    </span>
+                                  ) : isInactivity ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30 text-[10px]">
+                                      <Clock className="w-3 h-3" /> İnaktivite Zaman Aşımı
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px]">

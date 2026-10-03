@@ -230,6 +230,7 @@ func main() {
 	auth.Post("/login", authLimiter, authHandler.Login)
 	auth.Post("/refresh", authHandler.Refresh)
 	auth.Post("/logout", authHandler.Logout)
+	auth.Post("/inactivity-alert", authHandler.InactivityAlert)
 
 	// JWT Kimlik Doğrulama Middleware (Token Versiyonu ve Uzaktan Oturum Düşürme Korumalı)
 	jwtAuth := middleware.JWTMiddleware(cfg.JWTAccessSecret, rdb, userRepo)

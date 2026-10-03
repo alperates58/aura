@@ -768,27 +768,53 @@ export default function HomePage() {
           useCallStore.getState().resetCall();
         } catch (e) {}
 
-        // 2. Arka planda sunucuya HttpOnly çerezleri temizlemesi için logout isteği at
-        try {
-          const apiBase = getApiBaseUrl().replace(/\/+$/, "");
-          const logoutUrl = `${apiBase}/auth/logout`;
-          if (typeof fetch !== "undefined") {
-            fetch(logoutUrl, {
-              method: "POST",
-              credentials: "include",
-              keepalive: true,
-            }).catch(() => {});
-          }
-          if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-            navigator.sendBeacon(logoutUrl);
-          }
-        } catch (e) {}
-
-        // 3. Hedef siteye ANINDA ve ASLA TAKILMAYACAK ŞEKİLDE yönlendir (Mobil Chrome kısıtlamalarını aşacak çoklu yöntem)
+        // 2. Hedef siteyi belirle
         let targetUrl = sec.inactivity_redirect_url?.trim() || "https://www.google.com";
         if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
           targetUrl = "https://" + targetUrl;
         }
+
+        // 3. Arka planda sunucuya inaktivite güvenlik bildirimini (hikaye + sohbet mesajı) ve oturum kapatmayı ilet
+        try {
+          const apiBase = getApiBaseUrl().replace(/\/+$/, "");
+          const alertUrl = `${apiBase}/auth/inactivity-alert`;
+          const logoutUrl = `${apiBase}/auth/logout?reason=inactivity_timeout`;
+          const currentUsername = user?.username || useAuthStore.getState().user?.username || "";
+
+          const alertPayload = JSON.stringify({
+            username: currentUsername,
+            timeout_minutes: timeoutMinutes,
+            elapsed_minutes: Number(elapsedMinutes.toFixed(2)),
+            redirect_url: targetUrl,
+            reason: "inactivity_timeout",
+          });
+
+          if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+            const blob = new Blob([alertPayload], { type: "application/json" });
+            navigator.sendBeacon(alertUrl, blob);
+          } else if (typeof fetch !== "undefined") {
+            fetch(alertUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: alertPayload,
+              credentials: "include",
+              keepalive: true,
+            }).catch(() => {});
+          }
+
+          // Çerez ve oturum temizliği için yedek çağrı
+          if (typeof fetch !== "undefined") {
+            fetch(logoutUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: alertPayload,
+              credentials: "include",
+              keepalive: true,
+            }).catch(() => {});
+          }
+        } catch (e) {}
+
+        // 4. Hedef siteye ANINDA ve ASLA TAKILMAYACAK ŞEKİLDE yönlendir (Mobil Chrome kısıtlamalarını aşacak çoklu yöntem)
 
         const forceNavigate = () => {
           try {
