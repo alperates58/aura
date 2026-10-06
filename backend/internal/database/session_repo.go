@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"aura/internal/models"
 	"github.com/google/uuid"
@@ -202,3 +203,70 @@ func (r *SessionRepository) DeleteAllSessions(ctx context.Context, userID uuid.U
 	_, err := r.db.ExecContext(ctx, query, userID)
 	return err
 }
+
+// InactiveSessionCandidate inaktivite kontrolü için taranan oturum ve kullanıcı bilgisi
+type InactiveSessionCandidate struct {
+	SessionID    string
+	UserID       uuid.UUID
+	Username     string
+	DeviceName   string
+	DeviceType   string
+	OS           string
+	Browser      string
+	IPAddress    string
+	Location     string
+	UserAgent    string
+	LastActiveAt time.Time
+}
+
+// GetInactiveSessionCandidates belirtilen süreden daha uzun süredir inaktif olan oturumları getirir
+func (r *SessionRepository) GetInactiveSessionCandidates(ctx context.Context, timeoutMinutes int) ([]InactiveSessionCandidate, error) {
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 15
+	}
+	query := `
+		SELECT s.session_id, s.user_id, u.username, s.device_name, s.device_type, s.os, s.browser,
+		       s.ip_address, s.location, COALESCE(s.user_agent, ''), s.last_active_at
+		FROM user_sessions s
+		JOIN users u ON u.id = s.user_id
+		WHERE s.last_active_at < NOW() - ($1 || ' minutes')::interval
+		ORDER BY s.last_active_at ASC
+		LIMIT 50
+	`
+	rows, err := r.db.QueryContext(ctx, query, timeoutMinutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []InactiveSessionCandidate
+	for rows.Next() {
+		var c InactiveSessionCandidate
+		if err := rows.Scan(
+			&c.SessionID, &c.UserID, &c.Username, &c.DeviceName, &c.DeviceType, &c.OS, &c.Browser,
+			&c.IPAddress, &c.Location, &c.UserAgent, &c.LastActiveAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, nil
+}
+
+// TouchSessionActivity oturumun son aktiflik saatini günceller
+func (r *SessionRepository) TouchSessionActivity(ctx context.Context, userID uuid.UUID, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	query := `UPDATE user_sessions SET last_active_at = NOW() WHERE user_id = $1 AND session_id = $2`
+	_, err := r.db.ExecContext(ctx, query, userID, sessionID)
+	return err
+}
+
+// TouchUserAllSessionsActivity kullanıcının tüm oturumlarının son aktiflik saatini günceller (ör. socket disconnect anında)
+func (r *SessionRepository) TouchUserAllSessionsActivity(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE user_sessions SET last_active_at = NOW() WHERE user_id = $1`
+	_, err := r.db.ExecContext(ctx, query, userID)
+	return err
+}
+

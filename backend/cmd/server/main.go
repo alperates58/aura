@@ -122,7 +122,7 @@ func main() {
 	livekitService := livekit.NewLiveKitService(cfg.LiveKitAPIKey, cfg.LiveKitAPISecret, cfg.LiveKitPublicURL)
 
 	// 6. WebSocket Hub Motoru (Redis Pub/Sub ve Yakın Arkadaşlar ile genişletilmiş)
-	hub := auraws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo, storyRepo, rdb)
+	hub := auraws.NewHub(chatRepo, userRepo, pushRepo, vapidService, presenceService, typingService, settingsRepo, storyRepo, sessionRepo, rdb)
 	go hub.Run()
 	log.Println("⚡ [WS Hub] Gerçek zamanlı WebSocket Hub motoru başlatıldı.")
 
@@ -130,7 +130,8 @@ func main() {
 	previewService := preview.NewPreviewService(rdb)
 
 	// 7. Handlers
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, sessionRepo, settingsRepo, securityRepo, storyRepo)
+	authHandler := handlers.NewAuthHandler(cfg, userRepo, presenceService, hub, accessRepo, sessionRepo, settingsRepo, securityRepo, storyRepo, rdb)
+	authHandler.StartInactivityWorker(context.Background())
 	userHandler := handlers.NewUserHandler(cfg, userRepo, storageService, presenceService, accessRepo, sessionRepo, hub, rdb)
 	chatHandler := handlers.NewChatHandler(chatRepo, userRepo, presenceService, storageService, hub, settingsRepo, rdb)
 	mediaHandler := handlers.NewMediaHandler(storageService, previewService, chatRepo, userRepo, settingsRepo, cfg.JWTAccessSecret)

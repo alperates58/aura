@@ -111,6 +111,9 @@ func (c *Client) handleAction(msg WSMessage) {
 
 	// Her gelen soket aktivitesinde kullanıcının Presence TTL süresini tazele
 	_ = c.hub.presenceService.RefreshUserOnline(ctx, c.userID)
+	if c.hub.rdb != nil {
+		_ = c.hub.rdb.Set(ctx, "user:"+c.userID.String()+":last_active", time.Now().Unix(), 24*time.Hour).Err()
+	}
 
 	switch msg.Action {
 	case "ping":

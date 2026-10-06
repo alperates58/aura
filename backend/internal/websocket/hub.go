@@ -32,6 +32,7 @@ type Hub struct {
 	typingService   *auraredis.TypingService
 	settingsRepo    *database.SettingsRepository
 	storyRepo       *database.StoryRepository
+	sessionRepo     *database.SessionRepository
 	rdb             *redis.Client
 	instanceID      string
 }
@@ -45,6 +46,7 @@ func NewHub(
 	typingService *auraredis.TypingService,
 	settingsRepo *database.SettingsRepository,
 	storyRepo *database.StoryRepository,
+	sessionRepo *database.SessionRepository,
 	rdb *redis.Client,
 ) *Hub {
 	return &Hub{
@@ -61,6 +63,7 @@ func NewHub(
 		typingService:   typingService,
 		settingsRepo:    settingsRepo,
 		storyRepo:       storyRepo,
+		sessionRepo:     sessionRepo,
 		rdb:             rdb,
 		instanceID:      uuid.New().String(),
 	}
@@ -247,6 +250,9 @@ func (h *Hub) onUserOffline(userID uuid.UUID) {
 	ctx := context.Background()
 	_ = h.presenceService.SetUserOffline(ctx, userID)
 	_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+	if h.sessionRepo != nil {
+		_ = h.sessionRepo.TouchUserAllSessionsActivity(ctx, userID)
+	}
 
 	lastSeenAt := time.Now()
 	if h.userRepo != nil {

@@ -24,6 +24,7 @@ import (
 	auraws "aura/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]{3,30}$`)
@@ -54,6 +55,7 @@ type AuthHandler struct {
 	settingsRepo    *database.SettingsRepository
 	securityRepo    *database.SecurityRepository
 	storyRepo       *database.StoryRepository
+	rdb             *redis.Client
 }
 
 func NewAuthHandler(
@@ -66,6 +68,7 @@ func NewAuthHandler(
 	settingsRepo *database.SettingsRepository,
 	securityRepo *database.SecurityRepository,
 	storyRepo *database.StoryRepository,
+	rdb *redis.Client,
 ) *AuthHandler {
 	return &AuthHandler{
 		cfg:             cfg,
@@ -77,6 +80,7 @@ func NewAuthHandler(
 		settingsRepo:    settingsRepo,
 		securityRepo:    securityRepo,
 		storyRepo:       storyRepo,
+		rdb:             rdb,
 	}
 }
 
@@ -267,6 +271,10 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 			Location:   loc,
 			UserAgent:  currentUA,
 		})
+	}
+
+	if h.rdb != nil {
+		_ = h.rdb.Del(c.Context(), fmt.Sprintf("inactivity_breached_user:%s", user.ID.String())).Err()
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(models.AuthResponse{
@@ -1194,6 +1202,186 @@ func (h *AuthHandler) handleInactivityTimeoutBreach(username, realIP, ua, device
 	}()
 }
 
+// IsInactivityScheduleActive inaktivite takviminin geçerli olup olmadığını hesaplar
+func IsInactivityScheduleActive(sec models.SecuritySettings, now time.Time) bool {
+	if !sec.InactivityScheduleEnabled {
+		return true
+	}
+
+	weekday := now.Weekday() // 0: Pazar, 6: Cumartesi
+	isWeekend := weekday == time.Sunday || weekday == time.Saturday
+
+	if isWeekend && sec.InactivityWeekendFull {
+		return true
+	}
+
+	currentMinutes := now.Hour()*60 + now.Minute()
+
+	parseTimeToMinutes := func(t string, defaultMin int) int {
+		if !strings.Contains(t, ":") {
+			return defaultMin
+		}
+		parts := strings.Split(t, ":")
+		if len(parts) < 2 {
+			return defaultMin
+		}
+		h, err1 := strconv.Atoi(parts[0])
+		m, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil {
+			return defaultMin
+		}
+		return h*60 + m
+	}
+
+	startMinutes := parseTimeToMinutes(sec.InactivityWeekdayStart, 17*60+30) // 17:30
+	endMinutes := parseTimeToMinutes(sec.InactivityWeekdayEnd, 8*60+30)      // 08:30
+
+	if startMinutes > endMinutes {
+		// Geceyi aşan aralık (Örn: Hafta içi 17:30 akşam başlar, ertesi sabah 08:30'a kadar sürer)
+		return currentMinutes >= startMinutes || currentMinutes < endMinutes
+	} else if startMinutes < endMinutes {
+		// Aynı gün içi aralık (Örn: 09:00 - 18:00)
+		return currentMinutes >= startMinutes && currentMinutes < endMinutes
+	}
+
+	return true
+}
+
+func (h *AuthHandler) isUserInCall(ctx context.Context, userID uuid.UUID) bool {
+	if h.rdb == nil {
+		return false
+	}
+	key := fmt.Sprintf("in_call:%s", userID.String())
+	exists, err := h.rdb.Exists(ctx, key).Result()
+	return err == nil && exists > 0
+}
+
+func (h *AuthHandler) StartInactivityWorker(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		log.Println("🛡️ [Inactivity Worker] Arka plan inaktivite takip servisi başlatıldı (Periyot: 30s).")
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				h.checkInactiveSessions(ctx)
+			}
+		}
+	}()
+}
+
+func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
+	if h.settingsRepo == nil || h.sessionRepo == nil {
+		return
+	}
+
+	sec := h.settingsRepo.GetSecuritySettings(ctx)
+	if !sec.InactivityLogoutEnabled {
+		return
+	}
+
+	now := time.Now()
+	if !IsInactivityScheduleActive(sec, now) {
+		return
+	}
+
+	timeoutMinutes := sec.InactivityTimeoutMinutes
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 15
+	}
+
+	candidates, err := h.sessionRepo.GetInactiveSessionCandidates(ctx, timeoutMinutes)
+	if err != nil || len(candidates) == 0 {
+		return
+	}
+
+	targetURL := strings.TrimSpace(sec.InactivityRedirectURL)
+	if targetURL == "" {
+		targetURL = "https://www.google.com"
+	}
+
+	for _, cand := range candidates {
+		// 1. Kullanıcı görüşmedeyse (arama devam ediyorsa) kesinlikle dokunma
+		if h.isUserInCall(ctx, cand.UserID) {
+			continue
+		}
+
+		// 2. Bu oturumun canlı bir WebSocket bağlantısı varsa (kullanıcı açık ekranda aktif)
+		// İstemcinin kendi 1 saniyelik intervali denetler, soketi açık oturumu sunucudan aniden düşürme
+		if h.hub != nil && h.hub.IsSessionConnected(cand.UserID, cand.SessionID) {
+			continue
+		}
+
+		// 3. Mükerrer bildirim kontrolü: Bu kullanıcı veya oturum için zaten bildirim gönderildi mi?
+		breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", cand.UserID.String())
+		breachSessionKey := fmt.Sprintf("inactivity_breached_session:%s", cand.SessionID)
+		if h.rdb != nil {
+			if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
+				_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+				continue
+			}
+			if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
+				_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+				continue
+			}
+		}
+
+		// 4. İhlal bayraklarını Redis'e yaz (24 saat geçerli)
+		if h.rdb != nil {
+			_ = h.rdb.Set(ctx, breachUserKey, "1", 24*time.Hour).Err()
+			_ = h.rdb.Set(ctx, breachSessionKey, "1", 24*time.Hour).Err()
+		}
+
+		elapsedMinutes := float64(timeoutMinutes)
+		if !cand.LastActiveAt.IsZero() {
+			actualElapsed := time.Since(cand.LastActiveAt).Minutes()
+			if actualElapsed > elapsedMinutes {
+				elapsedMinutes = actualElapsed
+			}
+		}
+
+		log.Printf("🚨 [Inactivity Worker] Süresi dolan oturum tespit edildi: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk). Bildirim yayınlanıyor...",
+			cand.Username, cand.DeviceName, elapsedMinutes, timeoutMinutes)
+
+		// 5. Güvenlik olayını tetikle, hikaye ve mesajları tam zamanında yayınla
+		h.handleInactivityTimeoutBreach(
+			cand.Username,
+			cand.IPAddress,
+			cand.UserAgent,
+			cand.DeviceName,
+			timeoutMinutes,
+			elapsedMinutes,
+			targetURL,
+		)
+
+		// 6. Oturumu ve yetkileri güvenle sonlandır
+		if h.hub != nil {
+			h.hub.DisconnectSession(cand.UserID, cand.SessionID)
+		}
+		_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+
+		// Kullanıcının başka açık oturumu kalmadıysa offline yap
+		if h.hub != nil && !h.hub.IsUserConnected(cand.UserID) {
+			if h.presenceService != nil {
+				_ = h.presenceService.SetUserOffline(ctx, cand.UserID)
+			}
+			if h.userRepo != nil {
+				_ = h.userRepo.UpdateOnlineStatus(ctx, cand.UserID, 0)
+			}
+		}
+
+		// Token Version'ı arttır (JWT'leri anında geçersiz kıl)
+		if h.userRepo != nil {
+			newVer, _ := h.userRepo.IncrementTokenVersion(ctx, cand.UserID)
+			if h.rdb != nil && newVer > 0 {
+				_ = h.rdb.Set(ctx, "user:"+cand.UserID.String()+":token_version", newVer, 24*time.Hour).Err()
+			}
+		}
+	}
+}
+
 func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 	var req InactivityAlertRequest
 	_ = c.BodyParser(&req)
@@ -1273,6 +1461,56 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 		}
 	}
 
+	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
+
+	// Mükerrer bildirim kontrolü: Eğer sunucu worker'ı (veya az önce başka bir istek) bu kullanıcı/oturum için zaten bildirimi attıysa:
+	breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", userID.String())
+	alreadyBreached := false
+	if h.rdb != nil && userID != uuid.Nil {
+		if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
+			alreadyBreached = true
+		}
+	}
+	if !alreadyBreached && h.rdb != nil && currentSessionID != "" {
+		breachSessionKey := fmt.Sprintf("inactivity_breached_session:%s", currentSessionID)
+		if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
+			alreadyBreached = true
+		}
+	}
+
+	if alreadyBreached {
+		log.Printf("ℹ️ [Inactivity Alert] @%s için inaktivite bildirimi daha önce işlendi, mükerrer bildirim engellendi.", username)
+		// Oturumu güvenle sonlandır
+		if userID != uuid.Nil {
+			if h.hub != nil {
+				h.hub.DisconnectUser(userID)
+			}
+			if h.presenceService != nil {
+				_ = h.presenceService.SetUserOffline(ctx, userID)
+			}
+			if h.userRepo != nil {
+				_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+			}
+			if h.sessionRepo != nil && currentSessionID != "" {
+				_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
+			}
+		}
+		h.clearAuthCookies(c)
+		return c.JSON(fiber.Map{
+			"status":          "success",
+			"already_handled": true,
+			"message":         "İnaktivite bildirimi daha önce işlendi, oturum temizlendi.",
+		})
+	}
+
+	// Eğer sunucu henüz işlememişse (örn. masa başında ekran açıkken süre dolduysa veya acil tetiklendiyse):
+	if h.rdb != nil && userID != uuid.Nil {
+		_ = h.rdb.Set(ctx, breachUserKey, "1", 24*time.Hour).Err()
+	}
+	if h.rdb != nil && currentSessionID != "" {
+		_ = h.rdb.Set(ctx, fmt.Sprintf("inactivity_breached_session:%s", currentSessionID), "1", 24*time.Hour).Err()
+	}
+
 	realIP := GetRealIP(c)
 	ua := c.Get("User-Agent")
 	deviceInfo := database.ParseUserAgent(ua)
@@ -1291,7 +1529,6 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 		if h.userRepo != nil {
 			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
 		}
-		currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 		if h.sessionRepo != nil && currentSessionID != "" {
 			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
 		}
