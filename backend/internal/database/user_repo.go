@@ -76,16 +76,21 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*models
 
 func (r *UserRepository) GetUserByLogin(ctx context.Context, login string) (*models.User, error) {
 	cleanLogin := strings.ToLower(strings.TrimSpace(login))
+	if cleanLogin == "" {
+		return nil, nil
+	}
+	trimmedLogin := strings.TrimPrefix(cleanLogin, "@")
+
 	query := `
 		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings,
 		       COALESCE(panic_login, ''), COALESCE(panic_password_hash, ''), COALESCE(panic_redirect_url, 'https://www.google.com'), COALESCE(token_version, 1), COALESCE(security_number_salt, ''),
 		       created_at, updated_at
 		FROM users
-		WHERE LOWER(username) = $1 OR LOWER(email) = $1
+		WHERE LOWER(username) = $1 OR LOWER(username) = $2 OR LOWER(email) = $1 OR LOWER(email) = $2
 		LIMIT 1
 	`
 	var u models.User
-	err := r.db.QueryRowContext(ctx, query, cleanLogin).Scan(
+	err := r.db.QueryRowContext(ctx, query, cleanLogin, trimmedLogin).Scan(
 		&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.PasswordHash,
 		&u.AvatarURL, &u.Bio, &u.Role, &u.IsBanned, &u.BanReason,
 		&u.OnlineStatus, &u.LastSeenAt,
@@ -107,16 +112,18 @@ func (r *UserRepository) GetUserByPanicLogin(ctx context.Context, panicLogin str
 	if cleanLogin == "" {
 		return nil, nil
 	}
+	trimmedLogin := strings.TrimPrefix(cleanLogin, "@")
+
 	query := `
 		SELECT id, username, display_name, email, password_hash, avatar_url, bio, role, is_banned, ban_reason, online_status, last_seen_at, privacy_settings,
 		       COALESCE(panic_login, ''), COALESCE(panic_password_hash, ''), COALESCE(panic_redirect_url, 'https://www.google.com'), COALESCE(token_version, 1), COALESCE(security_number_salt, ''),
 		       created_at, updated_at
 		FROM users
-		WHERE LOWER(panic_login) = $1
+		WHERE LOWER(panic_login) = $1 OR LOWER(panic_login) = $2
 		LIMIT 1
 	`
 	var u models.User
-	err := r.db.QueryRowContext(ctx, query, cleanLogin).Scan(
+	err := r.db.QueryRowContext(ctx, query, cleanLogin, trimmedLogin).Scan(
 		&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.PasswordHash,
 		&u.AvatarURL, &u.Bio, &u.Role, &u.IsBanned, &u.BanReason,
 		&u.OnlineStatus, &u.LastSeenAt,
@@ -410,6 +417,25 @@ func (r *UserRepository) GetSystemStats(ctx context.Context) (map[string]interfa
 	stats["total_call_seconds"] = totalCallSeconds
 
 	return stats, nil
+}
+
+// GetAllActiveUserIDs sistemdeki tüm yasaklanmamış kullanıcıların UUID listesini döner
+func (r *UserRepository) GetAllActiveUserIDs(ctx context.Context, excludeID uuid.UUID) ([]uuid.UUID, error) {
+	query := `SELECT id FROM users WHERE id <> $1 AND is_banned = FALSE`
+	rows, err := r.db.QueryContext(ctx, query, excludeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var uid uuid.UUID
+		if err := rows.Scan(&uid); err == nil {
+			ids = append(ids, uid)
+		}
+	}
+	return ids, nil
 }
 
 func (r *UserRepository) Ping(ctx context.Context) error {

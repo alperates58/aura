@@ -152,7 +152,7 @@ func (r *SecurityRepository) CanPublishSecurityStory(ctx context.Context, cooldo
 	query := `
 		SELECT COUNT(*)
 		FROM stories
-		WHERE user_id = $1 AND created_at > NOW() - ($2 || ' seconds')::INTERVAL
+		WHERE user_id = $1 AND created_at > NOW() - ($2 * INTERVAL '1 second')
 	`
 	var count int
 	err := r.db.QueryRowContext(ctx, query, SecurityBotID, seconds).Scan(&count)

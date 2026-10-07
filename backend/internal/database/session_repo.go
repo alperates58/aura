@@ -229,7 +229,7 @@ func (r *SessionRepository) GetInactiveSessionCandidates(ctx context.Context, ti
 		       s.ip_address, s.location, COALESCE(s.user_agent, ''), s.last_active_at
 		FROM user_sessions s
 		JOIN users u ON u.id = s.user_id
-		WHERE s.last_active_at < NOW() - ($1 || ' minutes')::interval
+		WHERE s.last_active_at < NOW() - ($1 * INTERVAL '1 minute')
 		ORDER BY s.last_active_at ASC
 		LIMIT 50
 	`

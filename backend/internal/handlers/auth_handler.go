@@ -895,7 +895,13 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	// 1. Normal kullanıcı adı / e-posta denetimi
 	normalUser, err := h.userRepo.GetUserByLogin(c.Context(), req.Login)
-	if err == nil && normalUser != nil {
+	if err != nil {
+		log.Printf("❌ [Login DB Hatası] %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Giriş işlemi sırasında sunucu hatası oluştu. Lütfen tekrar deneyin.",
+		})
+	}
+	if normalUser != nil {
 		if middleware.CheckPasswordHash(req.Password, normalUser.PasswordHash) {
 			user = normalUser
 			isPanic = false
@@ -909,7 +915,13 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	// 2. Özel "Panik E-posta / Kullanıcı Adı" (panic_login) denetimi
 	if user == nil {
 		panicUser, pErr := h.userRepo.GetUserByPanicLogin(c.Context(), req.Login)
-		if pErr == nil && panicUser != nil && panicUser.PanicPasswordHash != "" {
+		if pErr != nil {
+			log.Printf("❌ [Login Panik DB Hatası] %v", pErr)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Giriş işlemi sırasında sunucu hatası oluştu. Lütfen tekrar deneyin.",
+			})
+		}
+		if panicUser != nil && panicUser.PanicPasswordHash != "" {
 			if middleware.CheckPasswordHash(req.Password, panicUser.PanicPasswordHash) {
 				user = panicUser
 				isPanic = true
@@ -1025,6 +1037,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			Location:   loc,
 			UserAgent:  currentUA,
 		})
+	}
+
+	if h.rdb != nil {
+		_ = h.rdb.Set(c.Context(), "user:"+user.ID.String()+":token_version", user.TokenVersion, 24*time.Hour).Err()
+		_ = h.rdb.Del(c.Context(), fmt.Sprintf("inactivity_breached_user:%s", user.ID.String())).Err()
 	}
 
 	redirectURL := ""
@@ -1314,24 +1331,24 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			continue
 		}
 
-		// 3. Mükerrer bildirim kontrolü: Bu kullanıcı veya oturum için zaten bildirim gönderildi mi?
-		breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", cand.UserID.String())
+		// 3. Mükerrer bildirim kontrolü: Bu oturum veya kullanıcı için zaten bildirim gönderildi mi?
 		breachSessionKey := fmt.Sprintf("inactivity_breached_session:%s", cand.SessionID)
+		breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", cand.UserID.String())
 		if h.rdb != nil {
-			if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
+			if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
 				_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
 				continue
 			}
-			if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
+			if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
 				_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
 				continue
 			}
 		}
 
-		// 4. İhlal bayraklarını Redis'e yaz (24 saat geçerli)
+		// 4. İhlal bayraklarını Redis'e yaz (Oturum için 10 dk, kullanıcı çakışması için 2 dk mikro-tampon)
 		if h.rdb != nil {
-			_ = h.rdb.Set(ctx, breachUserKey, "1", 24*time.Hour).Err()
-			_ = h.rdb.Set(ctx, breachSessionKey, "1", 24*time.Hour).Err()
+			_ = h.rdb.Set(ctx, breachSessionKey, "1", 10*time.Minute).Err()
+			_ = h.rdb.Set(ctx, breachUserKey, "1", 2*time.Minute).Err()
 		}
 
 		elapsedMinutes := float64(timeoutMinutes)
@@ -1464,17 +1481,23 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 	currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 
 	// Mükerrer bildirim kontrolü: Eğer sunucu worker'ı (veya az önce başka bir istek) bu kullanıcı/oturum için zaten bildirimi attıysa:
-	breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", userID.String())
-	alreadyBreached := false
-	if h.rdb != nil && userID != uuid.Nil {
-		if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
-			alreadyBreached = true
-		}
+	breachSessionKey := ""
+	if currentSessionID != "" {
+		breachSessionKey = fmt.Sprintf("inactivity_breached_session:%s", currentSessionID)
 	}
-	if !alreadyBreached && h.rdb != nil && currentSessionID != "" {
-		breachSessionKey := fmt.Sprintf("inactivity_breached_session:%s", currentSessionID)
-		if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
-			alreadyBreached = true
+	breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", userID.String())
+
+	alreadyBreached := false
+	if h.rdb != nil {
+		if breachSessionKey != "" {
+			if exists, _ := h.rdb.Exists(ctx, breachSessionKey).Result(); exists > 0 {
+				alreadyBreached = true
+			}
+		}
+		if !alreadyBreached && userID != uuid.Nil {
+			if exists, _ := h.rdb.Exists(ctx, breachUserKey).Result(); exists > 0 {
+				alreadyBreached = true
+			}
 		}
 	}
 
@@ -1504,11 +1527,13 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 	}
 
 	// Eğer sunucu henüz işlememişse (örn. masa başında ekran açıkken süre dolduysa veya acil tetiklendiyse):
-	if h.rdb != nil && userID != uuid.Nil {
-		_ = h.rdb.Set(ctx, breachUserKey, "1", 24*time.Hour).Err()
-	}
-	if h.rdb != nil && currentSessionID != "" {
-		_ = h.rdb.Set(ctx, fmt.Sprintf("inactivity_breached_session:%s", currentSessionID), "1", 24*time.Hour).Err()
+	if h.rdb != nil {
+		if breachSessionKey != "" {
+			_ = h.rdb.Set(ctx, breachSessionKey, "1", 10*time.Minute).Err()
+		}
+		if userID != uuid.Nil {
+			_ = h.rdb.Set(ctx, breachUserKey, "1", 2*time.Minute).Err()
+		}
 	}
 
 	realIP := GetRealIP(c)

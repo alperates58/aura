@@ -636,14 +636,10 @@ func (h *Hub) SendSecurityNotificationMessage(targetUserID *uuid.UUID, content s
 		if targetUserID != nil {
 			targetIDs = []uuid.UUID{*targetUserID}
 		} else if h.userRepo != nil {
-			// Genel sistem duyurusu ise tüm kayıtlı kullanıcılara gönder (security bot hariç)
-			users, _, err := h.userRepo.GetAllUsers(ctx, "", "", nil, 500, 0)
+			// Genel sistem duyurusu ise tüm kayıtlı ve aktif kullanıcılara gönder (security bot hariç)
+			ids, err := h.userRepo.GetAllActiveUserIDs(ctx, database.SecurityBotID)
 			if err == nil {
-				for _, u := range users {
-					if u.ID != database.SecurityBotID {
-						targetIDs = append(targetIDs, u.ID)
-					}
-				}
+				targetIDs = ids
 			}
 		}
 
