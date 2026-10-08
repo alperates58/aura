@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -36,8 +37,6 @@ import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
-import PinLockModal from "@/components/security/PinLockModal";
-import GhostPanicTouch from "@/components/security/GhostPanicTouch";
 import { performEmergencyEscape } from "@/lib/emergency";
 import EmptyChatState from "@/components/chat/EmptyChatState";
 import MessageSelectionBar from "@/components/chat/MessageSelectionBar";
@@ -82,6 +81,14 @@ import {
   UploadCloud,
   Key,
 } from "lucide-react";
+
+// İstemciye özel güvenlik modalları (SSR devre dışı)
+const PinLockModal = dynamic(() => import("@/components/security/PinLockModal"), {
+  ssr: false,
+});
+const GhostPanicTouch = dynamic(() => import("@/components/security/GhostPanicTouch"), {
+  ssr: false,
+});
 
 const isSameCalendarDay = (d1: Date, d2: Date) => {
   return (
@@ -217,15 +224,18 @@ export default function HomePage() {
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
 
   // Gizlilik Kalkanı: Tuş kilidi kapandığında veya inaktivite yönlendirmesinde sohbeti anında gizler
-  const [isPrivacyCurtainActive, setIsPrivacyCurtainActive] = useState(() => {
-    if (typeof window !== "undefined") {
-      const inactiveSince = localStorage.getItem("aura_inactive_since");
-      if (inactiveSince || document.hidden) {
-        return true;
+  const [isPrivacyCurtainActive, setIsPrivacyCurtainActive] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const inactiveSince = localStorage.getItem("aura_inactive_since");
+        if (inactiveSince || document.hidden) {
+          setIsPrivacyCurtainActive(true);
+        }
       }
-    }
-    return false;
-  });
+    } catch (_) {}
+  }, []);
 
   // İnaktivite süresi dolduğunda yönlendirme durumu
   const [isRedirecting, setIsRedirecting] = useState(false);
