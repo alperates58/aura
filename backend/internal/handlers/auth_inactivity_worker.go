@@ -284,7 +284,11 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 				_ = h.presenceService.SetUserOffline(ctx, cand.UserID)
 			}
 			if h.userRepo != nil {
-				_ = h.userRepo.UpdateOnlineStatus(ctx, cand.UserID, 0)
+				realLastSeen := cand.LastActiveAt
+				if realLastSeen.IsZero() {
+					realLastSeen = time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
+				}
+				_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, cand.UserID, 0, realLastSeen)
 			}
 		}
 
@@ -446,7 +450,8 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 			_ = h.presenceService.SetUserOffline(ctx, userID)
 		}
 		if h.userRepo != nil {
-			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+			realLastSeen := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
+			_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
 		}
 		if h.sessionRepo != nil && currentSessionID != "" {
 			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)

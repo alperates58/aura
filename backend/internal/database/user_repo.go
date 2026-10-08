@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"aura/internal/models"
 	"github.com/google/uuid"
@@ -249,6 +250,19 @@ func (r *UserRepository) UpdateOnlineStatus(ctx context.Context, userID uuid.UUI
 		WHERE id = $2
 	`
 	_, err := r.db.ExecContext(ctx, query, status, userID)
+	return err
+}
+
+func (r *UserRepository) UpdateOnlineStatusWithLastSeen(ctx context.Context, userID uuid.UUID, status int, lastSeenAt time.Time) error {
+	if lastSeenAt.IsZero() {
+		lastSeenAt = time.Now()
+	}
+	query := `
+		UPDATE users
+		SET online_status = $1, last_seen_at = $2, updated_at = NOW()
+		WHERE id = $3
+	`
+	_, err := r.db.ExecContext(ctx, query, status, lastSeenAt, userID)
 	return err
 }
 
