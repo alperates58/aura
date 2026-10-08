@@ -54,6 +54,19 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
+                  var panicEscaped = (localStorage.getItem("aura_panic_escaped") === "1" || sessionStorage.getItem("aura_panic_escaped") === "1");
+                  if (panicEscaped) {
+                    localStorage.removeItem("aura_panic_escaped");
+                    sessionStorage.removeItem("aura_panic_escaped");
+                    var sub = (window.location.pathname.match(/^(\/[a-zA-Z0-9_-]+)/) || ["",""])[1];
+                    if (["/login", "/register", "/chat", "/settings", "/api"].indexOf(sub) !== -1) sub = "";
+                    var targetLogin = sub ? sub + "/login" : "/login";
+                    if (window.location.pathname !== targetLogin) {
+                      window.location.replace(targetLogin);
+                      return;
+                    }
+                  }
+
                   var cached = localStorage.getItem("aura_security_settings");
                   var inactive = localStorage.getItem("aura_inactive_since");
                   var lastActive = localStorage.getItem("aura_last_active");

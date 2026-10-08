@@ -87,6 +87,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (login, password) => {
     const res = await api.post<{ user: User; is_panic_mode?: boolean; panic_redirect_url?: string }>("/auth/login", { login, password });
+    if (res.data?.is_panic_mode) {
+      set({ user: null, isAuthenticated: false, isLoading: false });
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aura_inactive_since");
+        localStorage.removeItem("aura_last_active");
+        localStorage.removeItem("aura_outbox");
+        sessionStorage.clear();
+      }
+      return res.data;
+    }
     const user = res.data.user;
     if (user?.privacy_settings?.sound_alerts !== undefined) {
       soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);

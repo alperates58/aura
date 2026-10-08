@@ -411,12 +411,40 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		h.handleConcurrentLoginBreach(c, user, currentIP, currentUA, currentDeviceInfo, prevAccessInfo, activeCount+1)
 	}
 
-	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, isPanic)
+	// Panik / Zorlama Kodu ile giriş denetimi
+	if isPanic {
+		// Panik modunda oturum AÇILMAZ!
+		// Kullanıcının tarayıcısındaki tüm yetki çerezleri (access/refresh) derhal silinir.
+		h.clearAuthCookies(c)
+		if h.hub != nil {
+			h.hub.DisconnectUser(user.ID)
+		}
+
+		redirectURL := user.PanicRedirectURL
+		if redirectURL == "" {
+			redirectURL = "https://zodiacrf.com"
+		} else {
+			if !strings.HasPrefix(redirectURL, "http://") && !strings.HasPrefix(redirectURL, "https://") {
+				redirectURL = "https://" + redirectURL
+			}
+			redirectURL = strings.Replace(redirectURL, "://www.zodiacrf.com", "://zodiacrf.com", 1)
+		}
+		h.handlePanicBreach(c, user, currentIP, currentUA, currentDeviceInfo, redirectURL)
+
+		return c.JSON(models.AuthResponse{
+			User:             models.UserResponse{},
+			AccessToken:      "",
+			IsPanicMode:      true,
+			PanicRedirectURL: redirectURL,
+		})
+	}
+
+	accessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, false)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Oturum anahtarı üretilemedi."})
 	}
 
-	refreshToken, err := middleware.GenerateCustomRefreshToken(user.ID, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays, user.TokenVersion, isPanic)
+	refreshToken, err := middleware.GenerateCustomRefreshToken(user.ID, h.cfg.JWTRefreshSecret, h.cfg.JWTRefreshExpiryDays, user.TokenVersion, false)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yenileme anahtarı üretilemedi."})
 	}
@@ -452,25 +480,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		_ = h.rdb.Del(c.Context(), fmt.Sprintf("inactivity_breached_user:%s", user.ID.String())).Err()
 	}
 
-	redirectURL := ""
-	if isPanic {
-		redirectURL = user.PanicRedirectURL
-		if redirectURL == "" {
-			redirectURL = "https://zodiacrf.com"
-		} else {
-			if !strings.HasPrefix(redirectURL, "http://") && !strings.HasPrefix(redirectURL, "https://") {
-				redirectURL = "https://" + redirectURL
-			}
-			redirectURL = strings.Replace(redirectURL, "://www.zodiacrf.com", "://zodiacrf.com", 1)
-		}
-		h.handlePanicBreach(c, user, currentIP, currentUA, currentDeviceInfo, redirectURL)
-	}
-
 	return c.JSON(models.AuthResponse{
 		User:             user.ToResponse(),
 		AccessToken:      accessToken,
-		IsPanicMode:      isPanic,
-		PanicRedirectURL: redirectURL,
+		IsPanicMode:      false,
+		PanicRedirectURL: "",
 	})
 }
 
@@ -512,7 +526,14 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		})
 	}
 
-	newAccessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, claims.IsPanicMode)
+	if claims.IsPanicMode {
+		h.clearAuthCookies(c)
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Panik modunda oturum yenilenemez.",
+		})
+	}
+
+	newAccessToken, err := middleware.GenerateCustomAccessToken(user.ID, user.Username, h.cfg.JWTAccessSecret, h.cfg.JWTAccessExpiryMin, user.TokenVersion, false)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Yeni token üretilemedi."})
 	}
@@ -591,6 +612,11 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Me(c *fiber.Ctx) error {
+	if isPanic, ok := c.Locals("is_panic_mode").(bool); ok && isPanic {
+		h.clearAuthCookies(c)
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Panik modunda oturum geçersizdir."})
+	}
+
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Yetkisiz istek."})

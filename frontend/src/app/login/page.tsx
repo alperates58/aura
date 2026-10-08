@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { Lock, User as UserIcon, AlertCircle, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { getBasePath } from "@/lib/api";
+import { performEmergencyEscape } from "@/lib/emergency";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function LoginPage() {
           target = "https://" + target;
         }
         target = target.replace(/^https?:\/\/www\.zodiacrf\.com/i, "https://zodiacrf.com");
-        window.location.replace(target);
+        await performEmergencyEscape(target);
         return;
       }
       if (typeof window !== "undefined") {
