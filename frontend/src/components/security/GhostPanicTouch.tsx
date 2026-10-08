@@ -29,13 +29,36 @@ export default function GhostPanicTouch() {
   const tapCountRef = useRef<number>(0);
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
   const awakeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isEscapingRef = useRef<boolean>(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Acil kaçış fonksiyonu (Sıfır onay, doğrudan hedef siteye yönlendirme ve geri dönüş engeli)
+  // Acil kaçış fonksiyonu (Her zaman öncelikle inaktivite için tanımlanan hedef siteye yönlendirir)
   const triggerEmergencyEscape = useCallback(() => {
-    const redirectUrl =
+    if (isEscapingRef.current) return;
+    isEscapingRef.current = true;
+
+    // 1. Store'dan inaktivite url'sini al
+    let redirectUrl =
       securitySettings?.inactivity_redirect_url ||
-      user?.panic_redirect_url ||
-      "https://www.google.com";
+      useSettingsStore.getState().settings?.security_settings?.inactivity_redirect_url;
+
+    // 2. LocalStorage'da kayıtlı security ayarlarından kontrol et
+    if (!redirectUrl && typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("aura_security_settings");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.inactivity_redirect_url && typeof parsed.inactivity_redirect_url === "string") {
+            redirectUrl = parsed.inactivity_redirect_url.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Kullanıcı panik url'si veya son çare Google
+    if (!redirectUrl) {
+      redirectUrl = user?.panic_redirect_url || "https://www.google.com";
+    }
 
     performEmergencyEscape(redirectUrl);
   }, [securitySettings, user]);
@@ -191,12 +214,24 @@ export default function GhostPanicTouch() {
     }
   };
 
-  // Dışarı tıklandığında menüyü kapat
+  // Dışarı tıklandığında menüyü kapat (Menü içi tıklamaları yoksay)
   useEffect(() => {
     if (!isOpenMenu) return;
-    const handleClickOutside = () => setIsOpenMenu(false);
-    window.addEventListener("click", handleClickOutside);
-    return () => window.removeEventListener("click", handleClickOutside);
+    const handleClickOutside = (e: MouseEvent | TouchEvent | PointerEvent) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
+      setIsOpenMenu(false);
+    };
+
+    const timer = setTimeout(() => {
+      window.addEventListener("pointerdown", handleClickOutside);
+    }, 60);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown", handleClickOutside);
+    };
   }, [isOpenMenu]);
 
   if (!isMounted || position.x === -1) return null;
@@ -221,19 +256,22 @@ export default function GhostPanicTouch() {
           left: `${position.x}px`,
           top: `${position.y}px`,
           zIndex: 9998,
-          touchAction: "none",
           transition: isDragging ? "none" : "all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
-        className="select-none flex flex-col items-center"
+        className="select-none flex flex-col items-center pointer-events-auto"
       >
         {/* Mikro Menü (Çift Tıklamada Açılır) */}
         {isOpenMenu && (
           <div
+            ref={menuRef}
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             style={{
               position: "absolute",
               [isBottomSide ? "bottom" : "top"]: "56px",
               [isRightSide ? "right" : "left"]: "0px",
+              touchAction: "auto",
+              pointerEvents: "auto",
             }}
             className="w-60 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-2xl p-2.5 backdrop-blur-xl flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150 text-slate-200"
           >
@@ -243,6 +281,7 @@ export default function GhostPanicTouch() {
                 <span>Security</span>
               </span>
               <button
+                type="button"
                 onClick={() => setIsOpenMenu(false)}
                 className="text-slate-500 hover:text-slate-300 p-0.5 rounded cursor-pointer"
               >
@@ -250,23 +289,35 @@ export default function GhostPanicTouch() {
               </button>
             </div>
 
-            {/* 1. Acil Kaçış (Google'a Git) */}
+            {/* 1. Acil Çıkış (Her zaman inaktivite için tanımlı siteye yönlendirir) */}
             <button
-              onClick={triggerEmergencyEscape}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerEmergencyEscape();
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
+                triggerEmergencyEscape();
+              }}
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-xs font-semibold text-left transition-all cursor-pointer text-red-300"
             >
               <div className="w-6 h-6 rounded-lg bg-red-600 text-white flex items-center justify-center flex-shrink-0">
                 <LogOut className="w-3.5 h-3.5" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-red-200">Acil Kaçış (Google)</span>
-                <span className="text-[10px] text-red-300/70 font-normal">Oturumu silip anında yönlendir</span>
+                <span className="font-bold text-red-200">Acil Çıkış</span>
+                <span className="text-[10px] text-red-300/70 font-normal">Oturumu kapatıp anında yönlendir</span>
               </div>
             </button>
 
             {/* 2. Tüm Cihazları Düşür */}
             <button
-              onClick={handleKillAllSessions}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleKillAllSessions();
+              }}
               disabled={isKilling}
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-amber-500/10 text-xs font-semibold text-left transition-all cursor-pointer text-amber-400"
             >
@@ -287,6 +338,7 @@ export default function GhostPanicTouch() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          style={{ touchAction: "none" }}
           className={`w-11 h-11 rounded-full bg-slate-950/85 border border-white/40 ring-1 ring-white/10 shadow-[0_0_12px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-all duration-300 ${
             isOpenMenu
               ? "opacity-100 ring-2 ring-purple-500/60 scale-105"
@@ -294,9 +346,9 @@ export default function GhostPanicTouch() {
               ? "opacity-100 ring-2 ring-purple-400 scale-110 shadow-purple-500/40"
               : isAwake
               ? "opacity-95"
-              : "opacity-55 hover:opacity-95 active:opacity-100"
+              : "opacity-40 hover:opacity-95 active:opacity-100"
           }`}
-          title="Security (3 Tık: Acil Kaçış, Çift Tık: Menü, Sürükle: Taşı)"
+          title="Security (3 Tık: Acil Çıkış, Çift Tık: Menü, Sürükle: Taşı)"
           aria-label="AssistiveTouch Security Butonu"
         >
           <div className="w-6 h-6 rounded-full border border-purple-400/60 flex items-center justify-center bg-purple-600/20 pointer-events-none">

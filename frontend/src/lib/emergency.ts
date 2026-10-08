@@ -10,7 +10,10 @@ import { useCallStore } from "@/store/useCallStore";
  * ve tarayıcıda 'Geri' tuşuna basılsa dahi siteye ASLA tekrar giriş yapılamamasını garanti eder.
  */
 export async function performEmergencyEscape(targetUrl?: string) {
-  const finalUrl = targetUrl && targetUrl.trim() ? targetUrl.trim() : "https://www.google.com";
+  let finalUrl = targetUrl && targetUrl.trim() ? targetUrl.trim() : "https://www.google.com";
+  if (!/^https?:\/\//i.test(finalUrl)) {
+    finalUrl = "https://" + finalUrl;
+  }
 
   // 1. Acil kaçış bayraklarını hemen işaretle (Bfcache ve History Back anında yakalar)
   try {
