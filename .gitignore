@@ -36,6 +36,7 @@ backend/tmp/
 *.out
 
 # Frontend (Node / Next.js)
+node_modules/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
