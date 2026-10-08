@@ -3,19 +3,46 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
-import { Shield, Lock, LogOut, Radio, X, AlertTriangle } from "lucide-react";
+import { Shield, Lock, LogOut, Radio, X, AlertTriangle, ArrowRight } from "lucide-react";
 
 export default function GhostPanicTouch() {
   const { user, lockApp, killSessions, logout } = useAuthStore();
   const securitySettings = useSettingsStore((s) => s.settings?.security_settings);
 
+  // Buton konumu ve sürükleme durumu
+  const [position, setPosition] = useState<{ x: number; y: number }>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("aura_ghost_touch_pos");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+            return parsed;
+          }
+        }
+      } catch (_) {}
+    }
+    return { x: -1, y: -1 };
+  });
+
+  const [isMounted, setIsMounted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [isOpenMenu, setIsOpenMenu] = useState(false);
+  const [isAwake, setIsAwake] = useState(false);
   const [isKilling, setIsKilling] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const lastTapRef = useRef<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Sürükleme ve tıklama ref'leri
+  const pointerStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const buttonStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isPointerActiveRef = useRef<boolean>(false);
+  const hasDraggedRef = useRef<boolean>(false);
 
+  const tapCountRef = useRef<number>(0);
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const awakeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Acil kaçış fonksiyonu (Sıfır onay, doğrudan hedef siteye yönlendirme)
   const triggerEmergencyEscape = useCallback(() => {
     const redirectUrl =
       securitySettings?.inactivity_redirect_url ||
@@ -29,29 +56,127 @@ export default function GhostPanicTouch() {
     window.location.replace(redirectUrl);
   }, [securitySettings, user, logout]);
 
-  // Çift dokunma (Double Tap) ve Tek dokunma tespiti
-  const handleTouchOrClick = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    const now = Date.now();
-    const diff = now - lastTapRef.current;
+  // İlk montaj ve ekran boyutu takibi
+  useEffect(() => {
+    setIsMounted(true);
+    const snapToEdge = (curX: number, curY: number) => {
+      const isRight = curX > window.innerWidth / 2;
+      const snappedX = isRight ? Math.max(16, window.innerWidth - 60) : 16;
+      const clampedY = Math.min(Math.max(60, curY), window.innerHeight - 90);
+      return { x: snappedX, y: clampedY };
+    };
 
-    if (diff < 350 && diff > 0) {
-      // Çift tıklama / çift dokunma tespit edildi!
-      // Zamanlayıcıyı iptal et ve anında acil kaçışı tetikle
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      triggerEmergencyEscape();
-    } else {
-      // Tek tıklama: 350ms bekle, ikinci tıklama gelmezse menüyü aç/kapat
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setIsOpenMenu((prev) => !prev);
-      }, 350);
+    if (position.x === -1 || position.y === -1) {
+      const initial = snapToEdge(window.innerWidth - 60, window.innerHeight - 130);
+      setPosition(initial);
     }
 
-    lastTapRef.current = now;
+    const handleResize = () => {
+      setPosition((prev) => snapToEdge(prev.x, prev.y));
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Butonu uyandır (şeffaflığı geçici olarak kaldır)
+  const wakeUp = () => {
+    setIsAwake(true);
+    if (awakeTimeoutRef.current) clearTimeout(awakeTimeoutRef.current);
+    awakeTimeoutRef.current = setTimeout(() => {
+      setIsAwake(false);
+    }, 3000);
+  };
+
+  // Temiz tıklama mantığı (Sürükleme yapılmadığında çağrılır)
+  // Tek tık: Uyandır
+  // Çift tık: Menüyü aç
+  // 3 tık (Triple tap): Anında Google / Panik kaçışı
+  const handleCleanTap = () => {
+    wakeUp();
+    tapCountRef.current += 1;
+
+    if (tapCountRef.current === 3) {
+      // 3 TIK (TRIPLE TAP) -> ANINDA KAÇIŞ
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+        tapTimerRef.current = null;
+      }
+      tapCountRef.current = 0;
+      triggerEmergencyEscape();
+      return;
+    }
+
+    if (tapCountRef.current === 1) {
+      // 1. Tık: 360ms bekle, başka tık gelmezse sadece uyandırma işlemi tamamlanır
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => {
+        tapCountRef.current = 0;
+      }, 360);
+    } else if (tapCountRef.current === 2) {
+      // 2. Tık: 270ms bekle, 3. tık gelmezse menüyü aç/kapat
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => {
+        tapCountRef.current = 0;
+        setIsOpenMenu((prev) => !prev);
+      }, 270);
+    }
+  };
+
+  // Pointer Eventleri (Hem Dokunmatik Hem Fare ile Sürükleme)
+  const handlePointerDown = (e: React.PointerEvent) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    isPointerActiveRef.current = true;
+    hasDraggedRef.current = false;
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    buttonStartRef.current = { x: position.x, y: position.y };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isPointerActiveRef.current) return;
+    const dx = e.clientX - pointerStartRef.current.x;
+    const dy = e.clientY - pointerStartRef.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // 8 pikselden fazla hareket sürükleme olarak algılanır
+    if (!hasDraggedRef.current && dist > 8) {
+      hasDraggedRef.current = true;
+      setIsDragging(true);
+      setIsOpenMenu(false); // Sürükleme başlayınca menüyü kapat
+    }
+
+    if (hasDraggedRef.current) {
+      const newX = Math.min(Math.max(10, buttonStartRef.current.x + dx), window.innerWidth - 56);
+      const newY = Math.min(Math.max(40, buttonStartRef.current.y + dy), window.innerHeight - 70);
+      setPosition({ x: newX, y: newY });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isPointerActiveRef.current) return;
+    isPointerActiveRef.current = false;
+
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch (_) {}
+
+    if (hasDraggedRef.current) {
+      // Sürükleme tamamlandı: Ekranın en yakın kenarına mıknatısla yapış
+      setIsDragging(false);
+      const isRight = position.x > window.innerWidth / 2;
+      const snappedX = isRight ? Math.max(16, window.innerWidth - 60) : 16;
+      const clampedY = Math.min(Math.max(60, position.y), window.innerHeight - 90);
+      const finalPos = { x: snappedX, y: clampedY };
+      setPosition(finalPos);
+
+      try {
+        localStorage.setItem("aura_ghost_touch_pos", JSON.stringify(finalPos));
+      } catch (_) {}
+      return; // Sürükleme bittiğinde tıklama fonksiyonunu çalıştırma!
+    }
+
+    // Gerçek tıklama
+    handleCleanTap();
   };
 
   const handleKillAllSessions = async () => {
@@ -81,6 +206,12 @@ export default function GhostPanicTouch() {
     return () => window.removeEventListener("click", handleClickOutside);
   }, [isOpenMenu]);
 
+  if (!isMounted || position.x === -1) return null;
+
+  // Menü açılma yönü hesabı (Butonun ekranın hangi çeyreğinde olduğuna göre)
+  const isRightSide = position.x > (typeof window !== "undefined" ? window.innerWidth / 2 : 200);
+  const isBottomSide = position.y > (typeof window !== "undefined" ? window.innerHeight / 2 : 400);
+
   return (
     <>
       {/* Toast Bilgilendirmesi */}
@@ -90,13 +221,28 @@ export default function GhostPanicTouch() {
         </div>
       )}
 
-      {/* AssistiveTouch Konteyneri */}
-      <div className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[9998] flex flex-col items-end">
-        {/* Mikro Menü (Tek Dokunuşta Açılır) */}
+      {/* AssistiveTouch Sabit Konteyneri */}
+      <div
+        style={{
+          position: "fixed",
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          zIndex: 9998,
+          touchAction: "none",
+          transition: isDragging ? "none" : "all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
+        className="select-none flex flex-col items-center"
+      >
+        {/* Mikro Menü (Çift Tıklamada Açılır) */}
         {isOpenMenu && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="mb-3 w-56 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-2xl p-2.5 backdrop-blur-xl flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150 text-slate-200"
+            style={{
+              position: "absolute",
+              [isBottomSide ? "bottom" : "top"]: "56px",
+              [isRightSide ? "right" : "left"]: "0px",
+            }}
+            className="w-60 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-2xl p-2.5 backdrop-blur-xl flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150 text-slate-200"
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800/80 mb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
@@ -111,7 +257,21 @@ export default function GhostPanicTouch() {
               </button>
             </div>
 
-            {/* 1. PIN ile Ekranı Kilitle */}
+            {/* 1. Acil Kaçış (Google'a Git) */}
+            <button
+              onClick={triggerEmergencyEscape}
+              className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-xs font-semibold text-left transition-all cursor-pointer text-red-300"
+            >
+              <div className="w-6 h-6 rounded-lg bg-red-600 text-white flex items-center justify-center flex-shrink-0">
+                <LogOut className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold text-red-200">Acil Kaçış (Google)</span>
+                <span className="text-[10px] text-red-300/70 font-normal">Oturumu silip anında yönlendir</span>
+              </div>
+            </button>
+
+            {/* 2. PIN ile Ekranı Kilitle */}
             <button
               onClick={handleLockScreen}
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-800/80 text-xs font-semibold text-left transition-all cursor-pointer"
@@ -122,20 +282,6 @@ export default function GhostPanicTouch() {
               <div className="flex flex-col">
                 <span className="text-white">PIN ile Kilitle</span>
                 <span className="text-[10px] text-slate-400 font-normal">Ekranı 6 haneli PIN ile dondur</span>
-              </div>
-            </button>
-
-            {/* 2. Oturumu Kapat ve Kaç */}
-            <button
-              onClick={triggerEmergencyEscape}
-              className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-red-500/10 text-xs font-semibold text-left transition-all cursor-pointer text-red-400"
-            >
-              <div className="w-6 h-6 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center flex-shrink-0">
-                <LogOut className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col">
-                <span>Oturumu Kapat & Kaç</span>
-                <span className="text-[10px] text-red-400/70 font-normal">Bu cihazdan çıkıp Google'a git</span>
               </div>
             </button>
 
@@ -150,31 +296,38 @@ export default function GhostPanicTouch() {
               </div>
               <div className="flex flex-col">
                 <span>Tüm Cihazları Düşür</span>
-                <span className="text-[10px] text-amber-400/70 font-normal">Diğer tüm telefon & PC oturumlarını öldür</span>
+                <span className="text-[10px] text-amber-400/70 font-normal">Diğer telefon & PC oturumlarını öldür</span>
               </div>
             </button>
 
-            <div className="px-2 py-1 text-[9px] text-slate-500 text-center border-t border-slate-800/60 mt-1">
-              💡 İpucu: Bu butona <b>2 kez hızlıca</b> vurursanız anında acil çıkış yapar.
+            <div className="px-2 py-1.5 text-[9px] text-slate-400 leading-tight bg-slate-950/60 rounded-lg border border-slate-800/60 mt-1">
+              💡 <b>Refleks:</b> Butona <b>3 kez seri</b> vurduğunuzda direkt Google&apos;a atar. Çift tıkla bu menü açılır. İstediğiniz yere sürükleyebilirsiniz.
             </div>
           </div>
         )}
 
-        {/* Hayalet Buton (iOS AssistiveTouch Tarzı) */}
-        <button
-          onClick={handleTouchOrClick}
-          className={`w-11 h-11 rounded-full bg-slate-950/70 border border-white/20 shadow-2xl backdrop-blur-md flex items-center justify-center cursor-pointer transition-all duration-300 ${
+        {/* Hayalet Buton (Sürüklenebilir & Edge-Snapping) */}
+        <div
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className={`w-11 h-11 rounded-full bg-slate-950/80 border border-white/20 shadow-2xl backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity duration-300 ${
             isOpenMenu
-              ? "opacity-100 ring-2 ring-purple-500/50 scale-105"
-              : "opacity-25 hover:opacity-100 active:opacity-100"
+              ? "opacity-100 ring-2 ring-purple-500/60 scale-105"
+              : isDragging
+              ? "opacity-100 ring-2 ring-purple-400 scale-110 shadow-purple-500/40"
+              : isAwake
+              ? "opacity-95"
+              : "opacity-20 hover:opacity-90 active:opacity-100"
           }`}
-          title="Panik Butonu (Çift tıkla: Acil Kaçış, Tek tıkla: Menü)"
+          title="Panik Butonu (3 Tık: Acil Kaçış, Çift Tık: Menü, Sürükle: Taşı)"
           aria-label="AssistiveTouch Panik Butonu"
         >
-          <div className="w-6 h-6 rounded-full border border-purple-400/60 flex items-center justify-center bg-purple-600/20">
+          <div className="w-6 h-6 rounded-full border border-purple-400/60 flex items-center justify-center bg-purple-600/20 pointer-events-none">
             <Shield className="w-3.5 h-3.5 text-purple-300" />
           </div>
-        </button>
+        </div>
       </div>
     </>
   );

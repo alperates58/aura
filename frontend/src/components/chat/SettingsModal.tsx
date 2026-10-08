@@ -1099,7 +1099,7 @@ export default function SettingsModal({
                     <div className="flex items-start gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                       <span>
-                        <b>Mobil / Dokunmatik (Hayalet Buton):</b> Ekranın sağ alt köşesinde yarı şeffaf duran AssistiveTouch kalkan butonuna <b>2 kez hızlıca</b> dokunduğunuzda anında acil çıkış yapar. Tek dokunduğunuzda ise PIN kilidi ve diğer oturumları düşürme menüsü açılır.
+                        <b>Mobil / Dokunmatik (Hayalet Buton):</b> Ekranın dilediğiniz yerine sürükleyip bırakabileceğiniz yarı şeffaf AssistiveTouch kalkan butonuna <b>3 kez seri</b> dokunduğunuzda (Triple Tap) anında acil çıkış yapar. <b>2 kez dokunduğunuzda</b> ise PIN kilidi, oturumu kapatma ve tüm cihazları düşürme menüsü açılır.
                       </span>
                     </div>
                   </div>
