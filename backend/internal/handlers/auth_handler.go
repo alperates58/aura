@@ -583,7 +583,40 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 			_ = h.presenceService.SetUserOffline(ctx, userID)
 		}
 		if h.userRepo != nil {
-			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+			var logoutReq struct {
+				Reason         string  `json:"reason"`
+				ElapsedMinutes float64 `json:"elapsed_minutes"`
+				TimeoutMinutes int     `json:"timeout_minutes"`
+			}
+			_ = c.BodyParser(&logoutReq)
+			reason := logoutReq.Reason
+			if reason == "" {
+				reason = c.Query("reason")
+			}
+
+			if reason == "inactivity_timeout" {
+				mins := logoutReq.ElapsedMinutes
+				if mins <= 0 {
+					mins = float64(logoutReq.TimeoutMinutes)
+				}
+				if mins <= 0 {
+					mins = 15
+				}
+				realLastSeen := time.Now().Add(-time.Duration(mins) * time.Minute)
+				if existingUser, err := h.userRepo.GetUserByID(ctx, userID); err == nil && existingUser != nil {
+					// Eğer kullanıcı zaten soketten düşmüş ve daha eski bir son görülme yazılmışsa, koru
+					if existingUser.OnlineStatus == 0 && !existingUser.LastSeenAt.IsZero() && time.Since(existingUser.LastSeenAt) >= time.Duration(mins-2)*time.Minute {
+						// Kullanıcının mevcut son görülmesi zaten doğru (ayrıldığı an), dokunma
+					} else {
+						_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
+					}
+				} else {
+					_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
+				}
+			} else {
+				_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+			}
+
 			newVer, err := h.userRepo.IncrementTokenVersion(ctx, userID)
 			if err == nil && h.rdb != nil {
 				_ = h.rdb.Set(ctx, "user:"+userID.String()+":token_version", newVer, 24*time.Hour).Err()
