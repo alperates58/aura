@@ -499,8 +499,9 @@ export default function HomePage() {
 
       let effectiveInactiveAt = 0;
       if (isHidden) {
+        // Kullanıcı arka plandaysa en son ne zaman aktifti veya ne zaman arka plana geçti
         if (inactiveSince > 0 && lastActive > 0) {
-          effectiveInactiveAt = Math.min(inactiveSince, lastActive);
+          effectiveInactiveAt = Math.max(inactiveSince, lastActive);
         } else {
           effectiveInactiveAt = inactiveSince || lastActive;
         }
@@ -542,7 +543,7 @@ export default function HomePage() {
         try {
           const apiBase = getApiBaseUrl().replace(/\/+$/, "");
           const alertUrl = `${apiBase}/auth/inactivity-alert`;
-          const logoutUrl = `${apiBase}/auth/logout?reason=inactivity_timeout`;
+          const logoutUrl = `${apiBase}/auth/logout`;
           const currentUsername = user?.username || useAuthStore.getState().user?.username || "";
 
           const alertPayload = JSON.stringify({

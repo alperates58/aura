@@ -24,8 +24,8 @@ export function formatLastSeen(lastSeenAt?: string | null, allowLastSeen: boolea
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
 
-  // Henüz gerçekleşmiş veya 1 dakikadan az
-  if (diffMs < 60 * 1000 && diffMs >= 0) {
+  // Henüz gerçekleşmiş veya 1 dakikadan az (istemci/sunucu saat farkı toleransı ile)
+  if (diffMs < 60 * 1000 && diffMs > -120 * 1000) {
     return "son görülme az önce";
   }
 

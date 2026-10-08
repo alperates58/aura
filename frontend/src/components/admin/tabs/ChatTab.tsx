@@ -7,16 +7,22 @@ import { Save, Ban, ChevronRight } from "lucide-react";
 interface ChatTabProps {
   settings: SystemSettings;
   setSettings: React.Dispatch<React.SetStateAction<SystemSettings | null>>;
-  handleSaveSetting: (key: string, value: any) => Promise<void>;
-  onOpenBannedWords: () => void;
+  handleSaveSetting?: (key: string, value: any) => Promise<any>;
+  onSave?: (key: string, value: any) => Promise<any>;
+  onOpenBannedWords?: () => void;
+  onNavigateToBannedWords?: () => void;
 }
 
 export const ChatTab: React.FC<ChatTabProps> = ({
   settings,
   setSettings,
   handleSaveSetting,
+  onSave,
   onOpenBannedWords,
+  onNavigateToBannedWords,
 }) => {
+  const saveFn = onSave || handleSaveSetting || (async () => {});
+  const openBannedWordsFn = onNavigateToBannedWords || onOpenBannedWords || (() => {});
   return (
     <div className="space-y-4">
       <div className="p-4 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
@@ -100,7 +106,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({
         </label>
 
         <button
-          onClick={() => handleSaveSetting("media_limits", settings.media_limits)}
+          onClick={() => saveFn("media_limits", settings.media_limits)}
           className="w-full py-2.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
           <Save className="w-3.5 h-3.5" />
@@ -215,7 +221,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({
         </div>
 
         <button
-          onClick={() => handleSaveSetting("chat_settings", settings.chat_settings)}
+          onClick={() => saveFn("chat_settings", settings.chat_settings)}
           className="w-full py-2.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
           <Save className="w-3.5 h-3.5" />
@@ -243,7 +249,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({
         </div>
         <button
           type="button"
-          onClick={onOpenBannedWords}
+          onClick={openBannedWordsFn}
           className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-900/30"
         >
           <span>Yönet</span>

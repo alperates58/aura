@@ -32,6 +32,7 @@ type Client struct {
 	// Rate limiting / Flood control
 	lastWindowStart time.Time
 	msgsInWindow    int
+	lastDbTouch     time.Time
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessionID string, tokenVersion int, isPanicMode bool) *Client {
@@ -44,6 +45,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessi
 		sessionID:    sessionID,
 		tokenVersion: tokenVersion,
 		isPanicMode:  isPanicMode,
+		lastDbTouch:  time.Now(),
 	}
 }
 
@@ -113,6 +115,18 @@ func (c *Client) handleAction(msg WSMessage) {
 	_ = c.hub.presenceService.RefreshUserOnline(ctx, c.userID)
 	if c.hub.rdb != nil {
 		_ = c.hub.rdb.Set(ctx, "user:"+c.userID.String()+":last_active", time.Now().Unix(), 24*time.Hour).Err()
+	}
+
+	// Kullanıcının oturumunun son aktiflik saatini DB'de de tazele (30 saniyede bir throttled veya mesaj anında)
+	if c.hub.sessionRepo != nil && (msg.Action == "send_message" || time.Since(c.lastDbTouch) >= 30*time.Second) {
+		c.lastDbTouch = time.Now()
+		go func(uid uuid.UUID, sid string) {
+			if sid != "" {
+				_ = c.hub.sessionRepo.TouchSessionActivity(context.Background(), uid, sid)
+			} else {
+				_ = c.hub.sessionRepo.TouchUserAllSessionsActivity(context.Background(), uid)
+			}
+		}(c.userID, c.sessionID)
 	}
 
 	switch msg.Action {

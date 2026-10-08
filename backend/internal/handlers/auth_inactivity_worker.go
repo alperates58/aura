@@ -216,6 +216,21 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			continue
 		}
 
+		// Redis'teki en son soket/mesaj aktivitesini kontrol et
+		if h.rdb != nil {
+			lastActiveUnixStr, err := h.rdb.Get(ctx, "user:"+cand.UserID.String()+":last_active").Result()
+			if err == nil && lastActiveUnixStr != "" {
+				if lastActiveUnix, err := strconv.ParseInt(lastActiveUnixStr, 10, 64); err == nil {
+					lastActiveTime := time.Unix(lastActiveUnix, 0)
+					if time.Since(lastActiveTime) < time.Duration(timeoutMinutes)*time.Minute {
+						// Kullanıcı Redis'te belirlenen süre içinde aktif olmuş. DB oturum saatini tazele ve atma!
+						_ = h.sessionRepo.TouchSessionActivity(ctx, cand.UserID, cand.SessionID)
+						continue
+					}
+				}
+			}
+		}
+
 		elapsedMinutes := float64(timeoutMinutes)
 		if !cand.LastActiveAt.IsZero() {
 			actualElapsed := time.Since(cand.LastActiveAt).Minutes()
@@ -224,41 +239,7 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			}
 		}
 
-		isSocketConnected := h.hub != nil && h.hub.IsSessionConnected(cand.UserID, cand.SessionID)
-
-		// DURUM A: Kullanıcı sekmeyi kapatmış veya çevrimdışı (Canlı WebSocket bağlantısı YOK)
-		if !isSocketConnected {
-			log.Printf("ℹ️ [Inactivity Worker] Sekmesi kapalı/çevrimdışı inaktif oturum sessizce sonlandırılıyor: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk)",
-				cand.Username, cand.DeviceName, elapsedMinutes, timeoutMinutes)
-
-			_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
-
-			// Kullanıcının başka açık oturumu kalmadıysa offline yap
-			if h.hub != nil && !h.hub.IsUserConnected(cand.UserID) {
-				if h.presenceService != nil {
-					_ = h.presenceService.SetUserOffline(ctx, cand.UserID)
-				}
-				if h.userRepo != nil {
-					_ = h.userRepo.UpdateOnlineStatus(ctx, cand.UserID, 0)
-				}
-			}
-
-			// Token Version'ı arttır (JWT'leri anında geçersiz kıl)
-			if h.userRepo != nil {
-				newVer, _ := h.userRepo.IncrementTokenVersion(ctx, cand.UserID)
-				if h.rdb != nil && newVer > 0 {
-					_ = h.rdb.Set(ctx, "user:"+cand.UserID.String()+":token_version", newVer, 24*time.Hour).Err()
-				}
-			}
-			continue
-		}
-
-		// DURUM B: Kullanıcının canlı WebSocket bağlantısı VAR (Sekme ekranda açık bırakılmış)
-		if elapsedMinutes < float64(timeoutMinutes)+0.5 {
-			continue
-		}
-
-		// 3. Mükerrer bildirim kontrolü
+		// Mükerrer bildirim kontrolü
 		breachSessionKey := fmt.Sprintf("inactivity_breached_session:%s", cand.SessionID)
 		breachUserKey := fmt.Sprintf("inactivity_breached_user:%s", cand.UserID.String())
 		if h.rdb != nil {
@@ -272,16 +253,16 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			}
 		}
 
-		// 4. İhlal bayraklarını Redis'e yaz
+		// İhlal bayraklarını Redis'e yaz
 		if h.rdb != nil {
 			_ = h.rdb.Set(ctx, breachSessionKey, "1", 10*time.Minute).Err()
-			_ = h.rdb.Set(ctx, breachUserKey, "1", 2*time.Minute).Err()
+			_ = h.rdb.Set(ctx, breachUserKey, "1", 5*time.Minute).Err()
 		}
 
-		log.Printf("🚨 [Inactivity Worker] Açık ekranda inaktif kalan oturum tespit edildi: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk). Zorla sonlandırılıyor ve bildirim yayınlanıyor...",
-			cand.Username, cand.DeviceName, elapsedMinutes, timeoutMinutes)
+		log.Printf("🚨 [Inactivity Worker] İnaktivite süresini (%d dk) aşan oturum tespit edildi: @%s (Cihaz: %s, Inaktif Süre: %.1f dk). Güvenlik protokolü devreye giriyor...",
+			timeoutMinutes, cand.Username, cand.DeviceName, elapsedMinutes)
 
-		// 5. Güvenlik olayını tetikle, hikaye ve mesajları tam zamanında yayınla
+		// Güvenlik olayını tetikle, hikaye ve bildirimleri yayınla
 		h.handleInactivityTimeoutBreach(
 			cand.Username,
 			cand.IPAddress,
@@ -292,7 +273,7 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			targetURL,
 		)
 
-		// 6. Oturumu ve yetkileri güvenle sonlandır
+		// Oturumu ve yetkileri güvenle sonlandır
 		if h.hub != nil {
 			h.hub.DisconnectSession(cand.UserID, cand.SessionID)
 		}
@@ -359,15 +340,16 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 		user, _ = h.userRepo.GetUserByUsername(ctx, req.Username)
 	}
 
-	username := "Kullanıcı"
-	if user != nil {
-		username = user.Username
-		if userID == uuid.Nil {
-			userID = user.ID
-		}
-	} else if strings.TrimSpace(req.Username) != "" {
-		username = strings.TrimSpace(req.Username)
+	// Kullanıcı belirlenemiyorsa sahte @Kullanıcı uyarısı gönderme!
+	if user == nil {
+		h.clearAuthCookies(c)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Geçerli bir kullanıcı oturumu bulunamadı.",
+		})
 	}
+
+	username := user.Username
+	userID = user.ID
 
 	timeoutMinutes := req.TimeoutMinutes
 	if timeoutMinutes <= 0 {

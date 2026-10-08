@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Search, X, Sparkles, ChevronDown } from "lucide-react";
+import { Search, X, Sparkles, ChevronDown, Smile, Clock } from "lucide-react";
 import {
   EmojiCategory,
+  EmojiItem,
   CATEGORIES,
   SKIN_TONES,
   KAOMOJIS,

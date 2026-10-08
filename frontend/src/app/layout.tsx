@@ -58,8 +58,8 @@ export default function RootLayout({
                   if (panicEscaped) {
                     localStorage.removeItem("aura_panic_escaped");
                     sessionStorage.removeItem("aura_panic_escaped");
-                    var sub = (window.location.pathname.match(/^(\/[a-zA-Z0-9_-]+)/) || ["",""])[1];
-                    if (["/login", "/register", "/chat", "/settings", "/api"].indexOf(sub) !== -1) sub = "";
+                    var pathParts = window.location.pathname.split("/").filter(Boolean);
+                    var sub = (pathParts.length > 0 && ["login", "register", "chat", "settings", "api"].indexOf(pathParts[0]) === -1) ? "/" + pathParts[0] : "";
                     var targetLogin = sub ? sub + "/login" : "/login";
                     if (window.location.pathname !== targetLogin) {
                       window.location.replace(targetLogin);
@@ -74,14 +74,7 @@ export default function RootLayout({
                     var s = JSON.parse(cached);
                     var sinceInactive = inactive ? parseInt(inactive, 10) : 0;
                     var sinceActive = lastActive ? parseInt(lastActive, 10) : 0;
-                    var since = 0;
-                    if (sinceInactive > 0 && sinceActive > 0) {
-                      since = Math.min(sinceInactive, sinceActive);
-                    } else if (sinceInactive > 0) {
-                      since = sinceInactive;
-                    } else if (sinceActive > 0) {
-                      since = sinceActive;
-                    }
+                    var since = Math.max(sinceInactive, sinceActive);
 
                     var timeout = (Number(s.inactivity_timeout_minutes) || 15) * 60 * 1000;
                     if (s.inactivity_logout_enabled && since > 0 && (Date.now() - since) >= timeout) {
@@ -117,9 +110,9 @@ export default function RootLayout({
                         var url = (s.inactivity_redirect_url || "https://www.google.com").trim();
                         if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
                         
-                        var sub = (window.location.pathname.match(/^(\\/[a-zA-Z0-9_-]+)/) || ["",""])[1];
-                        if (["/login", "/register", "/chat", "/settings", "/api"].indexOf(sub) !== -1) sub = "";
-                        var logoutUrl = window.location.origin + sub + "/api/v1/auth/logout";
+                        var pParts = window.location.pathname.split("/").filter(Boolean);
+                        var subPath = (pParts.length > 0 && ["login", "register", "chat", "settings", "api"].indexOf(pParts[0]) === -1) ? "/" + pParts[0] : "";
+                        var logoutUrl = window.location.origin + subPath + "/api/v1/auth/logout";
                         try { fetch(logoutUrl, { method: "POST", credentials: "include", keepalive: true }); } catch(e){}
                         try { navigator.sendBeacon(logoutUrl); } catch(e){}
 

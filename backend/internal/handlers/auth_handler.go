@@ -555,16 +555,6 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
-	reason := c.Query("reason")
-	if reason == "inactivity_timeout" {
-		return h.InactivityAlert(c)
-	}
-	var checkBody struct {
-		Reason string `json:"reason"`
-	}
-	if err := c.BodyParser(&checkBody); err == nil && checkBody.Reason == "inactivity_timeout" {
-		return h.InactivityAlert(c)
-	}
 
 	var userID uuid.UUID
 	if id, ok := c.Locals("user_id").(uuid.UUID); ok {

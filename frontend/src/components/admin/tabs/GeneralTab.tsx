@@ -7,14 +7,17 @@ import { Save } from "lucide-react";
 interface GeneralTabProps {
   settings: SystemSettings;
   setSettings: React.Dispatch<React.SetStateAction<SystemSettings | null>>;
-  handleSaveSetting: (key: string, value: any) => Promise<void>;
+  handleSaveSetting?: (key: string, value: any) => Promise<any>;
+  onSave?: (key: string, value: any) => Promise<any>;
 }
 
 export const GeneralTab: React.FC<GeneralTabProps> = ({
   settings,
   setSettings,
   handleSaveSetting,
+  onSave,
 }) => {
+  const saveFn = onSave || handleSaveSetting || (async () => {});
   return (
     <div className="space-y-4">
       <div className="p-4 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
@@ -107,7 +110,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
         </div>
 
         <button
-          onClick={() => handleSaveSetting("site_info", settings.site_info)}
+          onClick={() => saveFn("site_info", settings.site_info)}
           className="w-full py-2.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
           <Save className="w-3.5 h-3.5" />

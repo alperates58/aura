@@ -35,7 +35,8 @@ const MediaStagingModal = dynamic(() => import("@/components/chat/MediaStagingMo
 const MediaGalleryModal = dynamic(() => import("@/components/chat/MediaGalleryModal"), { ssr: false });
 const PdfPreviewModal = dynamic(() => import("@/components/chat/PdfPreviewModal"), { ssr: false });
 const DoodleModal = dynamic(() => import("@/components/chat/DoodleModal"), { ssr: false });
-export type { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
+import type { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
+export type { GalleryMediaItem };
 import { api, resolveMediaUrl } from "@/lib/api";
 import { compressImage, validateVideo } from "@/lib/compression";
 import { focusChatInput } from "@/lib/utils";

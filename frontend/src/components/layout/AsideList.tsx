@@ -153,7 +153,7 @@ export default function AsideList({
         <div className="relative">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
           <input
-            ref={searchInputRef}
+            ref={searchInputRef as any}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
