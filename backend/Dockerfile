@@ -48,7 +48,7 @@ USER appuser
 ENV PORT=8080
 EXPOSE 8080
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
 CMD ["/app/server"]
