@@ -609,7 +609,7 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 		loc := ResolveIPLocation(currentIP)
 		_ = h.sessionRepo.UpsertSession(c.Context(), &models.UserSession{
 			UserID:     userID,
-			SessionID:  sessionID,
+			SessionID:  currentSessionID,
 			DeviceName: devName,
 			DeviceType: devType,
 			OS:         devOS,
