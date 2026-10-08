@@ -113,25 +113,29 @@ func (h *AuthHandler) setAuthCookies(c *fiber.Ctx, accessToken, refreshToken str
 }
 
 func (h *AuthHandler) clearAuthCookies(c *fiber.Ctx) {
-	cookiePath := h.cfg.AppBasePath
-	if cookiePath == "" {
-		cookiePath = "/"
+	paths := []string{"/"}
+	if h.cfg.AppBasePath != "" && h.cfg.AppBasePath != "/" {
+		paths = append(paths, h.cfg.AppBasePath)
 	}
 
-	c.Cookie(&fiber.Cookie{
-		Name:     "access_token",
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		HTTPOnly: true,
-		Path:     cookiePath,
-	})
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		HTTPOnly: true,
-		Path:     cookiePath,
-	})
+	for _, p := range paths {
+		c.Cookie(&fiber.Cookie{
+			Name:     "access_token",
+			Value:    "",
+			Expires:  time.Now().Add(-24 * time.Hour),
+			MaxAge:   -1,
+			HTTPOnly: true,
+			Path:     p,
+		})
+		c.Cookie(&fiber.Cookie{
+			Name:     "refresh_token",
+			Value:    "",
+			Expires:  time.Now().Add(-24 * time.Hour),
+			MaxAge:   -1,
+			HTTPOnly: true,
+			Path:     p,
+		})
+	}
 }
 
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
@@ -1640,6 +1644,11 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		}
 		if h.userRepo != nil {
 			_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+			// Token version'u arttırarak mevcut tüm token'ları anında geçersiz kıl (Geri tuşuyla dönülse dahi 401 verir)
+			newVer, err := h.userRepo.IncrementTokenVersion(ctx, userID)
+			if err == nil && h.rdb != nil {
+				_ = h.rdb.Set(ctx, "user:"+userID.String()+":token_version", newVer, 24*time.Hour).Err()
+			}
 		}
 		currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
 		if h.sessionRepo != nil && currentSessionID != "" {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { Lock, ShieldAlert, ArrowRight, ShieldCheck, KeyRound } from "lucide-react";
+import { performEmergencyEscape } from "@/lib/emergency";
 
 export default function PinLockModal() {
   const { isAppLocked, hasAppPin, unlockApp, setAppPin, logout, user } = useAuthStore();
@@ -27,12 +28,8 @@ export default function PinLockModal() {
       user?.panic_redirect_url ||
       "https://www.google.com";
 
-    try {
-      logout();
-    } catch (_) {}
-
-    window.location.replace(redirectUrl);
-  }, [securitySettings, user, logout]);
+    performEmergencyEscape(redirectUrl);
+  }, [securitySettings, user]);
 
   // PIN kontrolü
   const handleDigitPress = (digit: string) => {

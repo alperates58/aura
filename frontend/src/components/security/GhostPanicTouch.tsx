@@ -4,20 +4,37 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { Shield, Lock, LogOut, Radio, X, AlertTriangle, ArrowRight } from "lucide-react";
+import { performEmergencyEscape } from "@/lib/emergency";
 
 export default function GhostPanicTouch() {
-  const { user, lockApp, killSessions, logout } = useAuthStore();
+  const { user, lockApp, killSessions, logout, hasAppPin } = useAuthStore();
   const securitySettings = useSettingsStore((s) => s.settings?.security_settings);
 
   // Buton konumu ve sürükleme durumu (SSR uyuşmazlığını önlemek için başlangıçta -1, -1)
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
 
+  const [hasPinLocal, setHasPinLocal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isOpenMenu, setIsOpenMenu] = useState(false);
   const [isAwake, setIsAwake] = useState(false);
   const [isKilling, setIsKilling] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // PIN kontrolü: Hem store hem localStorage kontrol edilir
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const has = !!localStorage.getItem("aura_app_pin_hash");
+        setHasPinLocal(has);
+        if (has && !hasAppPin) {
+          useAuthStore.setState({ hasAppPin: true });
+        }
+      }
+    } catch (_) {}
+  }, [hasAppPin]);
+
+  const effectiveHasPin = hasAppPin || hasPinLocal;
 
   // Sürükleme ve tıklama ref'leri
   const pointerStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -29,19 +46,15 @@ export default function GhostPanicTouch() {
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
   const awakeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Acil kaçış fonksiyonu (Sıfır onay, doğrudan hedef siteye yönlendirme)
+  // Acil kaçış fonksiyonu (Sıfır onay, doğrudan hedef siteye yönlendirme ve geri dönüş engeli)
   const triggerEmergencyEscape = useCallback(() => {
     const redirectUrl =
       securitySettings?.inactivity_redirect_url ||
       user?.panic_redirect_url ||
       "https://www.google.com";
 
-    try {
-      logout();
-    } catch (_) {}
-
-    window.location.replace(redirectUrl);
-  }, [securitySettings, user, logout]);
+    performEmergencyEscape(redirectUrl);
+  }, [securitySettings, user]);
 
   // İlk montaj ve ekran boyutu takibi
   useEffect(() => {
@@ -271,17 +284,45 @@ export default function GhostPanicTouch() {
               </div>
             </button>
 
-            {/* 2. PIN ile Ekranı Kilitle */}
+            {/* 2. PIN ile Ekranı Kilitle (PIN belirlenmediyse pasif) */}
             <button
-              onClick={handleLockScreen}
-              className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-800/80 text-xs font-semibold text-left transition-all cursor-pointer"
+              onClick={() => {
+                if (!effectiveHasPin) {
+                  setToast("Önce Ayarlar > Güvenlik menüsünden 6 haneli PIN belirleyin.");
+                  setTimeout(() => setToast(null), 3500);
+                  return;
+                }
+                handleLockScreen();
+              }}
+              disabled={!effectiveHasPin}
+              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-left transition-all ${
+                effectiveHasPin
+                  ? "hover:bg-slate-800/80 cursor-pointer"
+                  : "opacity-40 cursor-not-allowed hover:bg-transparent"
+              }`}
+              title={effectiveHasPin ? "Ekranı 6 haneli PIN ile dondur" : "PIN kodu henüz belirlenmedi (Pasif)"}
             >
-              <div className="w-6 h-6 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center flex-shrink-0">
+              <div
+                className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  effectiveHasPin
+                    ? "bg-purple-600/20 text-purple-400"
+                    : "bg-slate-800 text-slate-500"
+                }`}
+              >
                 <Lock className="w-3.5 h-3.5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-white">PIN ile Kilitle</span>
-                <span className="text-[10px] text-slate-400 font-normal">Ekranı 6 haneli PIN ile dondur</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={effectiveHasPin ? "text-white" : "text-slate-400"}>PIN ile Kilitle</span>
+                  {!effectiveHasPin && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-normal">
+                      Pasif
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-500 font-normal">
+                  {effectiveHasPin ? "Ekranı 6 haneli PIN ile dondur" : "PIN belirlenmedi (Ayarlar'dan kurun)"}
+                </span>
               </div>
             </button>
 

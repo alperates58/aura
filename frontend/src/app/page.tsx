@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -37,14 +36,9 @@ import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
-
-const PinLockModal = dynamic(() => import("@/components/security/PinLockModal"), {
-  ssr: false,
-});
-const GhostPanicTouch = dynamic(() => import("@/components/security/GhostPanicTouch"), {
-  ssr: false,
-});
-
+import PinLockModal from "@/components/security/PinLockModal";
+import GhostPanicTouch from "@/components/security/GhostPanicTouch";
+import { performEmergencyEscape } from "@/lib/emergency";
 import EmptyChatState from "@/components/chat/EmptyChatState";
 import MessageSelectionBar from "@/components/chat/MessageSelectionBar";
 import InChatSearchBar from "@/components/chat/InChatSearchBar";
@@ -279,6 +273,45 @@ export default function HomePage() {
   }, []);
 
   // ==============================================================
+  // ACİL KAÇIŞ GERİ DÖNÜŞ VE BFCACHE KORUMASI (Anti-Back / Anti-Restore)
+  // Kullanıcı panik kaçışı yaptıktan sonra tarayıcıda 'Geri' tuşuna bassa dahi
+  // sayfayı asla göstermez, anında login ekranına fırlatır.
+  // ==============================================================
+  useEffect(() => {
+    const checkPanicState = () => {
+      try {
+        if (
+          typeof window !== "undefined" &&
+          (localStorage.getItem("aura_panic_escaped") === "1" ||
+            sessionStorage.getItem("aura_panic_escaped") === "1")
+        ) {
+          localStorage.removeItem("aura_panic_escaped");
+          sessionStorage.removeItem("aura_panic_escaped");
+          useAuthStore.setState({ user: null, isAuthenticated: false });
+          window.location.replace(getLoginUrl());
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+
+    if (checkPanicState()) return;
+
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted || checkPanicState()) {
+        useAuthStore.getState().checkAuth().then((isAuthed) => {
+          if (!isAuthed) {
+            window.location.replace(getLoginUrl());
+          }
+        });
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  // ==============================================================
   // PC REFLEKS KAÇIŞI: ÇİFT ESC (Double-Escape Emergency Exit)
   // Masada otururken 450ms içinde iki kez ESC'ye basıldığında
   // mevcut oturumu anında kapatır ve hedef siteye (Google vb.) ışınlar.
@@ -297,11 +330,7 @@ export default function HomePage() {
             user?.panic_redirect_url ||
             "https://www.google.com";
 
-          try {
-            useAuthStore.getState().logout();
-          } catch (_) {}
-
-          window.location.replace(redirectUrl);
+          performEmergencyEscape(redirectUrl);
         }
         lastEscTime = now;
       }
