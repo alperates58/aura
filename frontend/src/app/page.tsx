@@ -504,9 +504,23 @@ export default function HomePage() {
     const handleSnapBottom = (e: Event) => {
       const customEvt = e as CustomEvent;
       if (!customEvt.detail?.convId || customEvt.detail.convId === activeConversationId) {
-        const el = messagesContainerRef.current;
-        if (el && !hasUserInteractedRef.current) {
-          el.scrollTop = el.scrollHeight;
+        if (!hasUserInteractedRef.current) {
+          const snap = () => {
+            const el = messagesContainerRef.current;
+            if (el && !hasUserInteractedRef.current) {
+              el.scrollTop = el.scrollHeight;
+            }
+          };
+          snap();
+          requestAnimationFrame(snap);
+          const t1 = setTimeout(snap, 50);
+          const t2 = setTimeout(snap, 150);
+          const t3 = setTimeout(snap, 300);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            clearTimeout(t3);
+          };
         }
       }
     };
@@ -636,13 +650,33 @@ export default function HomePage() {
 
     // A. İlk açılışta veya konuşma değiştirildiğinde: ANINDA ve SESSİZCE en alta sabitle
     if (!initialScrolledConvsRef.current[activeConversationId]) {
-      const el = messagesContainerRef.current;
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-        initialScrolledConvsRef.current[activeConversationId] = true;
-      }
+      const snapToBottom = () => {
+        const el = messagesContainerRef.current;
+        if (el && !hasUserInteractedRef.current) {
+          el.scrollTop = el.scrollHeight;
+        }
+      };
+
+      // İlk anda ve render genişledikçe sessizce tabanda kal (Asla scrollIntoView kullanma)
+      snapToBottom();
+      const r1 = requestAnimationFrame(snapToBottom);
+      const t1 = setTimeout(snapToBottom, 40);
+      const t2 = setTimeout(snapToBottom, 120);
+      const t3 = setTimeout(() => {
+        snapToBottom();
+        if (activeConversationId) {
+          initialScrolledConvsRef.current[activeConversationId] = true;
+        }
+      }, 300);
+
       prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
-      return;
+
+      return () => {
+        cancelAnimationFrame(r1);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
 
     // B. Eğer eski mesajlar yukarı eklendiyse (sayfalama / pagination): alta kaydırma!
@@ -658,13 +692,22 @@ export default function HomePage() {
 
     if (currentMsgs.length > prevCount) {
       // Eğer konuşma soketten gelen tek bir bildirim mesajından (örn. Aura Güvenlik)
-      // tam geçmişe sıçradıysa: doğrudan tabana yerleş
-      if (prevCount <= 1 && currentMsgs.length > 1) {
-        const el = messagesContainerRef.current;
-        if (el) {
-          el.scrollTop = el.scrollHeight;
-        }
-        return;
+      // veya ilk yüklemeden tam geçmişe sıçradıysa: doğrudan tabana yerleş
+      if (prevCount <= 1 || !initialScrolledConvsRef.current[activeConversationId]) {
+        const snap = () => {
+          const el = messagesContainerRef.current;
+          if (el && !hasUserInteractedRef.current) {
+            el.scrollTop = el.scrollHeight;
+          }
+        };
+        snap();
+        requestAnimationFrame(snap);
+        const t1 = setTimeout(snap, 50);
+        const t2 = setTimeout(snap, 150);
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        };
       }
 
       const isHidden = typeof document !== "undefined" && document.hidden;
