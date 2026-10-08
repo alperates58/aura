@@ -68,7 +68,7 @@ export default function GhostPanicTouch() {
 
     let startPos = { x: -1, y: -1 };
     try {
-      const saved = localStorage.getItem("aura_ghost_touch_pos");
+      const saved = localStorage.getItem("aura_ghost_touch_pos_v2");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === "number" && typeof parsed.y === "number") {
@@ -78,7 +78,8 @@ export default function GhostPanicTouch() {
     } catch (_) {}
 
     if (startPos.x === -1 || startPos.y === -1) {
-      startPos = snapToEdge(window.innerWidth - 60, window.innerHeight - 130);
+      // Varsayılan konum: Sola yaslı, ekranın dikey ortası
+      startPos = snapToEdge(16, window.innerHeight / 2 - 22);
     } else {
       startPos = snapToEdge(startPos.x, startPos.y);
     }
@@ -183,7 +184,7 @@ export default function GhostPanicTouch() {
       setPosition(finalPos);
 
       try {
-        localStorage.setItem("aura_ghost_touch_pos", JSON.stringify(finalPos));
+        localStorage.setItem("aura_ghost_touch_pos_v2", JSON.stringify(finalPos));
       } catch (_) {}
       return; // Sürükleme bittiğinde tıklama fonksiyonunu çalıştırma!
     }

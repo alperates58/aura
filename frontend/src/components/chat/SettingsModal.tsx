@@ -29,6 +29,7 @@ import {
   Tablet,
   Monitor,
   ShieldCheck,
+  ShieldAlert,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
