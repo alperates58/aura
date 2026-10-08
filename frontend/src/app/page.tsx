@@ -174,16 +174,10 @@ export default function HomePage() {
     if (typeof window === "undefined") return;
     if (window.visualViewport) {
       setViewportHeight(window.visualViewport.height);
-      const hasActiveInput =
-        typeof document !== "undefined" &&
-        document.activeElement &&
-        (document.activeElement.tagName === "INPUT" ||
-          document.activeElement.tagName === "TEXTAREA");
-      setViewportTop(hasActiveInput ? (window.visualViewport.offsetTop || 0) : 0);
     } else {
       setViewportHeight(window.innerHeight);
-      setViewportTop(0);
     }
+    setViewportTop(0);
   }, []);
 
   useEffect(() => {
@@ -194,7 +188,7 @@ export default function HomePage() {
     };
 
     const handleWindowScroll = () => {
-      if (typeof window !== "undefined" && window.scrollY !== 0) {
+      if (typeof window !== "undefined" && (window.scrollY !== 0 || window.scrollX !== 0)) {
         window.scrollTo(0, 0);
       }
     };
@@ -665,15 +659,25 @@ export default function HomePage() {
 
       notificationManager.stopFlash();
       updateViewportMetrics();
-      setTimeout(updateViewportMetrics, 100);
-      setTimeout(updateViewportMetrics, 300);
 
-      if (typeof window !== "undefined") {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
-        document.documentElement.scrollTop = 0;
-      }
-      window.dispatchEvent(new CustomEvent("aura:scroll_to_bottom"));
+      const dispatchBottom = () => {
+        if (typeof window !== "undefined") {
+          window.scrollTo(0, 0);
+          document.body.scrollTop = 0;
+          document.documentElement.scrollTop = 0;
+          window.dispatchEvent(new CustomEvent("aura:scroll_to_bottom"));
+        }
+      };
+
+      dispatchBottom();
+      setTimeout(() => {
+        updateViewportMetrics();
+        dispatchBottom();
+      }, 100);
+      setTimeout(() => {
+        updateViewportMetrics();
+        dispatchBottom();
+      }, 350);
 
       const socketState = useSocketStore.getState();
       if (
@@ -692,7 +696,7 @@ export default function HomePage() {
           .getState()
           .loadMessages(curConvId)
           .then(() => {
-            window.dispatchEvent(new CustomEvent("aura:scroll_to_bottom"));
+            dispatchBottom();
           })
           .catch(() => {});
 
@@ -888,7 +892,7 @@ export default function HomePage() {
         id="aura-main-content"
         className="fixed inset-x-0 flex flex-col w-full bg-grupo-dark-bg text-slate-100 select-none overflow-hidden"
         style={{
-          top: `${viewportTop}px`,
+          top: 0,
           height: viewportHeight ? `${viewportHeight}px` : "100%",
           maxHeight: viewportHeight ? `${viewportHeight}px` : "100%",
           visibility: isPrivacyCurtainActive ? "hidden" : "visible",

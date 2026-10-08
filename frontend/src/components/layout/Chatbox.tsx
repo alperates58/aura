@@ -230,6 +230,11 @@ export default function Chatbox({
     isNearBottomRef.current = true;
     if (behavior === "auto") {
       el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      });
     } else {
       el.scrollTo({
         top: el.scrollHeight,
@@ -240,7 +245,10 @@ export default function Chatbox({
 
   // Harici uyanış veya taban tetikleyici dinleyicisi
   useEffect(() => {
-    const handleScrollReq = () => scrollToBottom("auto");
+    const handleScrollReq = () => {
+      isNearBottomRef.current = true;
+      scrollToBottom("auto");
+    };
     window.addEventListener("aura:scroll_to_bottom", handleScrollReq);
     return () => window.removeEventListener("aura:scroll_to_bottom", handleScrollReq);
   }, [scrollToBottom]);
@@ -264,7 +272,7 @@ export default function Chatbox({
     }
   }, [replyingTo]);
 
-  // WhatsApp Standardı: Sohbet açıldığında tabana yerleş ve içerik (messagesInnerRef) büyüdükçe ResizeObserver ile tabanda kal
+  // WhatsApp Standardı: Sohbet açıldığında tabana yerleş; hem içerik hem container boyut değişiminde tabanda kal
   useEffect(() => {
     const container = messagesContainerRef.current;
     const content = messagesInnerRef.current;
@@ -274,15 +282,32 @@ export default function Chatbox({
     isNearBottomRef.current = true;
     container.scrollTop = container.scrollHeight;
 
-    // İçerik div'inin (messagesInnerRef) yüksekliği değiştikçe (mesajlar, görseller, fontlar)
-    // kullanıcı yukarı çıkmadıysa tabanda tut
+    let prevContainerHeight = container.clientHeight;
+
+    // Hem içerik div'i (mesajlar, görseller) hem de dış container (klavye, ekran kilidi açılışı, yeniden boyutlandırma)
+    // boyutu değiştikçe kullanıcı yukarı kaydırmadıysa tabanda tut
     const ro = new ResizeObserver(() => {
-      if (isNearBottomRef.current && container) {
-        container.scrollTop = container.scrollHeight;
+      if (!container) return;
+      const currentHeight = container.clientHeight;
+      const heightChanged = Math.abs(currentHeight - prevContainerHeight) > 2;
+      prevContainerHeight = currentHeight;
+
+      if (isNearBottomRef.current || isInputFocused || heightChanged) {
+        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (isInputFocused || distFromBottom < 250 || isNearBottomRef.current) {
+          isNearBottomRef.current = true;
+          container.scrollTop = container.scrollHeight;
+          requestAnimationFrame(() => {
+            if (container) {
+              container.scrollTop = container.scrollHeight;
+            }
+          });
+        }
       }
     });
 
     ro.observe(content);
+    ro.observe(container);
 
     // İlk mount anında DOM paint sonrası tabana sabitle
     const rafId = requestAnimationFrame(() => {
@@ -295,7 +320,32 @@ export default function Chatbox({
       ro.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [activeConversationId]);
+  }, [activeConversationId, isInputFocused]);
+
+  // Mobil sanal klavye açılıp kapanırken visualViewport resize takibi ve anlık tabana sabitleme
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const vv = window.visualViewport;
+
+    const handleVVResize = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      if (isNearBottomRef.current || isInputFocused) {
+        isNearBottomRef.current = true;
+        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+        });
+      }
+    };
+
+    vv.addEventListener("resize", handleVVResize);
+    return () => {
+      vv.removeEventListener("resize", handleVVResize);
+    };
+  }, [isInputFocused]);
 
   // Sadece yeni bir son mesaj geldiğinde tabana yerleş
   useEffect(() => {
@@ -984,7 +1034,7 @@ export default function Chatbox({
                     );
                   })
                 )}
-                <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
+                <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "none" }} />
               </div>
             </div>
           </div>
@@ -1090,9 +1140,11 @@ export default function Chatbox({
                         }}
                         onFocus={() => {
                           setIsInputFocused(true);
-                          setTimeout(() => {
-                            scrollToBottom("auto");
-                          }, 100);
+                          isNearBottomRef.current = true;
+                          scrollToBottom("auto");
+                          setTimeout(() => scrollToBottom("auto"), 50);
+                          setTimeout(() => scrollToBottom("auto"), 150);
+                          setTimeout(() => scrollToBottom("auto"), 350);
                         }}
                         onBlur={() => {
                           setIsInputFocused(false);
