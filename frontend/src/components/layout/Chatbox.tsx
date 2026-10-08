@@ -1044,7 +1044,7 @@ export default function Chatbox({
                         </div>
                       </div>
                     );
-                  })
+                  })}
                 </>
               )}
                 <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "none" }} />
