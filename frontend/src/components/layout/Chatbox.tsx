@@ -169,6 +169,7 @@ export default function Chatbox({
 
   // WhatsApp Stili Scroll Motoru & ResizeObserver
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesInnerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef<boolean>(true);
 
   // Arama Eşleşmeleri ve Vurgu
@@ -249,37 +250,58 @@ export default function Chatbox({
     }
   }, [replyingTo]);
 
-  // WhatsApp Standardı: Sohbet açıldığında tabana yerleş ve içerik büyüdükçe ResizeObserver ile tabanda kal
+  // WhatsApp Standardı: Sohbet açıldığında tabana yerleş ve içerik (messagesInnerRef) büyüdükçe ResizeObserver ile tabanda kal
   useEffect(() => {
-    const el = messagesContainerRef.current;
-    if (!el || !activeConversationId) return;
+    const container = messagesContainerRef.current;
+    const content = messagesInnerRef.current;
+    if (!container || !content || !activeConversationId) return;
 
     // Yeni sohbete girildiğinde doğrudan en altta başla
     isNearBottomRef.current = true;
-    el.scrollTop = el.scrollHeight;
+    container.scrollTop = container.scrollHeight;
 
-    // Mesajlar, avatarlar, görseller geldikçe kullanıcı yukarı çıkmadıysa tabanda tut
+    // İçerik div'inin (messagesInnerRef) yüksekliği değiştikçe (mesajlar, görseller, fontlar)
+    // kullanıcı yukarı çıkmadıysa tabanda tut
     const ro = new ResizeObserver(() => {
-      if (isNearBottomRef.current && el) {
-        el.scrollTop = el.scrollHeight;
+      if (isNearBottomRef.current && container) {
+        container.scrollTop = container.scrollHeight;
       }
     });
 
-    ro.observe(el);
-    return () => ro.disconnect();
+    ro.observe(content);
+
+    // İlk mount anında DOM paint sonrası tabana sabitle
+    const rafId = requestAnimationFrame(() => {
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(rafId);
+    };
   }, [activeConversationId]);
 
-  // Yeni mesaj geldiğinde veya gönderildiğinde
+  // Yeni mesaj geldiğinde veya mesajlar belleğe yüklendiğinde tabana yerleş
   useEffect(() => {
     if (!activeConversationId) return;
     const currentMsgs = messages[activeConversationId];
     if (!currentMsgs || currentMsgs.length === 0) return;
 
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
     const lastMsg = currentMsgs[currentMsgs.length - 1];
     if (lastMsg?.is_mine) {
       scrollToBottom("smooth");
     } else if (isNearBottomRef.current) {
-      scrollToBottom("auto");
+      container.scrollTop = container.scrollHeight;
+      requestAnimationFrame(() => {
+        if (container && isNearBottomRef.current) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
     }
   }, [messages, activeConversationId, scrollToBottom]);
 
@@ -823,63 +845,65 @@ export default function Chatbox({
               className="flex-1 min-h-0 p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
               style={{ scrollBehavior: "auto", overflowAnchor: "none" }}
             >
-              {loadingOlderMessages && (
-                <div className="flex justify-center py-2">
-                  <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-              {!isMessagesLoaded ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin opacity-40" />
-                </div>
-              ) : activeMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-slate-500">
-                  <Sparkles className="w-8 h-8 text-grupo-accent/50 mb-2" />
-                  <p className="text-sm font-medium">Bu sohbette henüz mesaj yok.</p>
-                  <p className="text-xs text-slate-600 mt-1">İlk mesajı göndererek başlayın!</p>
-                </div>
-              ) : (
-                activeMessages.map((m, index) => {
-                  const prevMsg = index > 0 ? activeMessages[index - 1] : null;
-                  const currentTimestamp = m.sent_at || m.created_at;
-                  const prevTimestamp = prevMsg?.sent_at || prevMsg?.created_at;
-                  const showDateDivider =
-                    !prevTimestamp ||
-                    (currentTimestamp &&
-                      !isSameCalendarDay(
-                        new Date(currentTimestamp),
-                        new Date(prevTimestamp)
-                      ));
+              <div ref={messagesInnerRef} className="flex flex-col min-h-full">
+                {loadingOlderMessages && (
+                  <div className="flex justify-center py-2">
+                    <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+                {!isMessagesLoaded ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin opacity-40" />
+                  </div>
+                ) : activeMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center text-slate-500">
+                    <Sparkles className="w-8 h-8 text-grupo-accent/50 mb-2" />
+                    <p className="text-sm font-medium">Bu sohbette henüz mesaj yok.</p>
+                    <p className="text-xs text-slate-600 mt-1">İlk mesajı göndererek başlayın!</p>
+                  </div>
+                ) : (
+                  activeMessages.map((m, index) => {
+                    const prevMsg = index > 0 ? activeMessages[index - 1] : null;
+                    const currentTimestamp = m.sent_at || m.created_at;
+                    const prevTimestamp = prevMsg?.sent_at || prevMsg?.created_at;
+                    const showDateDivider =
+                      !prevTimestamp ||
+                      (currentTimestamp &&
+                        !isSameCalendarDay(
+                          new Date(currentTimestamp),
+                          new Date(prevTimestamp)
+                        ));
 
-                  return (
-                    <div key={m.id}>
-                      {showDateDivider && currentTimestamp && (
-                        <div className="flex justify-center my-3 sticky top-1 z-10 pointer-events-none">
-                          <span className="px-3.5 py-1 rounded-full text-[11px] font-semibold bg-slate-900/90 backdrop-blur-md text-slate-400 border border-slate-800 shadow-md pointer-events-auto select-none">
-                            {formatMessageDateDivider(currentTimestamp)}
-                          </span>
+                    return (
+                      <div key={m.id}>
+                        {showDateDivider && currentTimestamp && (
+                          <div className="flex justify-center my-3 sticky top-1 z-10 pointer-events-none">
+                            <span className="px-3.5 py-1 rounded-full text-[11px] font-semibold bg-slate-900/90 backdrop-blur-md text-slate-400 border border-slate-800 shadow-md pointer-events-auto select-none">
+                              {formatMessageDateDivider(currentTimestamp)}
+                            </span>
+                          </div>
+                        )}
+                        <div id={`msg-${m.id}`}>
+                          <MessageBubble
+                            message={m}
+                            searchQuery={chatSearchQuery}
+                            isHighlightedMatch={m.id === activeMatchedMessageId}
+                            onJumpToMessage={(targetId) => handleJumpToMessage(activeConv.id, targetId)}
+                            otherUserName={activeConv.other_user.display_name}
+                            onOpenMedia={(msgId) => {
+                              const idx = galleryItems.findIndex((it) => it.id === msgId);
+                              setGalleryInitialIndex(idx >= 0 ? idx : 0);
+                              setIsGalleryOpen(true);
+                            }}
+                            onOpenPdf={(url, name) => setPreviewPdf({ url, name })}
+                          />
                         </div>
-                      )}
-                      <div id={`msg-${m.id}`}>
-                        <MessageBubble
-                          message={m}
-                          searchQuery={chatSearchQuery}
-                          isHighlightedMatch={m.id === activeMatchedMessageId}
-                          onJumpToMessage={(targetId) => handleJumpToMessage(activeConv.id, targetId)}
-                          otherUserName={activeConv.other_user.display_name}
-                          onOpenMedia={(msgId) => {
-                            const idx = galleryItems.findIndex((it) => it.id === msgId);
-                            setGalleryInitialIndex(idx >= 0 ? idx : 0);
-                            setIsGalleryOpen(true);
-                          }}
-                          onOpenPdf={(url, name) => setPreviewPdf({ url, name })}
-                        />
                       </div>
-                    </div>
-                  );
-                })
-              )}
-              <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
+                    );
+                  })
+                )}
+                <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
+              </div>
             </div>
           </div>
 

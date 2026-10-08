@@ -34,10 +34,19 @@ export function useBackNavigation(options: BackNavigationOptions) {
   const lastExitPressRef = useRef<number>(0);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Güncel opsiyonları ref'te sakla
+  // Güncel opsiyonları ref'te anında senkron sakla
+  optionsRef.current = options;
+
+  // Aktif sohbet açıldığında veya değiştiğinde çıkış toast'unu anında sıfırla
   useEffect(() => {
-    optionsRef.current = options;
-  });
+    if (options.activeConversationId) {
+      setShowExitToast(false);
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = null;
+      }
+    }
+  }, [options.activeConversationId]);
 
   // UI Geri Butonları İçin Fonksiyon (WhatsApp standardı: Saf React state geçişi, router reload yok)
   const handleBackToChatList = useCallback(() => {
@@ -99,6 +108,7 @@ export function useBackNavigation(options: BackNavigationOptions) {
 
       // 2. Aktif sohbet açıksa sohbeti kapatıp listeye dön
       if (opts.activeConversationId) {
+        setShowExitToast(false);
         opts.onCloseChat();
         return;
       }

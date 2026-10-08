@@ -1073,7 +1073,7 @@ export default function HomePage() {
         />
         <ListenTogetherController />
 
-        {showExitToast && (
+        {showExitToast && !activeConversationId && (
           <div className="fixed bottom-16 sm:bottom-6 inset-x-0 mx-auto w-fit z-50 px-4 py-2 bg-slate-900/95 border border-slate-700 text-white text-xs font-medium rounded-full shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none select-none">
             Çıkmak için tekrar dokunun
           </div>
