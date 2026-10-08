@@ -322,12 +322,19 @@ export default function Chatbox({
     };
   }, [activeConversationId, isInputFocused]);
 
-  // Mobil sanal klavye açılıp kapanırken visualViewport resize takibi ve anlık tabana sabitleme
+  // Mobil sanal klavye açılıp kapanırken visualViewport resize/scroll takibi ve anlık tabana sabitleme
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) return;
     const vv = window.visualViewport;
 
-    const handleVVResize = () => {
+    const handleVVChange = () => {
+      if (typeof window !== "undefined" && (window.scrollY !== 0 || window.scrollX !== 0)) {
+        window.scrollTo(0, 0);
+      }
+      if (typeof document !== "undefined") {
+        if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+        if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+      }
       const container = messagesContainerRef.current;
       if (!container) return;
       if (isNearBottomRef.current || isInputFocused) {
@@ -341,9 +348,11 @@ export default function Chatbox({
       }
     };
 
-    vv.addEventListener("resize", handleVVResize);
+    vv.addEventListener("resize", handleVVChange);
+    vv.addEventListener("scroll", handleVVChange);
     return () => {
-      vv.removeEventListener("resize", handleVVResize);
+      vv.removeEventListener("resize", handleVVChange);
+      vv.removeEventListener("scroll", handleVVChange);
     };
   }, [isInputFocused]);
 
@@ -993,7 +1002,10 @@ export default function Chatbox({
                     <p className="text-xs text-slate-600 mt-1">İlk mesajı göndererek başlayın!</p>
                   </div>
                 ) : (
-                  activeMessages.map((m, index) => {
+                  <>
+                    {/* WhatsApp Standardı: Mesajlar ekranı doldurmadığında tabana sabitleyen esnek boşluk */}
+                    <div className="flex-1 min-h-0" />
+                    {activeMessages.map((m, index) => {
                     const prevMsg = index > 0 ? activeMessages[index - 1] : null;
                     const currentTimestamp = m.sent_at || m.created_at;
                     const prevTimestamp = prevMsg?.sent_at || prevMsg?.created_at;
@@ -1033,7 +1045,8 @@ export default function Chatbox({
                       </div>
                     );
                   })
-                )}
+                </>
+              )}
                 <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "none" }} />
               </div>
             </div>
@@ -1141,10 +1154,22 @@ export default function Chatbox({
                         onFocus={() => {
                           setIsInputFocused(true);
                           isNearBottomRef.current = true;
-                          scrollToBottom("auto");
-                          setTimeout(() => scrollToBottom("auto"), 50);
-                          setTimeout(() => scrollToBottom("auto"), 150);
-                          setTimeout(() => scrollToBottom("auto"), 350);
+                          const ensureBottomAndNoWindowScroll = () => {
+                            if (typeof window !== "undefined") {
+                              if (window.scrollY !== 0 || window.scrollX !== 0) {
+                                window.scrollTo(0, 0);
+                              }
+                              if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+                              if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+                            }
+                            scrollToBottom("auto");
+                          };
+
+                          ensureBottomAndNoWindowScroll();
+                          setTimeout(ensureBottomAndNoWindowScroll, 50);
+                          setTimeout(ensureBottomAndNoWindowScroll, 150);
+                          setTimeout(ensureBottomAndNoWindowScroll, 350);
+                          setTimeout(ensureBottomAndNoWindowScroll, 500);
                         }}
                         onBlur={() => {
                           setIsInputFocused(false);
