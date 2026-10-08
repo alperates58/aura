@@ -3,17 +3,22 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
-import { Lock, ShieldAlert, Delete, ArrowRight, ShieldCheck, KeyRound } from "lucide-react";
+import { Lock, ShieldAlert, ArrowRight, ShieldCheck, KeyRound } from "lucide-react";
 
 export default function PinLockModal() {
   const { isAppLocked, hasAppPin, unlockApp, setAppPin, logout, user } = useAuthStore();
   const securitySettings = useSettingsStore((s) => s.settings?.security_settings);
 
+  const [isMounted, setIsMounted] = useState(false);
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [isConfirming, setIsConfirming] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Acil kaçış fonksiyonu
   const triggerEmergencyEscape = useCallback(() => {
@@ -120,7 +125,7 @@ export default function PinLockModal() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isAppLocked, pin, confirmPin, isConfirming, hasAppPin]);
 
-  if (!isAppLocked) return null;
+  if (!isMounted || !isAppLocked) return null;
 
   const currentDisplayPin = !hasAppPin && isConfirming ? confirmPin : pin;
 
@@ -219,7 +224,11 @@ export default function PinLockModal() {
           className="h-14 rounded-2xl bg-slate-900/50 hover:bg-slate-800 active:bg-slate-700/50 border border-slate-800/80 text-slate-400 hover:text-white transition-all flex items-center justify-center cursor-pointer"
           title="Sil"
         >
-          <Delete className="w-5 h-5" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+            <line x1="18" y1="9" x2="12" y2="15" />
+            <line x1="12" y1="9" x2="18" y2="15" />
+          </svg>
         </button>
       </div>
     </div>

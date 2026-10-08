@@ -75,7 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
   isAppLocked: false,
-  hasAppPin: typeof window !== "undefined" ? !!localStorage.getItem("aura_app_pin_hash") : false,
+  hasAppPin: false,
 
   checkAuth: async () => {
     try {
@@ -85,7 +85,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (user?.privacy_settings?.sound_alerts !== undefined) {
         soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
       }
-      set({ user, isAuthenticated: true, isLoading: false });
+      let hasPin = false;
+      if (typeof window !== "undefined") {
+        try {
+          hasPin = !!localStorage.getItem("aura_app_pin_hash");
+        } catch (_) {}
+      }
+      set({ user, isAuthenticated: true, isLoading: false, hasAppPin: hasPin });
       return true;
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false });
@@ -99,7 +105,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user?.privacy_settings?.sound_alerts !== undefined) {
       soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
     }
-    set({ user, isAuthenticated: true, isLoading: false });
+    let hasPin = false;
+    if (typeof window !== "undefined") {
+      try {
+        hasPin = !!localStorage.getItem("aura_app_pin_hash");
+      } catch (_) {}
+    }
+    set({ user, isAuthenticated: true, isLoading: false, hasAppPin: hasPin });
     return res.data;
   },
 
@@ -246,7 +258,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   unlockApp: (pin: string) => {
     if (typeof window === "undefined") return false;
-    const stored = localStorage.getItem("aura_app_pin_hash");
+    let stored = null;
+    try {
+      stored = localStorage.getItem("aura_app_pin_hash");
+    } catch (_) {}
     if (!stored) {
       // PIN henüz kurulmamışsa serbest bırak
       set({ isAppLocked: false });

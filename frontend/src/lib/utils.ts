@@ -188,34 +188,39 @@ export function focusChatInput(delayMs: number = 0) {
  * Hem geçmiş hem de canlı mesajlarda sansür sağlar.
  * Örnek: "elma" -> "e***"
  */
-export function maskBannedWords(text?: string | null, bannedWords?: string[]): string {
-  if (!text) return "";
-  if (!bannedWords || bannedWords.length === 0) return text;
+export function maskBannedWords(text?: string | null, bannedWords?: any): string {
+  if (!text || typeof text !== "string") return "";
+  if (!bannedWords || !Array.isArray(bannedWords) || bannedWords.length === 0) return text;
 
   let result = text;
-  for (const word of bannedWords) {
-    const trimmed = word.trim();
+  for (const item of bannedWords) {
+    if (!item || typeof item !== "string") continue;
+    const trimmed = item.trim();
     if (!trimmed) continue;
 
-    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     try {
-      const regex = new RegExp(`(?<=^|[\\s.,!?;:()"'«»<>\\[\\]{}/-])${escaped}(?=$|[\\s.,!?;:()"'«»<>\\[\\]{}/-])`, "gi");
-      result = result.replace(regex, (match) => {
-        const chars = Array.from(match);
-        if (chars.length <= 1) return "*";
-        return chars[0] + "*".repeat(chars.length - 1);
+      const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Kelime sınırları veya noktalama işaretleri ile yakalama grubu (Safari/eski tarayıcılarda lookbehind çökmesini önler)
+      const regex = new RegExp(`(^|[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_])(${escaped})([^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_]|$)`, "gi");
+      result = result.replace(regex, (_match, before, wordMatch, after) => {
+        const chars = Array.from(wordMatch as string);
+        const masked = chars.length <= 1 ? "*" : chars[0] + "*".repeat(chars.length - 1);
+        return (before || "") + masked + (after || "");
       });
     } catch {
       // Basit regex fallback
-      const simpleRegex = new RegExp(escaped, "gi");
-      result = result.replace(simpleRegex, (match) => {
-        const chars = Array.from(match);
-        if (chars.length <= 1) return "*";
-        return chars[0] + "*".repeat(chars.length - 1);
-      });
+      try {
+        const simpleRegex = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+        result = result.replace(simpleRegex, (match) => {
+          const chars = Array.from(match);
+          if (chars.length <= 1) return "*";
+          return chars[0] + "*".repeat(chars.length - 1);
+        });
+      } catch (_) {}
     }
   }
 
   return result;
 }
+
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -36,8 +37,14 @@ import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
-import PinLockModal from "@/components/security/PinLockModal";
-import GhostPanicTouch from "@/components/security/GhostPanicTouch";
+
+const PinLockModal = dynamic(() => import("@/components/security/PinLockModal"), {
+  ssr: false,
+});
+const GhostPanicTouch = dynamic(() => import("@/components/security/GhostPanicTouch"), {
+  ssr: false,
+});
+
 import EmptyChatState from "@/components/chat/EmptyChatState";
 import MessageSelectionBar from "@/components/chat/MessageSelectionBar";
 import InChatSearchBar from "@/components/chat/InChatSearchBar";

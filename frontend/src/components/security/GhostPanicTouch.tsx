@@ -9,21 +9,8 @@ export default function GhostPanicTouch() {
   const { user, lockApp, killSessions, logout } = useAuthStore();
   const securitySettings = useSettingsStore((s) => s.settings?.security_settings);
 
-  // Buton konumu ve sürükleme durumu
-  const [position, setPosition] = useState<{ x: number; y: number }>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("aura_ghost_touch_pos");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-            return parsed;
-          }
-        }
-      } catch (_) {}
-    }
-    return { x: -1, y: -1 };
-  });
+  // Buton konumu ve sürükleme durumu (SSR uyuşmazlığını önlemek için başlangıçta -1, -1)
+  const [position, setPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
 
   const [isMounted, setIsMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -66,10 +53,23 @@ export default function GhostPanicTouch() {
       return { x: snappedX, y: clampedY };
     };
 
-    if (position.x === -1 || position.y === -1) {
-      const initial = snapToEdge(window.innerWidth - 60, window.innerHeight - 130);
-      setPosition(initial);
+    let startPos = { x: -1, y: -1 };
+    try {
+      const saved = localStorage.getItem("aura_ghost_touch_pos");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+          startPos = parsed;
+        }
+      }
+    } catch (_) {}
+
+    if (startPos.x === -1 || startPos.y === -1) {
+      startPos = snapToEdge(window.innerWidth - 60, window.innerHeight - 130);
+    } else {
+      startPos = snapToEdge(startPos.x, startPos.y);
     }
+    setPosition(startPos);
 
     const handleResize = () => {
       setPosition((prev) => snapToEdge(prev.x, prev.y));
