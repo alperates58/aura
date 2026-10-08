@@ -16,6 +16,7 @@ import { User } from "@/store/useAuthStore";
 import { useSettingsStore, applyThemeToDocument } from "@/store/useSettingsStore";
 import { getContrastTextColor, getMutedTextColor, maskBannedWords } from "@/lib/utils";
 import {
+  Shield,
   ShieldAlert,
   ArrowLeft,
   Users,

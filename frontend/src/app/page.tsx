@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -480,12 +483,11 @@ export default function HomePage() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
 
-  // Akıllı ve güvenli en alta kaydırma fonksiyonu (Sadece mesaj konteynerini kaydırır, tarayıcı penceresini/document'ı kaydırmaz)
+  // Akıllı ve güvenli en alta kaydırma fonksiyonu (Sadece mesaj konteynerini kaydırır, pencereyi/document'ı ASLA sarsmaz)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     if (messagesContainerRef.current) {
       const el = messagesContainerRef.current;
       const isHidden = typeof document !== "undefined" && document.hidden;
-      // Ekran kilitli veya sekme arka plandaysa rAF durduğu için kesinlikle doğrudan ve "auto" kaydır
       if (isHidden || behavior === "auto") {
         el.scrollTop = el.scrollHeight;
       } else {
@@ -495,42 +497,17 @@ export default function HomePage() {
         });
       }
     }
-    if (messagesEndRef.current && behavior === "auto") {
-      messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
-    }
   }, []);
 
-  // loadMessages tamamlandığında veya arka plandan dönüldüğünde son mesaja odaklanma sinyali
+  // loadMessages tamamlandığında son mesaja odaklanma sinyali (Sessiz ve titreşimsiz)
   useEffect(() => {
     const handleSnapBottom = (e: Event) => {
       const customEvt = e as CustomEvent;
       if (!customEvt.detail?.convId || customEvt.detail.convId === activeConversationId) {
-        if (activeConversationId) {
-          initialScrolledConvsRef.current[activeConversationId] = false;
+        const el = messagesContainerRef.current;
+        if (el && !hasUserInteractedRef.current) {
+          el.scrollTop = el.scrollHeight;
         }
-        const snap = () => {
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-          }
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
-          }
-        };
-        snap();
-        requestAnimationFrame(snap);
-        const t1 = setTimeout(snap, 30);
-        const t2 = setTimeout(snap, 100);
-        const t3 = setTimeout(() => {
-          snap();
-          if (activeConversationId) {
-            initialScrolledConvsRef.current[activeConversationId] = true;
-          }
-        }, 250);
-        return () => {
-          clearTimeout(t1);
-          clearTimeout(t2);
-          clearTimeout(t3);
-        };
       }
     };
     window.addEventListener("aura:snap_bottom", handleSnapBottom);
@@ -649,46 +626,23 @@ export default function HomePage() {
     }
   }, [replyingTo]);
 
-  // 3. Mesaj listesi otomatik en alta kaydırma
-  useEffect(() => {
+  // 3. Mesaj listesi otomatik en alta kaydırma (useIsomorphicLayoutEffect ile ekran boyanmadan önce sessizce tabana yerleşir)
+  useIsomorphicLayoutEffect(() => {
     if (!activeConversationId) return;
-    const currentMsgs = messages[activeConversationId] || [];
+    const currentMsgs = messages[activeConversationId];
 
     // Mesajlar henüz yüklenmediyse bekle
-    if (currentMsgs.length === 0) return;
+    if (!currentMsgs || currentMsgs.length === 0) return;
 
-    // A. İlk açılışta veya konuşma değiştirildiğinde: ANINDA ve KESİN en alta sabitle
+    // A. İlk açılışta veya konuşma değiştirildiğinde: ANINDA ve SESSİZCE en alta sabitle
     if (!initialScrolledConvsRef.current[activeConversationId]) {
-      const snapToBottom = () => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-        }
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
-        }
-      };
-
-      // İlk açılışta kesinlikle 'auto' (anlık) tabana yerleş, asla animasyonla kaydırma
-      snapToBottom();
-      const r1 = requestAnimationFrame(snapToBottom);
-      const t1 = setTimeout(snapToBottom, 30);
-      const t2 = setTimeout(snapToBottom, 100);
-      const t3 = setTimeout(() => {
-        snapToBottom();
-        // Artık kullanıcı en alta indi, bundan sonra onScroll eski mesajları çekebilir
-        if (activeConversationId) {
-          initialScrolledConvsRef.current[activeConversationId] = true;
-        }
-      }, 250);
-
+      const el = messagesContainerRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+        initialScrolledConvsRef.current[activeConversationId] = true;
+      }
       prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
-
-      return () => {
-        cancelAnimationFrame(r1);
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+      return;
     }
 
     // B. Eğer eski mesajlar yukarı eklendiyse (sayfalama / pagination): alta kaydırma!
@@ -698,42 +652,26 @@ export default function HomePage() {
       return;
     }
 
-    // C. Yeni bir mesaj geldiğinde veya soket bildiriminden sonra geçmiş yüklendiğinde
+    // C. Yeni bir mesaj geldiğinde veya tek mesajlık bildirimden sonra tam geçmiş yüklendiğinde
     const prevCount = prevMessagesCountRef.current[activeConversationId] || 0;
     prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
 
     if (currentMsgs.length > prevCount) {
       // Eğer konuşma soketten gelen tek bir bildirim mesajından (örn. Aura Güvenlik)
-      // tam geçmişe (loadMessages tamamlandığında çoklu mesaja) sıçradıysa: kesinlikle tabana sabitle
+      // tam geçmişe sıçradıysa: doğrudan tabana yerleş
       if (prevCount <= 1 && currentMsgs.length > 1) {
-        const snap = () => {
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-          }
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
-          }
-        };
-        snap();
-        requestAnimationFrame(snap);
-        const t1 = setTimeout(snap, 40);
-        const t2 = setTimeout(snap, 120);
-        const t3 = setTimeout(() => {
-          snap();
-          if (activeConversationId) {
-            initialScrolledConvsRef.current[activeConversationId] = true;
-          }
-        }, 300);
-        return () => {
-          clearTimeout(t1);
-          clearTimeout(t2);
-          clearTimeout(t3);
-        };
+        const el = messagesContainerRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+        return;
       }
 
       const isHidden = typeof document !== "undefined" && document.hidden;
       if (isHidden) {
-        scrollToBottom("auto");
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
       } else {
         const el = messagesContainerRef.current;
         const isNearBottom = el
@@ -743,9 +681,7 @@ export default function HomePage() {
         const isMine = lastMsg?.is_mine;
 
         if (isNearBottom || isMine) {
-          scrollToBottom("smooth");
-          const timer = setTimeout(() => scrollToBottom("auto"), 100);
-          return () => clearTimeout(timer);
+          scrollToBottom(isMine ? "smooth" : "auto");
         }
       }
     }
@@ -1222,6 +1158,7 @@ export default function HomePage() {
   }, [searchQuery]);
 
   const activeConv = conversations.find((c) => c.id === activeConversationId);
+  const isMessagesLoaded = Boolean(activeConversationId && messages[activeConversationId] !== undefined);
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
   const isOtherTyping = activeConversationId ? typingMap[activeConversationId] : false;
 
@@ -2361,7 +2298,11 @@ export default function HomePage() {
                   <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
-              {activeMessages.length === 0 ? (
+              {!isMessagesLoaded ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin opacity-40" />
+                </div>
+              ) : activeMessages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-slate-500">
                   <Sparkles className="w-8 h-8 text-grupo-accent/50 mb-2" />
                   <p className="text-sm font-medium">Bu sohbette henüz mesaj yok.</p>
@@ -2389,7 +2330,7 @@ export default function HomePage() {
                           </span>
                         </div>
                       )}
-                      <div id={`msg-${m.id}`} className="transition-all duration-300">
+                      <div id={`msg-${m.id}`}>
                         <MessageBubble
                           message={m}
                           searchQuery={chatSearchQuery}
