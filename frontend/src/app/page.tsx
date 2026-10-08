@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-
-const useIsomorphicLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useAuthStore } from "@/store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import { useSocketStore } from "@/store/useSocketStore";
@@ -475,58 +472,24 @@ export default function HomePage() {
   }, []);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const initialScrolledConvsRef = useRef<Record<string, boolean>>({});
-  const prevMessagesCountRef = useRef<Record<string, number>>({});
-  const isPrependingOlderRef = useRef(false);
-  const hasUserInteractedRef = useRef<boolean>(false);
+  const isNearBottomRef = useRef<boolean>(true);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
 
-  // Akıllı ve güvenli en alta kaydırma fonksiyonu (Sadece mesaj konteynerini kaydırır, pencereyi/document'ı ASLA sarsmaz)
+  // WhatsApp Standardı: En alta kaydırma fonksiyonu (Sadece mesaj kutusunu kaydırır)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    if (messagesContainerRef.current) {
-      const el = messagesContainerRef.current;
-      const isHidden = typeof document !== "undefined" && document.hidden;
-      if (isHidden || behavior === "auto") {
-        el.scrollTop = el.scrollHeight;
-      } else {
-        el.scrollTo({
-          top: el.scrollHeight,
-          behavior: "smooth",
-        });
-      }
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    isNearBottomRef.current = true;
+    if (behavior === "auto") {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
     }
   }, []);
-
-  // loadMessages tamamlandığında son mesaja odaklanma sinyali (Sessiz ve titreşimsiz)
-  useEffect(() => {
-    const handleSnapBottom = (e: Event) => {
-      const customEvt = e as CustomEvent;
-      if (!customEvt.detail?.convId || customEvt.detail.convId === activeConversationId) {
-        if (!hasUserInteractedRef.current) {
-          const snap = () => {
-            const el = messagesContainerRef.current;
-            if (el && !hasUserInteractedRef.current) {
-              el.scrollTop = el.scrollHeight;
-            }
-          };
-          snap();
-          requestAnimationFrame(snap);
-          const t1 = setTimeout(snap, 50);
-          const t2 = setTimeout(snap, 150);
-          const t3 = setTimeout(snap, 300);
-          return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-            clearTimeout(t3);
-          };
-        }
-      }
-    };
-    window.addEventListener("aura:snap_bottom", handleSnapBottom);
-    return () => window.removeEventListener("aura:snap_bottom", handleSnapBottom);
-  }, [activeConversationId]);
 
   useEffect(() => {
     updateViewportMetrics();
@@ -621,112 +584,55 @@ export default function HomePage() {
   }, [isAuthenticated]);
 
   // Konuşma değiştiğinde bayrakları sıfırla
+  // Konuşma değiştiğinde bayrakları ve input alanını sıfırla
   useEffect(() => {
     setIsEmojiPickerOpen(false);
     if (!activeConversationId) return;
-    initialScrolledConvsRef.current[activeConversationId] = false;
-    isPrependingOlderRef.current = false;
-    hasUserInteractedRef.current = false;
+    isNearBottomRef.current = true;
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.overflowY = "hidden";
     }
   }, [activeConversationId]);
 
-  // 2c. Yanıtla seçildiğinde mesaj yazma alanına otomatik odaklan (özellikle PC'de)
+  // 2c. Yanıtla seçildiğinde mesaj yazma alanına otomatik odaklan
   useEffect(() => {
     if (replyingTo) {
       focusChatInput();
     }
   }, [replyingTo]);
 
-  // 3. Mesaj listesi otomatik en alta kaydırma (useIsomorphicLayoutEffect ile ekran boyanmadan önce sessizce tabana yerleşir)
-  useIsomorphicLayoutEffect(() => {
+  // 3. WhatsApp Standardı: Sohbet açıldığında tabana yerleş ve içerik büyüdükçe ResizeObserver ile tabanda kal
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el || !activeConversationId) return;
+
+    // Yeni sohbete girildiğinde doğrudan en altta başla
+    isNearBottomRef.current = true;
+    el.scrollTop = el.scrollHeight;
+
+    // Mesajlar, avatarlar, görseller geldikçe kullanıcı yukarı çıkmadıysa tabanda tut
+    const ro = new ResizeObserver(() => {
+      if (isNearBottomRef.current && el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activeConversationId]);
+
+  // 4. Yeni mesaj geldiğinde veya gönderildiğinde
+  useEffect(() => {
     if (!activeConversationId) return;
     const currentMsgs = messages[activeConversationId];
-
-    // Mesajlar henüz yüklenmediyse bekle
     if (!currentMsgs || currentMsgs.length === 0) return;
 
-    // A. İlk açılışta veya konuşma değiştirildiğinde: ANINDA ve SESSİZCE en alta sabitle
-    if (!initialScrolledConvsRef.current[activeConversationId]) {
-      const snapToBottom = () => {
-        const el = messagesContainerRef.current;
-        if (el && !hasUserInteractedRef.current) {
-          el.scrollTop = el.scrollHeight;
-        }
-      };
-
-      // İlk anda ve render genişledikçe sessizce tabanda kal (Asla scrollIntoView kullanma)
-      snapToBottom();
-      const r1 = requestAnimationFrame(snapToBottom);
-      const t1 = setTimeout(snapToBottom, 40);
-      const t2 = setTimeout(snapToBottom, 120);
-      const t3 = setTimeout(() => {
-        snapToBottom();
-        if (activeConversationId) {
-          initialScrolledConvsRef.current[activeConversationId] = true;
-        }
-      }, 300);
-
-      prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
-
-      return () => {
-        cancelAnimationFrame(r1);
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
-    }
-
-    // B. Eğer eski mesajlar yukarı eklendiyse (sayfalama / pagination): alta kaydırma!
-    if (isPrependingOlderRef.current) {
-      isPrependingOlderRef.current = false;
-      prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
-      return;
-    }
-
-    // C. Yeni bir mesaj geldiğinde veya tek mesajlık bildirimden sonra tam geçmiş yüklendiğinde
-    const prevCount = prevMessagesCountRef.current[activeConversationId] || 0;
-    prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
-
-    if (currentMsgs.length > prevCount) {
-      // Eğer konuşma soketten gelen tek bir bildirim mesajından (örn. Aura Güvenlik)
-      // veya ilk yüklemeden tam geçmişe sıçradıysa: doğrudan tabana yerleş
-      if (prevCount <= 1 || !initialScrolledConvsRef.current[activeConversationId]) {
-        const snap = () => {
-          const el = messagesContainerRef.current;
-          if (el && !hasUserInteractedRef.current) {
-            el.scrollTop = el.scrollHeight;
-          }
-        };
-        snap();
-        requestAnimationFrame(snap);
-        const t1 = setTimeout(snap, 50);
-        const t2 = setTimeout(snap, 150);
-        return () => {
-          clearTimeout(t1);
-          clearTimeout(t2);
-        };
-      }
-
-      const isHidden = typeof document !== "undefined" && document.hidden;
-      if (isHidden) {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-        }
-      } else {
-        const el = messagesContainerRef.current;
-        const isNearBottom = el
-          ? el.scrollHeight - el.scrollTop - el.clientHeight < 350
-          : true;
-        const lastMsg = currentMsgs[currentMsgs.length - 1];
-        const isMine = lastMsg?.is_mine;
-
-        if (isNearBottom || isMine) {
-          scrollToBottom(isMine ? "smooth" : "auto");
-        }
-      }
+    const lastMsg = currentMsgs[currentMsgs.length - 1];
+    if (lastMsg?.is_mine) {
+      scrollToBottom("smooth");
+    } else if (isNearBottomRef.current) {
+      scrollToBottom("auto");
     }
   }, [messages, activeConversationId, scrollToBottom]);
 
@@ -2287,52 +2193,34 @@ export default function HomePage() {
               {/* Mesaj Akışı */}
               <div
                 ref={messagesContainerRef}
-                onTouchStart={() => {
-                  hasUserInteractedRef.current = true;
-                }}
-                onWheel={() => {
-                  hasUserInteractedRef.current = true;
-                }}
-                onMouseDown={() => {
-                  hasUserInteractedRef.current = true;
-                }}
-                onKeyDown={() => {
-                  hasUserInteractedRef.current = true;
-                }}
                 onScroll={async (e) => {
                   const el = e.currentTarget;
                   if (!activeConversationId) return;
 
-                  // Kullanıcı kasıtlı olarak scroll/dokunma hareketi yapmadıysa (örn. ilk mount/sayfa render'ı) ASLA sayfalama yapma
-                  if (!hasUserInteractedRef.current) {
-                    return;
-                  }
+                  // Kullanıcı tabana 150px'ten yakın mı kontrol et
+                  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+                  isNearBottomRef.current = distFromBottom < 150;
 
-                  // Konuşma henüz ilk kez tabana kaydırılmadıysa ASLA yukarı kaydırma sayfalama tetikleme
-                  if (!initialScrolledConvsRef.current[activeConversationId]) {
-                    return;
+                  // Yukarı kaydırınca eski mesajları yükle (Pagination)
+                  if (
+                    el.scrollTop < 60 &&
+                    !loadingOlderMessages &&
+                    hasMoreMessages[activeConversationId] !== false &&
+                    el.scrollHeight > el.clientHeight
+                  ) {
+                    const prevScrollHeight = el.scrollHeight;
+                    const prevScrollTop = el.scrollTop;
+                    const loaded = await loadOlderMessages(activeConversationId);
+                    if (loaded) {
+                      requestAnimationFrame(() => {
+                        if (messagesContainerRef.current) {
+                          const diff = messagesContainerRef.current.scrollHeight - prevScrollHeight;
+                          messagesContainerRef.current.scrollTop = prevScrollTop + diff;
+                        }
+                      });
+                    }
                   }
-
-                if (
-                  el.scrollTop < 60 &&
-                  !loadingOlderMessages &&
-                  hasMoreMessages[activeConversationId] !== false &&
-                  el.scrollHeight > el.clientHeight
-                ) {
-                  const prevScrollHeight = el.scrollHeight;
-                  const prevScrollTop = el.scrollTop;
-                  isPrependingOlderRef.current = true;
-                  const loaded = await loadOlderMessages(activeConversationId);
-                  if (loaded) {
-                    requestAnimationFrame(() => {
-                      if (messagesContainerRef.current) {
-                        const diff = messagesContainerRef.current.scrollHeight - prevScrollHeight;
-                        messagesContainerRef.current.scrollTop = prevScrollTop + diff;
-                      }
-                    });
-                  }
-                }
-              }}
+                }}
               className="flex-1 min-h-0 p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
               style={{ scrollBehavior: "auto", overflowAnchor: "none" }}
             >
@@ -2392,7 +2280,7 @@ export default function HomePage() {
                   );
                 })
               )}
-              <div ref={messagesEndRef} className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
+              <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "auto" }} />
             </div>
             </div>
 

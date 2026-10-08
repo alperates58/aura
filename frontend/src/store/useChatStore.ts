@@ -390,11 +390,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         };
       });
-
-      // Aktif açık sohbete ait mesajlar yüklendiyse, arayüzün en alta (son mesaja) anında odaklanması için sinyal ver
-      if (typeof window !== "undefined" && get().activeConversationId === convId) {
-        window.dispatchEvent(new CustomEvent("aura:snap_bottom", { detail: { convId } }));
-      }
     } catch (err) {
       console.error("Mesajlar yüklenemedi:", err);
     }
