@@ -169,6 +169,7 @@ func (r *SettingsRepository) GetChatSettings(ctx context.Context) models.ChatSet
 		DisappearingMessagesDefault: 0,
 		EnableLinkPreviews:          true,
 		EnableSocialEmbeds:          true,
+		BannedWords:                 []string{},
 	}
 
 	raw, err := r.GetSetting(ctx, "chat_settings")
@@ -179,6 +180,9 @@ func (r *SettingsRepository) GetChatSettings(ctx context.Context) models.ChatSet
 	res := defaults
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return defaults
+	}
+	if res.BannedWords == nil {
+		res.BannedWords = []string{}
 	}
 	if res.EditTimeLimitMinutes <= 0 {
 		res.EditTimeLimitMinutes = 15

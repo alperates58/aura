@@ -38,7 +38,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import CodeSnippetBox from "./CodeSnippetBox";
 import LocationMessageCard from "./LocationMessageCard";
 import { triggerReactionConfetti, isSpecialConfettiEmoji, getPrimaryConfettiEmoji } from "@/lib/confetti";
-import { focusChatInput } from "@/lib/utils";
+import { focusChatInput, maskBannedWords } from "@/lib/utils";
 
 interface Props {
   message: Message;
@@ -77,6 +77,10 @@ export default function MessageBubble({
   const { user } = useAuthStore();
   const chatSettings = useSettingsStore((state) => state.settings?.chat_settings);
   const isSelected = selectedMessageIds.includes(message.id);
+
+  const maskedContent = useMemo(() => {
+    return maskBannedWords(message.content, chatSettings?.banned_words);
+  }, [message.content, chatSettings?.banned_words]);
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
   const targetRepliedMessage =
@@ -1016,7 +1020,7 @@ export default function MessageBubble({
                   </div>
                 ) : (
                   <div className="whitespace-pre-wrap break-words leading-relaxed">
-                    {renderFormattedContent(message.content)}
+                    {renderFormattedContent(maskedContent)}
                     {/* WhatsApp Tarzı Metin Sonu / Sağ Alt Zaman Damgası */}
                     <span
                       style={{

@@ -3,12 +3,17 @@ package transcoder
 import (
 	"bytes"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	"image/png"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -39,10 +44,12 @@ func ConvertAudioToMP3(inputPath string) (string, float64, error) {
 	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_audio_%s.mp3", uuid.New().String()))
 
 	// -y: Üzerine yaz, -i: Girdi, -vn: Video yok, -acodec libmp3lame: MP3 codec,
+	// -map_metadata -1: Tüm EXIF ve metadata bilgilerini temizle
 	// -b:a 128k: 128kbps ses kalitesi, -ar 44100: 44.1kHz, -ac 2: Stereo
 	cmd := exec.Command("ffmpeg",
 		"-y",
 		"-i", inputPath,
+		"-map_metadata", "-1",
 		"-vn",
 		"-acodec", "libmp3lame",
 		"-b:a", "128k",
@@ -67,8 +74,8 @@ func ConvertAudioToMP3(inputPath string) (string, float64, error) {
 
 // ConvertVideoToUniversalMP4 gelen videoyu (WebM, MOV, AVI, MKV vb.)
 // iOS WebKit ve Android Chrome'un sorunsuz oynatabileceği H.264 Baseline + AAC MP4 formatına dönüştürür.
+// -map_metadata -1 ile GPS koordinatları, cihaz seri numaraları ve çekim konumu tamamen silinir.
 // -movflags +faststart ile 'moov' atomu dosyanın başına alınır (iOS anında akış için zorunludur).
-// Eşzamanlı işlemlerde çakışma olmaması için benzersiz UUID temp dosyası kullanılır.
 func ConvertVideoToUniversalMP4(inputPath string) (string, error) {
 	if !IsAvailable() {
 		return "", fmt.Errorf("ffmpeg sistemde yüklü değil")
@@ -77,10 +84,11 @@ func ConvertVideoToUniversalMP4(inputPath string) (string, error) {
 	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_video_%s.mp4", uuid.New().String()))
 
 	// Eğer dosya zaten mp4 ise ve sadece streamable (faststart) yapılması gerekiyorsa
-	// önce hızlı remuxing dene:
+	// önce hızlı remuxing dene (metadata temizleme ile):
 	remuxCmd := exec.Command("ffmpeg",
 		"-y",
 		"-i", inputPath,
+		"-map_metadata", "-1",
 		"-c", "copy",
 		"-movflags", "+faststart",
 		outputPath,
@@ -90,10 +98,11 @@ func ConvertVideoToUniversalMP4(inputPath string) (string, error) {
 		return outputPath, nil
 	}
 
-	// Tam transcode: H.264 Baseline + yuv420p (iOS WebKit zorunluluğu) + AAC
+	// Tam transcode: H.264 Baseline + yuv420p (iOS WebKit zorunluluğu) + AAC + Metadata temizliği
 	cmd := exec.Command("ffmpeg",
 		"-y",
 		"-i", inputPath,
+		"-map_metadata", "-1",
 		"-c:v", "libx264",
 		"-profile:v", "baseline",
 		"-level", "3.0",
@@ -119,7 +128,7 @@ func ConvertVideoToUniversalMP4(inputPath string) (string, error) {
 	return outputPath, nil
 }
 
-// ConvertImageToJPEG iOS HEIC/HEIF veya desteklenmeyen formatları evrensel JPEG'e çevirir.
+// ConvertImageToJPEG iOS HEIC/HEIF veya desteklenmeyen formatları evrensel JPEG'e çevirir ve metadata'yı siler.
 func ConvertImageToJPEG(inputPath string) (string, error) {
 	if !IsAvailable() {
 		return "", fmt.Errorf("ffmpeg sistemde yüklü değil")
@@ -130,6 +139,7 @@ func ConvertImageToJPEG(inputPath string) (string, error) {
 	cmd := exec.Command("ffmpeg",
 		"-y",
 		"-i", inputPath,
+		"-map_metadata", "-1",
 		"-frames:v", "1",
 		"-q:v", "2",
 		outputPath,
@@ -141,6 +151,65 @@ func ConvertImageToJPEG(inputPath string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(outputPath)
 		return "", fmt.Errorf("görsel jpeg formatına dönüştürülemedi: %w (stderr: %s)", err, stderr.String())
+	}
+
+	return outputPath, nil
+}
+
+// StripImageMetadata fotoğraf dosyalarındaki GPS konumu, kamera modeli, lens ve EXIF verilerini temizler.
+// FFmpeg varsa kayıpsız temizler, yoksa Go standart görüntü motoruyla re-encode ederek sıfırlar.
+func StripImageMetadata(inputPath string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(inputPath))
+	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_clean_%s%s", uuid.New().String(), ext))
+
+	if IsAvailable() {
+		cmd := exec.Command("ffmpeg",
+			"-y",
+			"-i", inputPath,
+			"-map_metadata", "-1",
+			"-c", "copy",
+			outputPath,
+		)
+		if err := cmd.Run(); err == nil {
+			return outputPath, nil
+		}
+	}
+
+	// Go Fallback: image decode & encode (standart Go encoder EXIF başlığı yazmaz, veriyi sıfırlar)
+	return stripImageMetadataGo(inputPath, outputPath, ext)
+}
+
+func stripImageMetadataGo(inputPath, outputPath, ext string) (string, error) {
+	f, err := os.Open(inputPath)
+	if err != nil {
+		return inputPath, err
+	}
+	defer f.Close()
+
+	img, format, err := image.Decode(f)
+	if err != nil {
+		// Desteklenmeyen veya ham dosya ise orijinali döndür
+		return inputPath, nil
+	}
+
+	outF, err := os.Create(outputPath)
+	if err != nil {
+		return inputPath, err
+	}
+	defer outF.Close()
+
+	switch format {
+	case "jpeg":
+		err = jpeg.Encode(outF, img, &jpeg.Options{Quality: 92})
+	case "png":
+		err = png.Encode(outF, img)
+	default:
+		err = jpeg.Encode(outF, img, &jpeg.Options{Quality: 92})
+	}
+
+	if err != nil {
+		_ = os.Remove(outputPath)
+		return inputPath, nil
 	}
 
 	return outputPath, nil

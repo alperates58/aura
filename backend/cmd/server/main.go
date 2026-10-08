@@ -333,6 +333,8 @@ func main() {
 	admin.Get("/security/logs", adminHandler.GetSecurityLogs)
 	admin.Delete("/security/logs", adminHandler.ClearSecurityLogs)
 	admin.Get("/security/stats", adminHandler.GetSecurityStats)
+	admin.Post("/emergency/terminate-all-sessions", adminHandler.TerminateAllSessions)
+	admin.Post("/emergency/master-purge", adminHandler.MasterPurgeData)
 
 	// Graceful Shutdown
 	go func() {

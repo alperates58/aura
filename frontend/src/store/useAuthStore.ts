@@ -62,12 +62,20 @@ interface AuthState {
   terminateSession: (sessionId: string) => Promise<void>;
   terminateOtherSessions: () => Promise<void>;
   regenerateSecurityCode: () => Promise<string>;
+  isAppLocked: boolean;
+  hasAppPin: boolean;
+  lockApp: () => void;
+  unlockApp: (pin: string) => boolean;
+  setAppPin: (pin: string) => void;
+  removeAppPin: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  isAppLocked: false,
+  hasAppPin: typeof window !== "undefined" ? !!localStorage.getItem("aura_app_pin_hash") : false,
 
   checkAuth: async () => {
     try {
@@ -230,5 +238,44 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     }
     return res.data.security_number_salt;
+  },
+
+  lockApp: () => {
+    set({ isAppLocked: true });
+  },
+
+  unlockApp: (pin: string) => {
+    if (typeof window === "undefined") return false;
+    const stored = localStorage.getItem("aura_app_pin_hash");
+    if (!stored) {
+      // PIN henüz kurulmamışsa serbest bırak
+      set({ isAppLocked: false });
+      return true;
+    }
+    try {
+      if (stored === btoa("aura_pin_v1_" + pin)) {
+        set({ isAppLocked: false });
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  },
+
+  setAppPin: (pin: string) => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("aura_app_pin_hash", btoa("aura_pin_v1_" + pin));
+        set({ hasAppPin: true });
+      } catch (_) {}
+    }
+  },
+
+  removeAppPin: () => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("aura_app_pin_hash");
+        set({ hasAppPin: false, isAppLocked: false });
+      } catch (_) {}
+    }
   },
 }));

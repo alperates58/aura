@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { Conversation } from "@/store/useChatStore";
 import { useStoryStore } from "@/store/useStoryStore";
 import { resolveMediaUrl } from "@/lib/api";
-import { formatLastSeen } from "@/lib/utils";
+import { formatLastSeen, maskBannedWords } from "@/lib/utils";
+import { useSettingsStore } from "@/store/useSettingsStore";
 import { Trash2, Eraser, AlertCircle, MoreHorizontal } from "lucide-react";
 
 interface Props {
@@ -32,6 +33,7 @@ export default function ConversationListItem({
   const hasStory = !!userStoryGroup;
   const hasUnviewed = !!userStoryGroup?.has_unviewed;
   const isCloseFriends = !!userStoryGroup?.has_close_friends;
+  const bannedWords = useSettingsStore((state) => state.settings?.chat_settings?.banned_words);
 
   const [translateX, setTranslateX] = useState(0);
   const [isSwiped, setIsSwiped] = useState(false);
@@ -316,15 +318,15 @@ export default function ConversationListItem({
                   ) : conversation.last_message.message_type === "voice" ? (
                     "🎤 Sesli Mesaj"
                   ) : conversation.last_message.message_type === "image" ? (
-                    conversation.last_message.content ? `📷 ${conversation.last_message.content}` : "📷 Fotoğraf"
+                    conversation.last_message.content ? `📷 ${maskBannedWords(conversation.last_message.content, bannedWords)}` : "📷 Fotoğraf"
                   ) : conversation.last_message.message_type === "video" ? (
-                    conversation.last_message.content ? `🎥 ${conversation.last_message.content}` : "🎥 Video"
+                    conversation.last_message.content ? `🎥 ${maskBannedWords(conversation.last_message.content, bannedWords)}` : "🎥 Video"
                   ) : conversation.last_message.message_type === "file" ? (
-                    conversation.last_message.content ? `📄 ${conversation.last_message.content}` : "📄 Belge"
+                    conversation.last_message.content ? `📄 ${maskBannedWords(conversation.last_message.content, bannedWords)}` : "📄 Belge"
                   ) : conversation.last_message.message_type === "location" ? (
                     "📍 Konum"
                   ) : (
-                    conversation.last_message.content
+                    maskBannedWords(conversation.last_message.content, bannedWords)
                   )
                 ) : (
                   <span className="italic text-slate-600">Sohbeti başlatın</span>

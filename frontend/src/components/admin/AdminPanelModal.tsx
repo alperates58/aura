@@ -14,7 +14,7 @@ import {
 } from "@/lib/admin_api";
 import { User } from "@/store/useAuthStore";
 import { useSettingsStore, applyThemeToDocument } from "@/store/useSettingsStore";
-import { getContrastTextColor, getMutedTextColor } from "@/lib/utils";
+import { getContrastTextColor, getMutedTextColor, maskBannedWords } from "@/lib/utils";
 import {
   ShieldAlert,
   ArrowLeft,
@@ -265,6 +265,66 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     outgoingText === "auto"
       ? getContrastTextColor(outgoingBubble)
       : outgoingText;
+
+  // Emergency actions state
+  const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [emergencyPassword, setEmergencyPassword] = useState("");
+  const [purgeConfirmationText, setPurgeConfirmationText] = useState("");
+  const [isEmergencyLoading, setIsEmergencyLoading] = useState(false);
+  const [emergencyAlert, setEmergencyAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const handleTerminateAllSessions = async () => {
+    if (!emergencyPassword) {
+      setEmergencyAlert({ type: "error", message: "Lütfen yönetici şifrenizi girin." });
+      return;
+    }
+    setIsEmergencyLoading(true);
+    setEmergencyAlert(null);
+    try {
+      const res = await adminApi.terminateAllSessions(emergencyPassword);
+      setEmergencyAlert({ type: "success", message: res.message });
+      setShowTerminateModal(false);
+      setEmergencyPassword("");
+    } catch (err: any) {
+      setEmergencyAlert({
+        type: "error",
+        message: err.response?.data?.error || "Oturumlar kapatılamadı.",
+      });
+    } finally {
+      setIsEmergencyLoading(false);
+    }
+  };
+
+  const handleMasterPurge = async () => {
+    if (!emergencyPassword) {
+      setEmergencyAlert({ type: "error", message: "Lütfen yönetici şifrenizi girin." });
+      return;
+    }
+    if (purgeConfirmationText.trim() !== "HER ŞEYİ SİL") {
+      setEmergencyAlert({ type: "error", message: "Lütfen onay kutusuna tam olarak 'HER ŞEYİ SİL' yazın." });
+      return;
+    }
+    setIsEmergencyLoading(true);
+    setEmergencyAlert(null);
+    try {
+      const res = await adminApi.masterPurgeData(emergencyPassword, purgeConfirmationText.trim());
+      setEmergencyAlert({ type: "success", message: res.message });
+      setShowPurgeModal(false);
+      setEmergencyPassword("");
+      setPurgeConfirmationText("");
+      setTimeout(() => {
+        window.location.reload();
+      }, 2500);
+    } catch (err: any) {
+      setEmergencyAlert({
+        type: "error",
+        message: err.response?.data?.error || "Nükleer temizlik başarısız oldu.",
+      });
+    } finally {
+      setIsEmergencyLoading(false);
+    }
+  };
 
   // Handle initialTab changes when opening
   useEffect(() => {
@@ -717,6 +777,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       desc: "PostgreSQL, Redis, MinIO S3 ve sunucu yük durumu telemetrisi",
       icon: Activity,
       color: "from-green-600 to-emerald-600 text-green-300",
+    },
+    {
+      id: "emergency",
+      label: "Acil Durum & Nükleer Sıfırlama",
+      desc: "Herkesi siteden atma, mesaj geçmişini ve sohbet medyalarını kalıcı imha etme",
+      icon: AlertTriangle,
+      color: "from-rose-600 to-red-700 text-rose-300",
+      badge: "Kritik",
     },
   ];
 
@@ -2116,6 +2184,71 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       <span>Sohbet Kurallarını Kaydet</span>
                     </button>
                   </div>
+
+                  {/* YASAKLI KELİMELER FİLTRESİ */}
+                  <div className="p-4 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+                        <ShieldAlert className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold text-white">Yasaklı Kelimeler Filtresi (Banned Words)</h3>
+                        <p className="text-[10px] text-slate-400">Belirlenen kelimeler hem geçmiş hem de canlı yazılan tüm mesajlarda otomatik maskelenir (Örn: elma ➔ e***)</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">
+                        Yasaklı Kelimeler Listesi (Virgülle veya satırla ayırın)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={(settings.chat_settings.banned_words || []).join(", ")}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const words = raw
+                            .split(/[,;\n]+/)
+                            .map((w) => w.trim())
+                            .filter(Boolean);
+                          setSettings({
+                            ...settings,
+                            chat_settings: {
+                              ...settings.chat_settings,
+                              banned_words: words,
+                            },
+                          });
+                        }}
+                        placeholder="Örnek: elma, kumar, küfür1, gizlikelime"
+                        className="w-full bg-[#181B24] border border-[#292D38] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500/50 resize-none font-mono"
+                      />
+                    </div>
+
+                    {/* Canlı Sansür Test Alanı */}
+                    <div className="p-3 rounded-xl bg-[#181B24]/70 border border-[#292D38] space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Canlı Filtre Önizlemesi</span>
+                      <div className="text-xs text-slate-300">
+                        {settings.chat_settings.banned_words && settings.chat_settings.banned_words.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {settings.chat_settings.banned_words.map((w, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] font-mono">
+                                {w} ➔ {maskBannedWords(w, [w])}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">Henüz yasaklı kelime eklenmedi.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSaveSetting("chat_settings", settings.chat_settings)}
+                      className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Yasaklı Kelimeleri Kaydet</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2998,6 +3131,110 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </div>
               )}
 
+              {/* TAB 10: ACİL DURUM & NÜKLEER SIFIRLAMA */}
+              {activeTab === "emergency" && (
+                <div className="space-y-5 animate-in fade-in duration-200">
+                  {/* Bilgilendirme Kartı */}
+                  <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-white mb-1">Kritik Acil Durum & Veri Güvenliği Bölgesi</h3>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Bu alandaki işlemler geri döndürülemez güvenlik önlemleridir. Olası bir sızıntı, cihaz çalınması veya tehdit anında sistemi anında dondurmak veya sıfır iz bırakacak şekilde temizlemek için tasarlanmıştır.
+                      </p>
+                    </div>
+                  </div>
+
+                  {emergencyAlert && (
+                    <div
+                      className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                        emergencyAlert.type === "success"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                      }`}
+                    >
+                      {emergencyAlert.type === "success" ? (
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      )}
+                      <span>{emergencyAlert.message}</span>
+                    </div>
+                  )}
+
+                  {/* KART 1: TÜM OTURUMLARI DÜŞÜR (HERKESİ AT) */}
+                  <div className="p-5 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                        <Radio className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Tüm Kullanıcıları Siteden At (Oturumları Düşür)</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Hiçbir mesaj veya veriyi silmez; tüm aktif WebSocket bağlantılarını anında koparır, tüm token versiyonlarını artırır ve tüm cihazları (telefon, tablet, bilgisayar) login ekranına düşürür.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#222631] flex justify-end">
+                      <button
+                        onClick={() => {
+                          setEmergencyAlert(null);
+                          setEmergencyPassword("");
+                          setShowTerminateModal(true);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-md hover:shadow-amber-500/20 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Radio className="w-4 h-4" />
+                        <span>Herkesi Siteden At (Tüm Cihazları Düşür)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* KART 2: NÜKLEER VERİ İMHASI (FABRİKA AYARLARINA SIFIRLA) */}
+                  <div className="p-5 bg-[#12151D] border border-rose-500/30 rounded-2xl space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/40">
+                        <Trash2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>Nükleer Veri İmhası (Fabrika Ayarlarına Sıfırla)</span>
+                          <span className="px-2 py-0.5 rounded-full bg-rose-600/30 border border-rose-500/40 text-rose-300 text-[10px] font-bold">Geri Alınamaz</span>
+                        </h4>
+                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                          Sistemdeki <b>3 ana kullanıcı (2 Admin ve 1 Güvenlik kullanıcısı)</b> ve şifreleri korunur. Ancak veritabanındaki <b>tüm mesajlar, sohbetler, medyalar (fotoğraf, video, ses), arama kayıtları ve giriş logları</b> MinIO ve PostgreSQL üzerinden kalıcı olarak imha edilir.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-900/40 text-rose-300 text-xs flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                      <span>Bu işlem çalıştırıldığında sistem 0 bayt konuşma geçmişiyle ilk kurulduğu günkü haline döner.</span>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#222631] flex justify-end">
+                      <button
+                        onClick={() => {
+                          setEmergencyAlert(null);
+                          setEmergencyPassword("");
+                          setPurgeConfirmationText("");
+                          setShowPurgeModal(true);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Nükleer Temizliği Başlat (Tüm Mesaj ve Medyaları Sil)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
 
         </div>
@@ -3189,6 +3426,179 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* TÜM OTURUMLARI SONLANDIRMA ONAY MODALI */}
+      {showTerminateModal && (
+        <div className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in select-none">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#0F1219] border border-amber-500/40 rounded-3xl shadow-2xl p-5 sm:p-6 flex flex-col gap-4 text-slate-200 animate-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#222736]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white">
+                    Tüm Oturumları Kapat
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Bütün kullanıcıları sistemden anında düşürün
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTerminateModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-900/40 text-amber-300 text-xs leading-relaxed flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                Bu işlem sistemdeki tüm kullanıcıların ve yöneticilerin aktif tokenlarını geçersiz kılar ve tüm WebSocket bağlantılarını anında keser.
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300">
+                Yönetici Şifreniz
+              </label>
+              <input
+                type="password"
+                placeholder="İşlemi onaylamak için şifrenizi girin"
+                value={emergencyPassword}
+                onChange={(e) => setEmergencyPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleTerminateAllSessions();
+                }}
+                className="w-full bg-[#151922] border border-[#272D3D] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-amber-500 transition-colors"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#222736]">
+              <button
+                type="button"
+                onClick={() => setShowTerminateModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleTerminateAllSessions}
+                disabled={isEmergencyLoading || !emergencyPassword}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-amber-600/30 transition cursor-pointer"
+              >
+                {isEmergencyLoading ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Users className="w-3.5 h-3.5" />
+                )}
+                <span>{isEmergencyLoading ? "Düşürülüyor..." : "Herkesi Düşür"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NÜKLEER VERİ İMHASI ONAY MODALI */}
+      {showPurgeModal && (
+        <div className="fixed inset-0 z-[140] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in select-none">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#0F1219] border border-rose-600/50 rounded-3xl shadow-2xl p-5 sm:p-6 flex flex-col gap-4 text-slate-200 animate-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#222736]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>Nükleer Veri İmhası</span>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-600/30 border border-rose-500/40 text-rose-300 text-[10px] font-bold">GERİ ALINAMAZ</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Fabrika ayarlarına sıfırlama ve sıfır kalıntı
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPurgeModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-900/50 text-rose-200 text-xs leading-relaxed space-y-1.5">
+              <div className="flex items-center gap-2 font-bold text-rose-400">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>DİKKAT: Kalıcı ve Geri Alınamaz İşlem!</span>
+              </div>
+              <p className="text-slate-300 text-[11px]">
+                Sistemdeki <b>3 ana kullanıcı (2 Admin, 1 Güvenlik)</b> haricindeki tüm mesajlar, konuşmalar, MinIO medya dosyaları (fotoğraf, video, ses), arama kayıtları ve sistem logları kalıcı olarak silinecektir.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  1. Onay Cümlesi: Tam olarak <span className="text-rose-400 font-mono font-bold select-all">&quot;HER ŞEYİ SİL&quot;</span> yazın
+                </label>
+                <input
+                  type="text"
+                  placeholder="HER ŞEYİ SİL"
+                  value={purgeConfirmationText}
+                  onChange={(e) => setPurgeConfirmationText(e.target.value)}
+                  className="w-full bg-[#151922] border border-rose-500/30 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-rose-500 transition-colors uppercase tracking-wider"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  2. Yönetici Şifreniz
+                </label>
+                <input
+                  type="password"
+                  placeholder="İşlemi yetkilendirmek için şifrenizi girin"
+                  value={emergencyPassword}
+                  onChange={(e) => setEmergencyPassword(e.target.value)}
+                  className="w-full bg-[#151922] border border-[#272D3D] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-rose-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#222736]">
+              <button
+                type="button"
+                onClick={() => setShowPurgeModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleMasterPurge}
+                disabled={isEmergencyLoading || purgeConfirmationText.trim() !== "HER ŞEYİ SİL" || !emergencyPassword}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shadow-lg shadow-rose-600/40 transition cursor-pointer"
+              >
+                {isEmergencyLoading ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>{isEmergencyLoading ? "Veriler İmha Ediliyor..." : "HER ŞEYİ KALICI OLARAK İMHA ET"}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -246,6 +246,32 @@ func (h *Hub) DisconnectSession(userID uuid.UUID, sessionID string) {
 	}
 }
 
+// DisconnectAllUsers sistemdeki tüm bağlı WebSocket istemcilerini anında sonlandırır.
+func (h *Hub) DisconnectAllUsers() {
+	h.mu.RLock()
+	var allClients []*Client
+	for client := range h.clients {
+		allClients = append(allClients, client)
+	}
+	h.mu.RUnlock()
+
+	termMsg, _ := NewWSMessage("session_terminated", map[string]string{
+		"reason":  "emergency_global_logout",
+		"message": "Sistem yöneticisi tarafından tüm oturumlar kapatıldı.",
+	})
+
+	for _, c := range allClients {
+		client := c
+		select {
+		case client.send <- termMsg:
+		default:
+		}
+		time.AfterFunc(100*time.Millisecond, func() {
+			_ = client.conn.Close()
+		})
+	}
+}
+
 func (h *Hub) onUserOffline(userID uuid.UUID) {
 	ctx := context.Background()
 	_ = h.presenceService.SetUserOffline(ctx, userID)

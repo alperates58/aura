@@ -80,9 +80,37 @@ func (s *StorageService) UploadAvatar(ctx context.Context, userID uuid.UUID, fil
 		}
 	}
 
+	// Geçici dosyaya kopyala ve EXIF/GPS metadata'sını temizle
+	tmpIn, err := os.CreateTemp("", "aura_avatar_*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("geçici avatar dosyası oluşturulamadı: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+
+	if _, err := io.Copy(tmpIn, file); err != nil {
+		_ = tmpIn.Close()
+		return "", fmt.Errorf("geçici avatar dosyasına yazılamadı: %w", err)
+	}
+	_ = tmpIn.Close()
+
+	uploadPath := tmpIn.Name()
+	if cleanPath, err := transcoder.StripImageMetadata(tmpIn.Name()); err == nil && cleanPath != tmpIn.Name() {
+		defer os.Remove(cleanPath)
+		uploadPath = cleanPath
+	}
+
+	uploadF, err := os.Open(uploadPath)
+	if err != nil {
+		return "", fmt.Errorf("avatar dosyası açılamadı: %w", err)
+	}
+	defer uploadF.Close()
+
+	stat, _ := uploadF.Stat()
+	uploadSize := stat.Size()
+
 	objectName := fmt.Sprintf("%s_%d%s", userID.String(), time.Now().Unix(), ext)
 
-	_, err = s.client.PutObject(ctx, s.avatarBucket, objectName, file, header.Size, minio.PutObjectOptions{
+	_, err = s.client.PutObject(ctx, s.avatarBucket, objectName, uploadF, uploadSize, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	if err != nil {
@@ -190,6 +218,12 @@ func (s *StorageService) UploadMedia(ctx context.Context, userID uuid.UUID, file
 			} else {
 				contentType = "image/jpeg"
 			}
+		}
+
+		// Görseldeki EXIF / GPS koordinatlarını ve kamera etiketlerini temizle
+		if cleanImgPath, err := transcoder.StripImageMetadata(uploadFilePath); err == nil && cleanImgPath != uploadFilePath {
+			defer os.Remove(cleanImgPath)
+			uploadFilePath = cleanImgPath
 		}
 
 	case "video":
@@ -451,3 +485,31 @@ func (s *StorageService) GetStorageBreakdown(ctx context.Context) (map[string]in
 
 	return result, nil
 }
+
+// PurgeChatMedia medya, ses ve dosya bucket'larındaki tüm nesneleri siler; avatar bucket'ını korur.
+func (s *StorageService) PurgeChatMedia(ctx context.Context) error {
+	buckets := []string{s.mediaBucket, s.voiceBucket, s.filesBucket}
+	for _, b := range buckets {
+		if b == "" || b == s.avatarBucket {
+			continue
+		}
+		objectsCh := make(chan minio.ObjectInfo)
+		go func(bucketName string) {
+			defer close(objectsCh)
+			for object := range s.client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Recursive: true}) {
+				if object.Err == nil {
+					objectsCh <- object
+				}
+			}
+		}(b)
+
+		errorCh := s.client.RemoveObjects(ctx, b, objectsCh, minio.RemoveObjectsOptions{})
+		for err := range errorCh {
+			if err.Err != nil {
+				// Hata oluşsa bile devam et
+			}
+		}
+	}
+	return nil
+}
+

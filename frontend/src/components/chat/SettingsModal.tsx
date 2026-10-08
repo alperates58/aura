@@ -122,6 +122,10 @@ export default function SettingsModal({
     killSessions,
     regenerateSecurityCode,
     logout,
+    hasAppPin,
+    lockApp,
+    setAppPin,
+    removeAppPin,
   } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTabType>(
@@ -160,6 +164,9 @@ export default function SettingsModal({
   const [isSavingPanic, setIsSavingPanic] = useState(false);
   const [isKillingSessions, setIsKillingSessions] = useState(false);
   const [isRegeneratingSecurity, setIsRegeneratingSecurity] = useState(false);
+  const [newPinInput, setNewPinInput] = useState("");
+  const [pinSuccessMsg, setPinSuccessMsg] = useState<string | null>(null);
+  const [pinErrorMsg, setPinErrorMsg] = useState<string | null>(null);
 
   // Active Sessions & Devices state
   const [sessions, setSessions] = useState<UserSession[]>([]);
@@ -970,6 +977,131 @@ export default function SettingsModal({
                     >
                       {isRegeneratingSecurity ? "Yenileniyor..." : "Yenile"}
                     </button>
+                  </div>
+                </div>
+
+                {/* 6 HANELİ UYGULAMA PIN KİLİDİ */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>6 Haneli Uygulama PIN Kilidi</span>
+                          {hasAppPin ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                              Korumalı
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium border border-slate-700">
+                              Kurulmadı
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Uygulamayı anında dondurmak için 6 haneli yerel kilit kodu belirleyin. 5 yanlış denemede acil çıkış yapar.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        lockApp();
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Şimdi Kilitle</span>
+                    </button>
+                  </div>
+
+                  {pinSuccessMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{pinSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {pinErrorMsg && (
+                    <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{pinErrorMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="password"
+                        maxLength={6}
+                        placeholder="6 haneli yeni PIN girin (örn: 123456)"
+                        value={newPinInput}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          setNewPinInput(val);
+                          setPinErrorMsg(null);
+                        }}
+                        className="bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white font-mono tracking-widest focus:outline-none focus:border-purple-400 w-full sm:w-56"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newPinInput.length !== 6) {
+                            setPinErrorMsg("PIN tam olarak 6 rakamdan oluşmalıdır.");
+                            return;
+                          }
+                          setAppPin(newPinInput);
+                          setNewPinInput("");
+                          setPinErrorMsg(null);
+                          setPinSuccessMsg("6 haneli PIN kodu başarıyla güncellendi.");
+                          setTimeout(() => setPinSuccessMsg(null), 3000);
+                        }}
+                        disabled={newPinInput.length !== 6}
+                        className="px-3.5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 disabled:opacity-40 border border-purple-500/30 text-xs font-bold transition-all cursor-pointer shrink-0"
+                      >
+                        Kaydet
+                      </button>
+                    </div>
+
+                    {hasAppPin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeAppPin();
+                          setPinSuccessMsg("PIN kilidi kaldırıldı.");
+                          setTimeout(() => setPinSuccessMsg(null), 3000);
+                        }}
+                        className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer text-right px-1"
+                      >
+                        PIN'i Kaldır
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ANİ REFLEKS KAÇIŞ PROTOKOLLERİ BİLGİ KARTI */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900/90 to-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center gap-2.5 text-xs font-bold text-amber-400">
+                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <span>Ani Refleks Kaçış Protokolleri (Panik Tetikleyicileri)</span>
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+                    <div className="flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                      <span>
+                        <b>Masaüstü / PC (Çift ESC):</b> Klavyenizde 450 milisaniye içinde iki kez art arda <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-white font-mono text-[10px]">ESC</kbd> tuşuna bastığınızda mevcut oturum anında kapatılır ve panik yönlendirme adresinize ışınlanırsınız.
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                      <span>
+                        <b>Mobil / Dokunmatik (Hayalet Buton):</b> Ekranın sağ alt köşesinde yarı şeffaf duran AssistiveTouch kalkan butonuna <b>2 kez hızlıca</b> dokunduğunuzda anında acil çıkış yapar. Tek dokunduğunuzda ise PIN kilidi ve diğer oturumları düşürme menüsü açılır.
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

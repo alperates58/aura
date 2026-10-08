@@ -36,6 +36,8 @@ import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherIsland from "@/components/chat/ListenTogetherIsland";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
 import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
+import PinLockModal from "@/components/security/PinLockModal";
+import GhostPanicTouch from "@/components/security/GhostPanicTouch";
 import EmptyChatState from "@/components/chat/EmptyChatState";
 import MessageSelectionBar from "@/components/chat/MessageSelectionBar";
 import InChatSearchBar from "@/components/chat/InChatSearchBar";
@@ -268,6 +270,39 @@ export default function HomePage() {
       if (alertTimer) clearTimeout(alertTimer);
     };
   }, []);
+
+  // ==============================================================
+  // PC REFLEKS KAÇIŞI: ÇİFT ESC (Double-Escape Emergency Exit)
+  // Masada otururken 450ms içinde iki kez ESC'ye basıldığında
+  // mevcut oturumu anında kapatır ve hedef siteye (Google vb.) ışınlar.
+  // ==============================================================
+  useEffect(() => {
+    let lastEscTime = 0;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const now = Date.now();
+        if (now - lastEscTime < 450 && now - lastEscTime > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const redirectUrl =
+            (useSettingsStore.getState().settings?.security_settings?.inactivity_redirect_url) ||
+            user?.panic_redirect_url ||
+            "https://www.google.com";
+
+          try {
+            useAuthStore.getState().logout();
+          } catch (_) {}
+
+          window.location.replace(redirectUrl);
+        }
+        lastEscTime = now;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [user]);
 
   // Android Sistem Geri Tuşu & Tarayıcı Geri Gezinme Yönetimi
   const { handleBackToChatList, showExitToast } = useBackNavigation({
@@ -2704,6 +2739,12 @@ export default function HomePage() {
 
       {/* Öne Çıkanlar (Story Highlights) Tam Ekran Oynatıcı */}
       {activeHighlight && <StoryHighlightViewerModal />}
+
+      {/* Mobil ve Web Hayalet Panik Butonu (AssistiveTouch) */}
+      <GhostPanicTouch />
+
+      {/* 6 Haneli Ekran Kilit Paneli */}
+      <PinLockModal />
     </div>
     </>
   );

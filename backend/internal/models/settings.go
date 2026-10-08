@@ -22,9 +22,10 @@ type ChatSettings struct {
 	EditTimeLimitMinutes        int  `json:"edit_time_limit_minutes"`
 	AllowDeleteForAll           bool `json:"allow_delete_for_all"`
 	DeleteTimeLimitMinutes      int  `json:"delete_time_limit_minutes"`
-	DisappearingMessagesDefault int  `json:"disappearing_messages_default"`
-	EnableLinkPreviews          bool `json:"enable_link_previews"`
-	EnableSocialEmbeds          bool `json:"enable_social_embeds"`
+	DisappearingMessagesDefault int      `json:"disappearing_messages_default"`
+	EnableLinkPreviews          bool     `json:"enable_link_previews"`
+	EnableSocialEmbeds          bool     `json:"enable_social_embeds"`
+	BannedWords                 []string `json:"banned_words"`
 }
 
 type CallSettings struct {

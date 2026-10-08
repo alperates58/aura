@@ -529,3 +529,136 @@ func (h *AdminHandler) GetActiveCalls(c *fiber.Ctx) error {
 		"count":        len(telemetryList),
 	})
 }
+
+// 12. Acil Durum: Tüm Kullanıcıların Oturumlarını Sonlandır (Herkesi Düşür)
+type TerminateAllSessionsRequest struct {
+	Password string `json:"password"`
+}
+
+func (h *AdminHandler) TerminateAllSessions(c *fiber.Ctx) error {
+	var currentUserID uuid.UUID
+	if val, ok := c.Locals("user_id").(uuid.UUID); ok {
+		currentUserID = val
+	} else if val, ok := c.Locals("userID").(uuid.UUID); ok {
+		currentUserID = val
+	}
+
+	var req TerminateAllSessionsRequest
+	if err := c.BodyParser(&req); err != nil || req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Lütfen yönetici şifrenizi girin."})
+	}
+
+	adminUser, err := h.userRepo.GetUserByID(c.Context(), currentUserID)
+	if err != nil || adminUser == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Yönetici bulunamadı."})
+	}
+
+	if !middleware.CheckPasswordHash(req.Password, adminUser.PasswordHash) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Yanlış yönetici şifresi."})
+	}
+
+	ctx := c.Context()
+	db := h.userRepo.DB()
+
+	// 1. Tüm kullanıcıların token versiyonunu artır
+	_, _ = db.ExecContext(ctx, "UPDATE users SET token_version = token_version + 1")
+
+	// 2. Tüm oturum kayıtlarını sil
+	_, _ = db.ExecContext(ctx, "DELETE FROM user_sessions")
+
+	// 3. Redis token versiyonlarını temizle
+	if h.redisClient != nil {
+		keys, _ := h.redisClient.Keys(ctx, "user:*:token_version").Result()
+		for _, k := range keys {
+			_ = h.redisClient.Del(ctx, k).Err()
+		}
+	}
+
+	// 4. WebSocket bağlantılarını kopar
+	if h.hub != nil {
+		h.hub.DisconnectAllUsers()
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Sistemdeki tüm oturumlar başarıyla kapatıldı. Tüm cihazlar çıkışa zorlandı.",
+	})
+}
+
+// 13. Acil Durum: Nükleer Veri İmhası (Kullanıcılar kalır; mesajlar, medyalar ve loglar silinir)
+type MasterPurgeRequest struct {
+	Password     string `json:"password"`
+	Confirmation string `json:"confirmation"`
+}
+
+func (h *AdminHandler) MasterPurgeData(c *fiber.Ctx) error {
+	var currentUserID uuid.UUID
+	if val, ok := c.Locals("user_id").(uuid.UUID); ok {
+		currentUserID = val
+	} else if val, ok := c.Locals("userID").(uuid.UUID); ok {
+		currentUserID = val
+	}
+
+	var req MasterPurgeRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Geçersiz istek gövdesi."})
+	}
+
+	if strings.TrimSpace(req.Confirmation) != "HER ŞEYİ SİL" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Onay metni eşleşmedi. Lütfen tam olarak 'HER ŞEYİ SİL' yazın."})
+	}
+
+	adminUser, err := h.userRepo.GetUserByID(c.Context(), currentUserID)
+	if err != nil || adminUser == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Yönetici bulunamadı."})
+	}
+
+	if !middleware.CheckPasswordHash(req.Password, adminUser.PasswordHash) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Yanlış yönetici şifresi."})
+	}
+
+	ctx := c.Context()
+	db := h.userRepo.DB()
+
+	// 1. Veritabanındaki tüm mesaj, sohbet, arama, log ve oturum kayıtlarını boşalt (CASCADE)
+	// NOT: users tablosu ve içindeki admin / guvenlik kullanıcıları KORUNUR!
+	queries := []string{
+		"TRUNCATE TABLE messages CASCADE",
+		"TRUNCATE TABLE conversations CASCADE",
+		"TRUNCATE TABLE call_logs CASCADE",
+		"TRUNCATE TABLE access_logs CASCADE",
+		"TRUNCATE TABLE stories CASCADE",
+		"TRUNCATE TABLE user_sessions CASCADE",
+		"UPDATE users SET token_version = token_version + 1",
+	}
+
+	for _, q := range queries {
+		_, _ = db.ExecContext(ctx, q)
+	}
+
+	// 2. MinIO S3 üzerindeki tüm sohbet medyalarını (fotoğraf, video, ses, dosya) kalıcı olarak sil
+	// NOT: avatarBucket korunur, kullanıcıların avatarları silinmez.
+	if h.storageService != nil {
+		_ = h.storageService.PurgeChatMedia(ctx)
+	}
+
+	// 3. Redis presence, typing ve token anahtarlarını sıfırla
+	if h.redisClient != nil {
+		keys, _ := h.redisClient.Keys(ctx, "user:*").Result()
+		for _, k := range keys {
+			_ = h.redisClient.Del(ctx, k).Err()
+		}
+		tKeys, _ := h.redisClient.Keys(ctx, "typing:*").Result()
+		for _, k := range tKeys {
+			_ = h.redisClient.Del(ctx, k).Err()
+		}
+	}
+
+	// 4. Tüm bağlı WebSocket istemcilerini anında kopar
+	if h.hub != nil {
+		h.hub.DisconnectAllUsers()
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Nükleer temizlik başarıyla tamamlandı. Tüm mesajlar, sohbetler, medyalar ve loglar kalıcı olarak silindi. Kullanıcı hesapları korundu.",
+	})
+}

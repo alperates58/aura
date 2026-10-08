@@ -20,6 +20,10 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
+func (r *UserRepository) DB() *sql.DB {
+	return r.db
+}
+
 func (r *UserRepository) CreateUser(ctx context.Context, u *models.User) error {
 	query := `
 		INSERT INTO users (username, display_name, email, password_hash, avatar_url, bio, online_status, privacy_settings, created_at, updated_at)

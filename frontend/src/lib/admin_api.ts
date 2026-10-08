@@ -27,6 +27,7 @@ export interface SystemSettings {
     disappearing_messages_default: number;
     enable_link_previews: boolean;
     enable_social_embeds: boolean;
+    banned_words?: string[];
   };
   call_settings: {
     enable_audio_calls: boolean;
@@ -262,6 +263,16 @@ export const adminApi = {
 
   getSecurityStats: async (): Promise<AdminSecurityStats> => {
     const res = await api.get<AdminSecurityStats>("/admin/security/stats");
+    return res.data;
+  },
+
+  terminateAllSessions: async (password: string): Promise<{ message: string }> => {
+    const res = await api.post<{ message: string }>("/admin/emergency/terminate-all-sessions", { password });
+    return res.data;
+  },
+
+  masterPurgeData: async (password: string, confirmation: string): Promise<{ message: string }> => {
+    const res = await api.post<{ message: string }>("/admin/emergency/master-purge", { password, confirmation });
     return res.data;
   },
 };

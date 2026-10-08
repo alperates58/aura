@@ -39,6 +39,7 @@ export interface PublicSettings {
     disappearing_messages_default: number;
     enable_link_previews: boolean;
     enable_social_embeds: boolean;
+    banned_words?: string[];
   };
   call_settings: {
     enable_audio_calls: boolean;
@@ -97,6 +98,7 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     disappearing_messages_default: 0,
     enable_link_previews: true,
     enable_social_embeds: true,
+    banned_words: [],
   },
   call_settings: {
     enable_audio_calls: true,

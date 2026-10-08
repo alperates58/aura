@@ -183,3 +183,39 @@ export function focusChatInput(delayMs: number = 0) {
   }
 }
 
+/**
+ * Yasaklı kelimeleri e*** şeklinde dinamik olarak maskeler.
+ * Hem geçmiş hem de canlı mesajlarda sansür sağlar.
+ * Örnek: "elma" -> "e***"
+ */
+export function maskBannedWords(text?: string | null, bannedWords?: string[]): string {
+  if (!text) return "";
+  if (!bannedWords || bannedWords.length === 0) return text;
+
+  let result = text;
+  for (const word of bannedWords) {
+    const trimmed = word.trim();
+    if (!trimmed) continue;
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    try {
+      const regex = new RegExp(`(?<=^|[\\s.,!?;:()"'«»<>\\[\\]{}/-])${escaped}(?=$|[\\s.,!?;:()"'«»<>\\[\\]{}/-])`, "gi");
+      result = result.replace(regex, (match) => {
+        const chars = Array.from(match);
+        if (chars.length <= 1) return "*";
+        return chars[0] + "*".repeat(chars.length - 1);
+      });
+    } catch {
+      // Basit regex fallback
+      const simpleRegex = new RegExp(escaped, "gi");
+      result = result.replace(simpleRegex, (match) => {
+        const chars = Array.from(match);
+        if (chars.length <= 1) return "*";
+        return chars[0] + "*".repeat(chars.length - 1);
+      });
+    }
+  }
+
+  return result;
+}
+
