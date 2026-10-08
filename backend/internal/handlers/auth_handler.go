@@ -1325,9 +1325,50 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			continue
 		}
 
-		// 2. Bu oturumun canlı bir WebSocket bağlantısı varsa (kullanıcı açık ekranda aktif)
-		// İstemcinin kendi 1 saniyelik intervali denetler, soketi açık oturumu sunucudan aniden düşürme
-		if h.hub != nil && h.hub.IsSessionConnected(cand.UserID, cand.SessionID) {
+		elapsedMinutes := float64(timeoutMinutes)
+		if !cand.LastActiveAt.IsZero() {
+			actualElapsed := time.Since(cand.LastActiveAt).Minutes()
+			if actualElapsed > elapsedMinutes {
+				elapsedMinutes = actualElapsed
+			}
+		}
+
+		isSocketConnected := h.hub != nil && h.hub.IsSessionConnected(cand.UserID, cand.SessionID)
+
+		// DURUM A: Kullanıcı sekmeyi kapatmış veya çevrimdışı (Canlı WebSocket bağlantısı YOK)
+		// Kullanıcı zaten sekmesini kapatarak siteden ayrıldığı için bu bir "ekran açık unutuldu" ihlali DEĞİLDİR.
+		// Kullanıcı açık ekranda Google'a yönlendirilmediği için sitedeki diğer kişilere "Google'a yönlendirildi"
+		// bildirimi ve hikayesi ASLA ATILMAZ. Oturum ve yetkiler arka planda SESSİZCE sonlandırılır.
+		if !isSocketConnected {
+			log.Printf("ℹ️ [Inactivity Worker] Sekmesi kapalı/çevrimdışı inaktif oturum sessizce sonlandırılıyor: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk)",
+				cand.Username, cand.DeviceName, elapsedMinutes, timeoutMinutes)
+
+			_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+
+			// Kullanıcının başka açık oturumu kalmadıysa offline yap
+			if h.hub != nil && !h.hub.IsUserConnected(cand.UserID) {
+				if h.presenceService != nil {
+					_ = h.presenceService.SetUserOffline(ctx, cand.UserID)
+				}
+				if h.userRepo != nil {
+					_ = h.userRepo.UpdateOnlineStatus(ctx, cand.UserID, 0)
+				}
+			}
+
+			// Token Version'ı arttır (JWT'leri anında geçersiz kıl, 15 dk dolduktan sonra tekrar girdiğinde oturum kapalı karşılansın)
+			if h.userRepo != nil {
+				newVer, _ := h.userRepo.IncrementTokenVersion(ctx, cand.UserID)
+				if h.rdb != nil && newVer > 0 {
+					_ = h.rdb.Set(ctx, "user:"+cand.UserID.String()+":token_version", newVer, 24*time.Hour).Err()
+				}
+			}
+			continue
+		}
+
+		// DURUM B: Kullanıcının canlı WebSocket bağlantısı VAR (Sekme ekranda açık bırakılmış)
+		// Normalde istemci (frontend) 15. dakikada kendisi /auth/inactivity-alert çağırarak kullanıcıyı Google'a yönlendirir.
+		// İstemcinin kendi yönlendirmesini yapabilmesi için +30 saniye tolerans tanıyalım.
+		if elapsedMinutes < float64(timeoutMinutes)+0.5 {
 			continue
 		}
 
@@ -1351,15 +1392,7 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			_ = h.rdb.Set(ctx, breachUserKey, "1", 2*time.Minute).Err()
 		}
 
-		elapsedMinutes := float64(timeoutMinutes)
-		if !cand.LastActiveAt.IsZero() {
-			actualElapsed := time.Since(cand.LastActiveAt).Minutes()
-			if actualElapsed > elapsedMinutes {
-				elapsedMinutes = actualElapsed
-			}
-		}
-
-		log.Printf("🚨 [Inactivity Worker] Süresi dolan oturum tespit edildi: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk). Bildirim yayınlanıyor...",
+		log.Printf("🚨 [Inactivity Worker] Açık ekranda inaktif kalan oturum tespit edildi: @%s (Cihaz: %s, Inaktif Süre: %.1f dk, Sınır: %d dk). Zorla sonlandırılıyor ve bildirim yayınlanıyor...",
 			cand.Username, cand.DeviceName, elapsedMinutes, timeoutMinutes)
 
 		// 5. Güvenlik olayını tetikle, hikaye ve mesajları tam zamanında yayınla
