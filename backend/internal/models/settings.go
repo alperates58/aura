@@ -48,6 +48,12 @@ type SecuritySettings struct {
 	InactivityWeekdayStart     string `json:"inactivity_weekday_start"`
 	InactivityWeekdayEnd       string `json:"inactivity_weekday_end"`
 	InactivityWeekendFull      bool   `json:"inactivity_weekend_full"`
+	EnableAssistiveTouch      bool   `json:"enable_assistive_touch"`
+	AssistiveTouchOpacity     int    `json:"assistive_touch_opacity"`
+	AssistiveTouchDefaultPos  string `json:"assistive_touch_default_pos"`
+	AssistiveTouchRedirectURL string `json:"assistive_touch_redirect_url"`
+	EnableTripleTapEscape     bool   `json:"enable_triple_tap_escape"`
+	EnableDoubleTapMenu       bool   `json:"enable_double_tap_menu"`
 }
 
 type NotificationSettings struct {

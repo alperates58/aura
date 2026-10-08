@@ -224,6 +224,12 @@ func (r *SettingsRepository) GetSecuritySettings(ctx context.Context) models.Sec
 		InactivityWeekdayStart:    "17:30",
 		InactivityWeekdayEnd:      "08:30",
 		InactivityWeekendFull:     true,
+		EnableAssistiveTouch:      true,
+		AssistiveTouchOpacity:     30,
+		AssistiveTouchDefaultPos:  "left_center",
+		AssistiveTouchRedirectURL: "",
+		EnableTripleTapEscape:     true,
+		EnableDoubleTapMenu:       true,
 	}
 
 	raw, err := r.GetSetting(ctx, "security_settings")
@@ -246,6 +252,12 @@ func (r *SettingsRepository) GetSecuritySettings(ctx context.Context) models.Sec
 	}
 	if res.InactivityWeekdayEnd == "" {
 		res.InactivityWeekdayEnd = "08:30"
+	}
+	if res.AssistiveTouchOpacity <= 0 {
+		res.AssistiveTouchOpacity = 30
+	}
+	if res.AssistiveTouchDefaultPos == "" {
+		res.AssistiveTouchDefaultPos = "left_center"
 	}
 	return res
 }

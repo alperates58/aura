@@ -48,6 +48,12 @@ export interface SystemSettings {
     inactivity_weekday_start?: string;
     inactivity_weekday_end?: string;
     inactivity_weekend_full?: boolean;
+    enable_assistive_touch?: boolean;
+    assistive_touch_opacity?: number;
+    assistive_touch_default_pos?: string;
+    assistive_touch_redirect_url?: string;
+    enable_triple_tap_escape?: boolean;
+    enable_double_tap_menu?: boolean;
   };
   notification_settings: {
     enable_web_push: boolean;

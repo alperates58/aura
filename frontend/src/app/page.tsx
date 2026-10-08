@@ -332,10 +332,26 @@ export default function HomePage() {
           e.preventDefault();
           e.stopPropagation();
 
-          const redirectUrl =
-            (useSettingsStore.getState().settings?.security_settings?.inactivity_redirect_url) ||
-            user?.panic_redirect_url ||
-            "https://www.google.com";
+          const sec = useSettingsStore.getState().settings?.security_settings;
+          let redirectUrl =
+            sec?.assistive_touch_redirect_url?.trim() ||
+            sec?.inactivity_redirect_url?.trim();
+
+          if (!redirectUrl && typeof window !== "undefined") {
+            try {
+              const raw = localStorage.getItem("aura_security_settings");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                redirectUrl =
+                  parsed?.assistive_touch_redirect_url?.trim() ||
+                  parsed?.inactivity_redirect_url?.trim();
+              }
+            } catch (_) {}
+          }
+
+          if (!redirectUrl) {
+            redirectUrl = "https://www.google.com";
+          }
 
           performEmergencyEscape(redirectUrl);
         }

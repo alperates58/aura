@@ -60,6 +60,12 @@ export interface PublicSettings {
     inactivity_weekday_start?: string;
     inactivity_weekday_end?: string;
     inactivity_weekend_full?: boolean;
+    enable_assistive_touch?: boolean;
+    assistive_touch_opacity?: number;
+    assistive_touch_default_pos?: string;
+    assistive_touch_redirect_url?: string;
+    enable_triple_tap_escape?: boolean;
+    enable_double_tap_menu?: boolean;
   };
 }
 
@@ -119,6 +125,12 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     inactivity_weekday_start: "17:30",
     inactivity_weekday_end: "08:30",
     inactivity_weekend_full: true,
+    enable_assistive_touch: true,
+    assistive_touch_opacity: 30,
+    assistive_touch_default_pos: "left_center",
+    assistive_touch_redirect_url: "",
+    enable_triple_tap_escape: true,
+    enable_double_tap_menu: true,
   },
 };
 

@@ -32,36 +32,45 @@ export default function GhostPanicTouch() {
   const isEscapingRef = useRef<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Acil kaçış fonksiyonu (Her zaman öncelikle inaktivite için tanımlanan hedef siteye yönlendirir)
+  // Acil kaçış fonksiyonu (Her zaman öncelikle Güvenlik Touch / İnaktivite için tanımlanan hedef siteye yönlendirir)
   const triggerEmergencyEscape = useCallback(() => {
     if (isEscapingRef.current) return;
     isEscapingRef.current = true;
 
-    // 1. Store'dan inaktivite url'sini al
+    // 1. Güvenlik Touch özel yönlendirme adresi var mı?
     let redirectUrl =
-      securitySettings?.inactivity_redirect_url ||
-      useSettingsStore.getState().settings?.security_settings?.inactivity_redirect_url;
+      securitySettings?.assistive_touch_redirect_url?.trim() ||
+      useSettingsStore.getState().settings?.security_settings?.assistive_touch_redirect_url?.trim();
 
-    // 2. LocalStorage'da kayıtlı security ayarlarından kontrol et
+    // 2. Yoksa inaktivite için tanımlanan siteyi al
+    if (!redirectUrl) {
+      redirectUrl =
+        securitySettings?.inactivity_redirect_url?.trim() ||
+        useSettingsStore.getState().settings?.security_settings?.inactivity_redirect_url?.trim();
+    }
+
+    // 3. LocalStorage'da kayıtlı security ayarlarından kontrol et
     if (!redirectUrl && typeof window !== "undefined") {
       try {
         const raw = localStorage.getItem("aura_security_settings");
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed?.inactivity_redirect_url && typeof parsed.inactivity_redirect_url === "string") {
+          if (parsed?.assistive_touch_redirect_url && typeof parsed.assistive_touch_redirect_url === "string" && parsed.assistive_touch_redirect_url.trim()) {
+            redirectUrl = parsed.assistive_touch_redirect_url.trim();
+          } else if (parsed?.inactivity_redirect_url && typeof parsed.inactivity_redirect_url === "string" && parsed.inactivity_redirect_url.trim()) {
             redirectUrl = parsed.inactivity_redirect_url.trim();
           }
         }
       } catch (_) {}
     }
 
-    // 3. Kullanıcı panik url'si veya son çare Google
+    // 4. Son çare Google (ASLA user?.panic_redirect_url kullanılmaz)
     if (!redirectUrl) {
-      redirectUrl = user?.panic_redirect_url || "https://www.google.com";
+      redirectUrl = "https://www.google.com";
     }
 
     performEmergencyEscape(redirectUrl);
-  }, [securitySettings, user]);
+  }, [securitySettings]);
 
   // İlk montaj ve ekran boyutu takibi
   useEffect(() => {
@@ -85,8 +94,21 @@ export default function GhostPanicTouch() {
     } catch (_) {}
 
     if (startPos.x === -1 || startPos.y === -1) {
-      // Varsayılan konum: Sola yaslı, ekranın dikey ortası
-      startPos = snapToEdge(16, window.innerHeight / 2 - 22);
+      // Varsayılan konumu ayarlardan al (sol orta, sağ orta, sol alt, sağ alt)
+      const defaultPos = securitySettings?.assistive_touch_default_pos || "left_center";
+      const rightX = typeof window !== "undefined" ? Math.max(16, window.innerWidth - 60) : 300;
+      const winH = typeof window !== "undefined" ? window.innerHeight : 800;
+
+      if (defaultPos === "right_center") {
+        startPos = snapToEdge(rightX, winH / 2 - 22);
+      } else if (defaultPos === "left_bottom") {
+        startPos = snapToEdge(16, winH - 100);
+      } else if (defaultPos === "right_bottom") {
+        startPos = snapToEdge(rightX, winH - 100);
+      } else {
+        // "left_center"
+        startPos = snapToEdge(16, winH / 2 - 22);
+      }
     } else {
       startPos = snapToEdge(startPos.x, startPos.y);
     }
@@ -98,7 +120,7 @@ export default function GhostPanicTouch() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [securitySettings?.assistive_touch_default_pos]);
 
   // Butonu uyandır (şeffaflığı geçici olarak kaldır)
   const wakeUp = () => {
@@ -112,34 +134,37 @@ export default function GhostPanicTouch() {
   // Temiz tıklama mantığı (Sürükleme yapılmadığında çağrılır)
   // Tek tık: Uyandır
   // Çift tık: Menüyü aç
-  // 3 tık (Triple tap): Anında Google / Panik kaçışı
+  // 3 tık (Triple tap): Anında Kaçış (Eğer açıksa)
   const handleCleanTap = () => {
     wakeUp();
     tapCountRef.current += 1;
 
     if (tapCountRef.current === 3) {
-      // 3 TIK (TRIPLE TAP) -> ANINDA KAÇIŞ
+      // 3 TIK (TRIPLE TAP) -> HIZLI KAÇIŞ
       if (tapTimerRef.current) {
         clearTimeout(tapTimerRef.current);
         tapTimerRef.current = null;
       }
       tapCountRef.current = 0;
-      triggerEmergencyEscape();
+      if (securitySettings?.enable_triple_tap_escape !== false) {
+        triggerEmergencyEscape();
+      }
       return;
     }
 
     if (tapCountRef.current === 1) {
-      // 1. Tık: 360ms bekle, başka tık gelmezse sadece uyandırma işlemi tamamlanır
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
       tapTimerRef.current = setTimeout(() => {
         tapCountRef.current = 0;
       }, 360);
     } else if (tapCountRef.current === 2) {
-      // 2. Tık: 270ms bekle, 3. tık gelmezse menüyü aç/kapat
+      // 2. Tık: Çift tık menüsü (Eğer açıksa)
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
       tapTimerRef.current = setTimeout(() => {
         tapCountRef.current = 0;
-        setIsOpenMenu((prev) => !prev);
+        if (securitySettings?.enable_double_tap_menu !== false) {
+          setIsOpenMenu((prev) => !prev);
+        }
       }, 270);
     }
   };
@@ -234,11 +259,13 @@ export default function GhostPanicTouch() {
     };
   }, [isOpenMenu]);
 
-  if (!isMounted || position.x === -1) return null;
+  if (!isMounted || position.x === -1 || securitySettings?.enable_assistive_touch === false) return null;
 
   // Menü açılma yönü hesabı (Butonun ekranın hangi çeyreğinde olduğuna göre)
   const isRightSide = position.x > (typeof window !== "undefined" ? window.innerWidth / 2 : 200);
   const isBottomSide = position.y > (typeof window !== "undefined" ? window.innerHeight / 2 : 400);
+
+  const opacityPercent = typeof securitySettings?.assistive_touch_opacity === "number" ? securitySettings.assistive_touch_opacity : 30;
 
   return (
     <>
@@ -289,7 +316,7 @@ export default function GhostPanicTouch() {
               </button>
             </div>
 
-            {/* 1. Acil Çıkış (Her zaman inaktivite için tanımlı siteye yönlendirir) */}
+            {/* 1. Acil Çıkış (Her zaman inaktivite / Güvenlik Touch için tanımlı siteye yönlendirir) */}
             <button
               type="button"
               onClick={(e) => {
@@ -338,15 +365,16 @@ export default function GhostPanicTouch() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          style={{ touchAction: "none" }}
+          style={{
+            touchAction: "none",
+            opacity: isOpenMenu || isDragging ? 1 : isAwake ? 0.95 : opacityPercent / 100,
+          }}
           className={`w-11 h-11 rounded-full bg-slate-950/85 border border-white/40 ring-1 ring-white/10 shadow-[0_0_12px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-all duration-300 ${
             isOpenMenu
-              ? "opacity-100 ring-2 ring-purple-500/60 scale-105"
+              ? "ring-2 ring-purple-500/60 scale-105"
               : isDragging
-              ? "opacity-100 ring-2 ring-purple-400 scale-110 shadow-purple-500/40"
-              : isAwake
-              ? "opacity-95"
-              : "opacity-40 hover:opacity-95 active:opacity-100"
+              ? "ring-2 ring-purple-400 scale-110 shadow-purple-500/40"
+              : "hover:!opacity-95 active:!opacity-100"
           }`}
           title="Security (3 Tık: Acil Çıkış, Çift Tık: Menü, Sürükle: Taşı)"
           aria-label="AssistiveTouch Security Butonu"
