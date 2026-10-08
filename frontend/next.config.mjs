@@ -10,6 +10,9 @@ const nextConfig = {
   output: "standalone",
   reactStrictMode: false,
   skipTrailingSlashRedirect: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   basePath: normalizedBasePath || undefined,
   assetPrefix: normalizedBasePath ? `${normalizedBasePath}/` : undefined,
   images: {

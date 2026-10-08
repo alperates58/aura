@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ==========================================
 # AURA - Go Backend Multi-Stage Dockerfile
 # ==========================================
@@ -10,12 +11,14 @@ WORKDIR /app
 RUN apk add --no-cache git ca-certificates tzdata
 
 COPY go.mod go.sum* ./
-RUN go mod download || true
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
 
-# Modül bağımlılıklarını eşitle ve statik Linux binary derle
-RUN go mod tidy && \
+# Derleme: Modül ve Go build önbelleklerini kullanarak hızlı derleme
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/server ./cmd/server
 
 # 2. Aşama: Üretim Çalışma Zamanı (Production Runtime)
@@ -44,7 +47,7 @@ USER appuser
 ENV PORT=8080
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=5s --timeout=3s --start-period=3s --retries=3 \
   CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
 CMD ["/app/server"]

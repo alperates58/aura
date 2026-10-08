@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ==========================================
 # AURA - Next.js 15 Standalone Dockerfile
 # ==========================================
@@ -7,7 +8,12 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps --ignore-scripts; else npm install --legacy-peer-deps --ignore-scripts; fi
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -f package-lock.json ]; then \
+      npm ci --legacy-peer-deps --ignore-scripts --prefer-offline; \
+    else \
+      npm install --legacy-peer-deps --ignore-scripts --prefer-offline; \
+    fi
 
 # 2. Aşama: Derleme (Builder)
 FROM node:22-alpine AS builder
@@ -24,7 +30,8 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_LIVEKIT_URL=$NEXT_PUBLIC_LIVEKIT_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # 3. Aşama: Üretim Çalışma Zamanı (Runner)
 FROM node:22-alpine AS runner

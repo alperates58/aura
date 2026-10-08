@@ -1,0 +1,9 @@
+.git
+.gitignore
+*.log
+server
+server.exe
+tmp
+.env
+.env.*
+README.md
