@@ -1215,7 +1215,7 @@ export default function SettingsModal({
                                       setTerminatingSessionId(s.session_id);
                                       try {
                                         await useAuthStore.getState().terminateSession(s.session_id);
-                                        showToast("Cihaz oturumu kapatıldı.");
+                                        showToast("Seçilen cihazın oturumu uzaktan kapatıldı.");
                                         await loadSessions();
                                       } catch {
                                         alert("Oturum kapatılamadı.");
