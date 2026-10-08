@@ -284,3 +284,88 @@ func optimizeImageToJPEG(inputPath string) (string, error) {
 
 	return outputPath, nil
 }
+
+// GenerateVideoThumbnail videodan 1. saniyede 320px genişliğinde poster thumbnail üretir.
+func GenerateVideoThumbnail(videoPath string) (string, error) {
+	if !IsAvailable() {
+		return "", fmt.Errorf("ffmpeg sistemde yüklü değil")
+	}
+
+	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_vthumb_%s.jpg", uuid.New().String()))
+
+	// -ss 1: 1. saniyeden kare al, -vframes 1: tek kare, scale: 320px
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-ss", "00:00:01",
+		"-i", videoPath,
+		"-map_metadata", "-1",
+		"-vframes", "1",
+		"-vf", "scale=320:-2",
+		"-q:v", "4",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(outputPath)
+		// 1. saniye yoksa (çok kısa video ise) en baştan tek kare almayı dene
+		cmdStart := exec.Command("ffmpeg",
+			"-y",
+			"-i", videoPath,
+			"-map_metadata", "-1",
+			"-vframes", "1",
+			"-vf", "scale=320:-2",
+			"-q:v", "4",
+			outputPath,
+		)
+		if errStart := cmdStart.Run(); errStart != nil {
+			_ = os.Remove(outputPath)
+			return "", fmt.Errorf("video thumbnail üretilemedi: %w", errStart)
+		}
+	}
+
+	return outputPath, nil
+}
+
+// GenerateImageThumbnail büyük fotoğraftan 240px genişliğinde hafif WebP thumbnail üretir (~10-20 KB).
+func GenerateImageThumbnail(imagePath string) (string, error) {
+	if !IsAvailable() {
+		return "", fmt.Errorf("ffmpeg sistemde yüklü değil")
+	}
+
+	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_ithumb_%s.webp", uuid.New().String()))
+
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-i", imagePath,
+		"-map_metadata", "-1",
+		"-vf", "scale=240:-2",
+		"-c:v", "libwebp",
+		"-quality", "75",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(outputPath)
+		// Fallback: JPEG thumbnail
+		cmdJpg := exec.Command("ffmpeg",
+			"-y",
+			"-i", imagePath,
+			"-map_metadata", "-1",
+			"-vf", "scale=240:-2",
+			"-q:v", "4",
+			outputPath,
+		)
+		if errJpg := cmdJpg.Run(); errJpg != nil {
+			_ = os.Remove(outputPath)
+			return "", fmt.Errorf("görsel thumbnail üretilemedi: %w", errJpg)
+		}
+	}
+
+	return outputPath, nil
+}

@@ -547,49 +547,80 @@ export default function Chatbox({
 
     if (activeConversationId !== conversationId) {
       await selectConversation(conversationId);
+      await new Promise((r) => setTimeout(r, 100));
       isNearBottomRef.current = false;
     }
     setShowContactDrawer(false);
     setIsGalleryOpen(false);
 
-    // Çekmece kapanışı ve layout reflow'u için kısa süre tanı
-    await new Promise((r) => setTimeout(r, 120));
-
     const scrollToTarget = (element: HTMLElement) => {
       isNearBottomRef.current = false;
       setHighlightedMessageId(messageId);
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        isNearBottomRef.current = false;
+      const container = messagesContainerRef.current;
+      if (container && element) {
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const offset = elementRect.top - containerRect.top;
+        const targetScrollTop =
+          container.scrollTop +
+          offset -
+          container.clientHeight / 2 +
+          element.clientHeight / 2;
+        container.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: "smooth",
+        });
+      } else if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+
+    const triggerCentering = (element: HTMLElement) => {
+      scrollToTarget(element);
+      setTimeout(() => {
+        const reEl = document.getElementById(`msg-${messageId}`);
+        if (reEl) scrollToTarget(reEl);
       }, 150);
+      setTimeout(() => {
+        const reEl = document.getElementById(`msg-${messageId}`);
+        if (reEl) scrollToTarget(reEl);
+      }, 300);
     };
 
     // 1. Doğrudan DOM kontrolü
     let el = document.getElementById(`msg-${messageId}`);
     if (el) {
-      scrollToTarget(el);
+      triggerCentering(el);
       return;
     }
 
     // 2. Hassas yükleme (loadMessagesAround)
-    await useChatStore.getState().loadMessagesAround(conversationId, messageId);
-    await new Promise((r) => setTimeout(r, 150));
+    try {
+      await useChatStore.getState().loadMessagesAround(conversationId, messageId);
+    } catch (e) {
+      console.warn("loadMessagesAround hatası:", e);
+    }
 
-    el = document.getElementById(`msg-${messageId}`);
-    if (el) {
-      scrollToTarget(el);
-      return;
+    // DOM'a React tarafından basılmasını bekle (polling)
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((r) => setTimeout(r, 60));
+      el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        triggerCentering(el);
+        return;
+      }
     }
 
     // 3. Fallback: Kademeli yükleme
     for (let i = 0; i < 5; i++) {
       const hasMore = await useChatStore.getState().loadOlderMessages(conversationId);
-      await new Promise((r) => setTimeout(r, 150));
-      el = document.getElementById(`msg-${messageId}`);
-      if (el) {
-        scrollToTarget(el);
-        break;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise((r) => setTimeout(r, 60));
+        el = document.getElementById(`msg-${messageId}`);
+        if (el) {
+          triggerCentering(el);
+          return;
+        }
       }
       if (!hasMore) break;
     }
@@ -615,7 +646,23 @@ export default function Chatbox({
       isNearBottomRef.current = false;
       const el = document.getElementById(`msg-${activeMatchedMessageId}`);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        const container = messagesContainerRef.current;
+        if (container) {
+          const containerRect = container.getBoundingClientRect();
+          const elementRect = el.getBoundingClientRect();
+          const offset = elementRect.top - containerRect.top;
+          const targetScrollTop =
+            container.scrollTop +
+            offset -
+            container.clientHeight / 2 +
+            el.clientHeight / 2;
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: "smooth",
+          });
+        } else {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       }
     }
   }, [activeMatchedMessageId, currentMatchIndex]);

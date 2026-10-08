@@ -123,14 +123,17 @@ export default function MediaGalleryModal({
           {onJumpToMessage && currentItem.id && (
             <button
               onClick={() => {
+                const targetId = currentItem.id;
                 onClose();
-                onJumpToMessage(currentItem.id);
+                if (onJumpToMessage) {
+                  onJumpToMessage(targetId);
+                }
               }}
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer border border-slate-700/60 flex items-center gap-1.5 shadow-sm"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer border border-slate-700/60 flex items-center gap-1.5 shadow-sm active:scale-95"
               title="Sohbette Göster"
             >
-              <MessageSquare className="w-5 h-5 text-pink-400" />
-              <span className="hidden md:inline text-xs font-medium">Sohbette Göster</span>
+              <MessageSquare className="w-4 h-4 text-pink-400 flex-shrink-0" />
+              <span className="text-xs font-semibold">Sohbette Göster</span>
             </button>
           )}
 

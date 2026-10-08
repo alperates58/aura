@@ -264,8 +264,53 @@ func (h *MediaHandler) GetMediaFile(c *fiber.Ctx) error {
 	ua := strings.ToLower(c.Get("User-Agent"))
 	isIOS := strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad") || strings.Contains(ua, "ipod") || strings.Contains(ua, "crios") || (strings.Contains(ua, "safari") && !strings.Contains(ua, "chrome"))
 
-	// 1. iOS veya ?format=mp3 için WebM ses dosyalarını on-the-fly MP3'e dönüştür
-	if bucket == "audio-messages" && strings.HasSuffix(objectName, ".webm") && (isIOS || c.Query("format") == "mp3") && transcoder.IsAvailable() {
+	lowerObj := strings.ToLower(objectName)
+
+	// 1. Hızlı Küçük Resim / Thumbnail Desteği (?thumb=1) - Profil Medya Grid'i için ultra hafif yükleme
+	if c.Query("thumb") == "1" && bucket == "media" && transcoder.IsAvailable() {
+		isVideoFile := strings.HasSuffix(lowerObj, ".mp4") || strings.HasSuffix(lowerObj, ".mov") || strings.HasSuffix(lowerObj, ".webm") || strings.HasSuffix(lowerObj, ".mkv") || strings.HasSuffix(lowerObj, ".avi") || strings.HasSuffix(lowerObj, ".3gp") || strings.HasSuffix(lowerObj, ".m4v") || strings.HasSuffix(lowerObj, ".ts")
+		if isVideoFile {
+			thumbObjName := objectName + ".thumb.jpg"
+			if _, statErr := h.storage.StatObject(c.Context(), bucket, thumbObjName); statErr == nil {
+				objectName = thumbObjName
+			} else {
+				tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_vth_%s_%s", uuid.New().String(), filepath.Base(objectName)))
+				if err := h.storage.FGetObject(c.Context(), bucket, objectName, tmpIn, minio.GetObjectOptions{}); err == nil {
+					if thumbPath, err := transcoder.GenerateVideoThumbnail(tmpIn); err == nil {
+						_, _ = h.storage.FPutObject(c.Context(), bucket, thumbObjName, thumbPath, minio.PutObjectOptions{
+							ContentType: "image/jpeg",
+						})
+						_ = os.Remove(thumbPath)
+						objectName = thumbObjName
+					}
+					_ = os.Remove(tmpIn)
+				}
+			}
+		}
+
+		isImgFile := strings.HasSuffix(lowerObj, ".jpg") || strings.HasSuffix(lowerObj, ".jpeg") || strings.HasSuffix(lowerObj, ".png") || strings.HasSuffix(lowerObj, ".webp") || strings.HasSuffix(lowerObj, ".bmp") || strings.HasSuffix(lowerObj, ".gif")
+		if isImgFile && !strings.Contains(lowerObj, ".thumb.") {
+			thumbObjName := objectName + ".thumb.webp"
+			if _, statErr := h.storage.StatObject(c.Context(), bucket, thumbObjName); statErr == nil {
+				objectName = thumbObjName
+			} else {
+				tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_ith_%s_%s", uuid.New().String(), filepath.Base(objectName)))
+				if err := h.storage.FGetObject(c.Context(), bucket, objectName, tmpIn, minio.GetObjectOptions{}); err == nil {
+					if thumbPath, err := transcoder.GenerateImageThumbnail(tmpIn); err == nil {
+						_, _ = h.storage.FPutObject(c.Context(), bucket, thumbObjName, thumbPath, minio.PutObjectOptions{
+							ContentType: "image/webp",
+						})
+						_ = os.Remove(thumbPath)
+						objectName = thumbObjName
+					}
+					_ = os.Remove(tmpIn)
+				}
+			}
+		}
+	}
+
+	// 2. iOS veya ?format=mp3 için WebM ses dosyalarını on-the-fly MP3'e dönüştür
+	if bucket == "audio-messages" && strings.HasSuffix(lowerObj, ".webm") && (isIOS || c.Query("format") == "mp3") && transcoder.IsAvailable() {
 		mp3ObjectName := objectName + ".mp3"
 		if _, statErr := h.storage.StatObject(c.Context(), bucket, mp3ObjectName); statErr == nil {
 			objectName = mp3ObjectName
@@ -284,33 +329,21 @@ func (h *MediaHandler) GetMediaFile(c *fiber.Ctx) error {
 		}
 	}
 
-	// 2. iOS veya ?format=mp4 için WebM videolarını on-the-fly MP4'e dönüştür
-	if bucket == "media" && strings.HasSuffix(objectName, ".webm") && (isIOS || c.Query("format") == "mp4") && transcoder.IsAvailable() {
-		mp4ObjectName := objectName + ".mp4"
-		if _, statErr := h.storage.StatObject(c.Context(), bucket, mp4ObjectName); statErr == nil {
-			objectName = mp4ObjectName
+	// 3. Evrensel Video Oynatma: Hem iPhone hem Android karşılıklı her videoyu açabilsin (WebM, MOV, MKV, AVI -> Universal MP4)
+	isNonUniversalVideo := bucket == "media" && (strings.HasSuffix(lowerObj, ".webm") || strings.HasSuffix(lowerObj, ".mov") || strings.HasSuffix(lowerObj, ".mkv") || strings.HasSuffix(lowerObj, ".avi") || strings.HasSuffix(lowerObj, ".3gp"))
+	if isNonUniversalVideo && transcoder.IsAvailable() && !strings.Contains(lowerObj, ".thumb.") {
+		extIdx := strings.LastIndex(objectName, ".")
+		var baseName string
+		if extIdx != -1 {
+			baseName = objectName[:extIdx]
 		} else {
-			tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_vid_%s.webm", uuid.New().String()))
-			if err := h.storage.FGetObject(c.Context(), bucket, objectName, tmpIn, minio.GetObjectOptions{}); err == nil {
-				if convertedPath, err := transcoder.ConvertVideoToUniversalMP4(tmpIn); err == nil {
-					_, _ = h.storage.FPutObject(c.Context(), bucket, mp4ObjectName, convertedPath, minio.PutObjectOptions{
-						ContentType: "video/mp4",
-					})
-					_ = os.Remove(convertedPath)
-					objectName = mp4ObjectName
-				}
-				_ = os.Remove(tmpIn)
-			}
+			baseName = objectName
 		}
-	}
-
-	// 3. MOV videolarını evrensel H.264 MP4'e on-the-fly dönüştür ve önbelleğe al
-	if bucket == "media" && strings.HasSuffix(objectName, ".mov") && transcoder.IsAvailable() {
-		mp4ObjectName := strings.TrimSuffix(objectName, ".mov") + ".mp4"
+		mp4ObjectName := baseName + ".mp4"
 		if _, statErr := h.storage.StatObject(c.Context(), bucket, mp4ObjectName); statErr == nil {
 			objectName = mp4ObjectName
 		} else {
-			tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_vid_%s.mov", uuid.New().String()))
+			tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_vid_%s_%s", uuid.New().String(), filepath.Base(objectName)))
 			if err := h.storage.FGetObject(c.Context(), bucket, objectName, tmpIn, minio.GetObjectOptions{}); err == nil {
 				if convertedPath, err := transcoder.ConvertVideoToUniversalMP4(tmpIn); err == nil {
 					_, _ = h.storage.FPutObject(c.Context(), bucket, mp4ObjectName, convertedPath, minio.PutObjectOptions{
@@ -325,9 +358,8 @@ func (h *MediaHandler) GetMediaFile(c *fiber.Ctx) error {
 	}
 
 	// 4. Mevcut büyük fotoğrafları (JPG, PNG, BMP) on-the-fly WhatsApp standardı WebP'ye dönüştür ve MinIO'da önbelleğe al
-	lowerObj := strings.ToLower(objectName)
 	isImageFile := bucket == "media" && (strings.HasSuffix(lowerObj, ".jpg") || strings.HasSuffix(lowerObj, ".jpeg") || strings.HasSuffix(lowerObj, ".png") || strings.HasSuffix(lowerObj, ".bmp"))
-	if isImageFile && transcoder.IsAvailable() && !strings.Contains(lowerObj, ".opt.") {
+	if isImageFile && transcoder.IsAvailable() && !strings.Contains(lowerObj, ".opt.") && !strings.Contains(lowerObj, ".thumb.") {
 		optObjectName := objectName + ".opt.webp"
 		if _, statErr := h.storage.StatObject(c.Context(), bucket, optObjectName); statErr == nil {
 			objectName = optObjectName

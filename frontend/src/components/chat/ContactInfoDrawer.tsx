@@ -1161,27 +1161,34 @@ export default function ContactInfoDrawer({
                         /\.(mp4|mov|webm|m4v|mkv|avi|3gp)($|\?)/i.test(m.media_url || "");
                       const isDoodle = m.message_type === "doodle";
                       const finalUrl = resolveMediaUrl(m.media_url);
+                      const thumbUrl = `${finalUrl}${finalUrl.includes("?") ? "&" : "?"}thumb=1`;
 
                       return (
                         <div
                           key={m.id}
                           onClick={() => setDrawerGalleryIndex(idx)}
-                          className="aspect-square bg-grupo-dark-card relative cursor-pointer group overflow-hidden"
+                          className="aspect-square bg-slate-950 relative cursor-pointer group overflow-hidden border border-white/5"
                         >
                           {isVid ? (
-                            <div className="w-full h-full relative bg-black flex items-center justify-center">
-                              <video
-                                src={finalUrl}
-                                className="w-full h-full object-cover pointer-events-none opacity-80"
-                                preload="metadata"
+                            <div className="w-full h-full relative bg-slate-950 flex items-center justify-center">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumbUrl}
+                                alt="Video Önizleme"
+                                loading="lazy"
+                                decoding="async"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = "none";
+                                }}
                               />
-                              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                                <div className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white">
-                                  <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+                              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex items-center justify-center">
+                                <div className="w-8 h-8 rounded-full bg-black/70 backdrop-blur-xs flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                                  <Play className="w-4 h-4 fill-white ml-0.5" />
                                 </div>
                               </div>
                               {m.media_metadata?.duration && (
-                                <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded bg-black/70 text-[9px] text-white font-medium">
+                                <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white font-mono font-medium">
                                   {Math.floor(m.media_metadata.duration / 60)}:
                                   {String(Math.floor(m.media_metadata.duration % 60)).padStart(2, "0")}
                                 </span>
@@ -1190,10 +1197,11 @@ export default function ContactInfoDrawer({
                           ) : (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={finalUrl}
+                              src={thumbUrl}
                               alt="Medya"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                               loading="lazy"
+                              decoding="async"
                             />
                           )}
 
@@ -1682,10 +1690,10 @@ export default function ContactInfoDrawer({
           onClose={() => setDrawerGalleryIndex(null)}
           onJumpToMessage={(msgId) => {
             setDrawerGalleryIndex(null);
+            onClose();
             if (onJumpToMessage) {
               onJumpToMessage(msgId);
             }
-            onClose();
           }}
         />
       )}
