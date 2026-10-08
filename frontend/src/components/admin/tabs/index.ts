@@ -1,0 +1,12 @@
+export { ThemeTab } from "./ThemeTab";
+export { GeneralTab } from "./GeneralTab";
+export { ChatTab } from "./ChatTab";
+export { BannedWordsTab } from "./BannedWordsTab";
+export { SecurityTouchTab } from "./SecurityTouchTab";
+export { CallsTab } from "./CallsTab";
+export { SecurityParamsTab } from "./SecurityParamsTab";
+export { LogsTab } from "./LogsTab";
+export { StatsTab } from "./StatsTab";
+export { EmergencyTab } from "./EmergencyTab";
+export { UsersTab } from "./UsersTab";
+export { SecurityLogsTab } from "./SecurityLogsTab";

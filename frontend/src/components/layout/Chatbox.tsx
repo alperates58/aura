@@ -26,12 +26,16 @@ import ReplyBar from "@/components/chat/ReplyBar";
 import MediaUploadMenu from "@/components/chat/MediaUploadMenu";
 import AudioRecorder from "@/components/chat/AudioRecorder";
 import EmojiPicker from "@/components/chat/EmojiPicker";
+import dynamic from "next/dynamic";
 import EmptyChatState from "@/components/chat/EmptyChatState";
-import ContactInfoDrawer from "@/components/chat/ContactInfoDrawer";
-import MediaStagingModal from "@/components/chat/MediaStagingModal";
-import MediaGalleryModal, { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
-import PdfPreviewModal from "@/components/chat/PdfPreviewModal";
-import DoodleModal from "@/components/chat/DoodleModal";
+
+// Chat içi ağır çekmece ve modalları dinamik (lazy) yükle
+const ContactInfoDrawer = dynamic(() => import("@/components/chat/ContactInfoDrawer"), { ssr: false });
+const MediaStagingModal = dynamic(() => import("@/components/chat/MediaStagingModal"), { ssr: false });
+const MediaGalleryModal = dynamic(() => import("@/components/chat/MediaGalleryModal"), { ssr: false });
+const PdfPreviewModal = dynamic(() => import("@/components/chat/PdfPreviewModal"), { ssr: false });
+const DoodleModal = dynamic(() => import("@/components/chat/DoodleModal"), { ssr: false });
+export type { GalleryMediaItem } from "@/components/chat/MediaGalleryModal";
 import { api, resolveMediaUrl } from "@/lib/api";
 import { compressImage, validateVideo } from "@/lib/compression";
 import { focusChatInput } from "@/lib/utils";
@@ -182,6 +186,14 @@ export default function Chatbox({
   const isMessagesLoaded = Boolean(activeConversationId && messages[activeConversationId] !== undefined);
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
   const isOtherTyping = activeConversationId ? typingMap[activeConversationId] : false;
+
+  const messageMap = useMemo(() => {
+    const map = new Map<string, (typeof activeMessages)[0]>();
+    for (const m of activeMessages) {
+      map.set(m.id, m);
+    }
+    return map;
+  }, [activeMessages]);
 
   const otherUserStoryGroup = useMemo(() => {
     if (!activeConv?.other_user?.id) return null;
@@ -959,6 +971,7 @@ export default function Chatbox({
                             isHighlightedMatch={m.id === activeMatchedMessageId}
                             onJumpToMessage={(targetId) => handleJumpToMessage(activeConv.id, targetId)}
                             otherUserName={activeConv.other_user.display_name}
+                            repliedMessage={m.reply_to_id ? messageMap.get(m.reply_to_id) : undefined}
                             onOpenMedia={(msgId) => {
                               const idx = galleryItems.findIndex((it) => it.id === msgId);
                               setGalleryInitialIndex(idx >= 0 ? idx : 0);

@@ -13,23 +13,25 @@ import { useSettingsStore } from "@/store/useSettingsStore";
 import SideNavigation, { NavTab } from "@/components/layout/SideNavigation";
 import AsideList from "@/components/layout/AsideList";
 import Chatbox from "@/components/layout/Chatbox";
-import IncomingCallModal from "@/components/call/IncomingCallModal";
-import ActiveCallModal from "@/components/call/ActiveCallModal";
-import SettingsModal from "@/components/chat/SettingsModal";
-import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
-import StoryViewerModal from "@/components/story/StoryViewerModal";
-import StoryCreatorModal from "@/components/story/StoryCreatorModal";
-import StoryHighlightViewerModal from "@/components/story/StoryHighlightViewerModal";
 import StoryNotificationBanner from "@/components/story/StoryNotificationBanner";
-import MessageInfoModal from "@/components/chat/MessageInfoModal";
-import ListenTogetherModal from "@/components/chat/ListenTogetherModal";
 import ListenTogetherController from "@/components/chat/ListenTogetherController";
-import SafetyNumberModal from "@/components/chat/SafetyNumberModal";
 import { performEmergencyEscape } from "@/lib/emergency";
 import { getApiBaseUrl, getBasePath, getLoginUrl } from "@/lib/api";
 import { notificationManager } from "@/lib/notifications";
 import { subscribeUserToPush, getPushSubscription } from "@/lib/push_notifications";
 import { ShieldAlert, X } from "lucide-react";
+
+// Mobil ve web başlangıç yükleme süresini optimize etmek için ağır modalları dinamik (lazy) yükle
+const IncomingCallModal = dynamic(() => import("@/components/call/IncomingCallModal"), { ssr: false });
+const ActiveCallModal = dynamic(() => import("@/components/call/ActiveCallModal"), { ssr: false });
+const SettingsModal = dynamic(() => import("@/components/chat/SettingsModal"), { ssr: false });
+const AdminPanelModal = dynamic(() => import("@/components/admin/AdminPanelModal").then((mod) => mod.AdminPanelModal), { ssr: false });
+const StoryViewerModal = dynamic(() => import("@/components/story/StoryViewerModal"), { ssr: false });
+const StoryCreatorModal = dynamic(() => import("@/components/story/StoryCreatorModal"), { ssr: false });
+const StoryHighlightViewerModal = dynamic(() => import("@/components/story/StoryHighlightViewerModal"), { ssr: false });
+const MessageInfoModal = dynamic(() => import("@/components/chat/MessageInfoModal"), { ssr: false });
+const ListenTogetherModal = dynamic(() => import("@/components/chat/ListenTogetherModal"), { ssr: false });
+const SafetyNumberModal = dynamic(() => import("@/components/chat/SafetyNumberModal"), { ssr: false });
 
 // İstemciye özel güvenlik butonu (SSR devre dışı)
 const GhostPanicTouch = dynamic(() => import("@/components/security/GhostPanicTouch"), {

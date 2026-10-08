@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Message, useChatStore } from "@/store/useChatStore";
 import {
@@ -48,9 +48,10 @@ interface Props {
   otherUserName?: string;
   onOpenMedia?: (messageId: string) => void;
   onOpenPdf?: (url: string, name?: string) => void;
+  repliedMessage?: Message | null;
 }
 
-export default function MessageBubble({
+function MessageBubbleComponent({
   message,
   searchQuery,
   isHighlightedMatch,
@@ -58,36 +59,28 @@ export default function MessageBubble({
   otherUserName,
   onOpenMedia,
   onOpenPdf,
+  repliedMessage,
 }: Props) {
-  const {
-    setSelectedMessageInfo,
-    setReplyingTo,
-    deleteMessage,
-    editMessage,
-    toggleStar,
-    messages,
-    activeConversationId,
-    isSelectionMode,
-    selectedMessageIds,
-    toggleSelectMessage,
-    startSelectionMode,
-    editingMessageId,
-    setEditingMessageId,
-  } = useChatStore();
+  const setSelectedMessageInfo = useChatStore((s) => s.setSelectedMessageInfo);
+  const setReplyingTo = useChatStore((s) => s.setReplyingTo);
+  const deleteMessage = useChatStore((s) => s.deleteMessage);
+  const editMessage = useChatStore((s) => s.editMessage);
+  const toggleStar = useChatStore((s) => s.toggleStar);
+  const toggleSelectMessage = useChatStore((s) => s.toggleSelectMessage);
+  const startSelectionMode = useChatStore((s) => s.startSelectionMode);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const setEditingMessageId = useChatStore((s) => s.setEditingMessageId);
+  const isSelected = useChatStore((s) => s.selectedMessageIds.includes(message.id));
+  const isSelectionMode = useChatStore((s) => s.isSelectionMode);
+
   const { user } = useAuthStore();
   const chatSettings = useSettingsStore((state) => state.settings?.chat_settings);
-  const isSelected = selectedMessageIds.includes(message.id);
 
   const maskedContent = useMemo(() => {
     return maskBannedWords(message.content, chatSettings?.banned_words);
   }, [message.content, chatSettings?.banned_words]);
 
-  const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
-  const targetRepliedMessage =
-    message.reply_to ||
-    (message.reply_to_id
-      ? activeMessages.find((m) => m.id === message.reply_to_id)
-      : null);
+  const targetRepliedMessage = message.reply_to || repliedMessage || null;
 
   // WhatsApp Mobil Sağa Kaydırarak Yanıtla (Swipe-to-Reply)
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -95,11 +88,13 @@ export default function MessageBubble({
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const isHorizontalSwipe = useRef(false);
+  const hasVibratedRef = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     isHorizontalSwipe.current = false;
+    hasVibratedRef.current = false;
     setIsSwiping(false);
   };
 
@@ -118,7 +113,9 @@ export default function MessageBubble({
     if (isHorizontalSwipe.current) {
       const offset = Math.min(Math.max(deltaX, 0), 75);
       setSwipeOffset(offset);
-      if (offset >= 50 && typeof navigator !== "undefined" && navigator.vibrate) {
+      // Mobilde titremenin sürekli tetiklenip UI iş parçacığını kasmasını önlemek için eşik aşıldığında sadece bir kez titret
+      if (offset >= 50 && !hasVibratedRef.current && typeof navigator !== "undefined" && navigator.vibrate) {
+        hasVibratedRef.current = true;
         navigator.vibrate(10);
       }
     }
@@ -135,6 +132,7 @@ export default function MessageBubble({
     setSwipeOffset(0);
     setIsSwiping(false);
     isHorizontalSwipe.current = false;
+    hasVibratedRef.current = false;
   };
 
   const [showReactions, setShowReactions] = useState(false);
@@ -1276,3 +1274,6 @@ export default function MessageBubble({
     </div>
   );
 }
+
+const MessageBubble = React.memo(MessageBubbleComponent);
+export default MessageBubble;

@@ -31,6 +31,7 @@ let activeWs: WebSocket | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let reconnectAttempts = 0;
 let isListenersRegistered = false;
+let heartbeatInterval: NodeJS.Timeout | null = null;
 
 const OUTBOX_STORAGE_KEY = "aura_outbox";
 
@@ -79,7 +80,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
 
     set({ isManualDisconnect: false, isConnecting: true });
 
-    // Tarayıcı çevrimiçi / çevrimdışı dinleyicilerini ilk seferde bağla
+    // Tarayıcı çevrimiçi / çevrimdışı ve ekran uyanma (visibilitychange) dinleyicilerini ilk seferde bağla
     if (typeof window !== "undefined" && !isListenersRegistered) {
       isListenersRegistered = true;
       window.addEventListener("online", () => {
@@ -96,6 +97,27 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         console.log("⚠️ [Aura Network] İnternet bağlantısı koptu.");
         set({ isConnected: false });
       });
+
+      // Mobil cihaz ekran kilidinden çıktığında veya sekme öne geldiğinde anında canlılığı tazele
+      const handleWakeOrFocus = () => {
+        if (document.visibilityState === "visible") {
+          const cur = activeWs || get().socket;
+          if (!cur || cur.readyState !== WebSocket.OPEN) {
+            console.log("📱 [Aura Network] Mobil ekran uyandı. Soket hızlıca bağlanıyor...");
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+              reconnectTimer = null;
+            }
+            reconnectAttempts = 0;
+            get().connect();
+          } else {
+            // Soket açık ise hemen ping göndererek presence ve canlılığı tazele
+            get().sendAction("ping", {});
+          }
+        }
+      };
+      document.addEventListener("visibilitychange", handleWakeOrFocus);
+      window.addEventListener("focus", handleWakeOrFocus);
 
       // 2.2 Düzeltmesi: Sekmeler arası outbox sayacını senkronize et
       window.addEventListener("storage", (e) => {
@@ -159,6 +181,14 @@ export const useSocketStore = create<SocketState>((set, get) => ({
           reconnectTimer = null;
         }
 
+        // Mobil ağlarda (4G/5G/WiFi NAT) bağlantının sessizce kopmasını önlemek için 20sn keep-alive heartbeat
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+          if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+            get().sendAction("ping", {});
+          }
+        }, 20000);
+
         set({
           socket: ws,
           isConnected: true,
@@ -171,6 +201,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       };
 
       ws.onclose = () => {
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = null;
+        }
         if (activeWs === ws) {
           console.log("🔌 [WS] WebSocket bağlantısı kapandı.");
           activeWs = null;
@@ -244,15 +278,14 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               // Mesajın ulaştığını onayla
               get().sendAction("delivered_ack", { message_ids: [data.payload.id] });
 
-              // Kullanıcı şu an bu sohbette mi ve ekran açık/odaklanmış mı?
-              const isVisibleAndFocused =
+              // Kullanıcı şu an bu sohbette mi ve ekran açık mı? (Mobilde hasFocus klavye/dokunmada false dönebileceğinden visibilityState ve !hidden esas alınır)
+              const isVisible =
                 typeof document !== "undefined" &&
                 !document.hidden &&
-                document.visibilityState === "visible" &&
-                document.hasFocus();
+                document.visibilityState === "visible";
 
               const isCurrentChatActive =
-                isVisibleAndFocused && chatStore.activeConversationId === data.payload.conversation_id;
+                isVisible && chatStore.activeConversationId === data.payload.conversation_id;
 
               if (isCurrentChatActive) {
                 notificationManager.stopFlash();
@@ -486,6 +519,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
   },
 
   disconnect: () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
     set({ isManualDisconnect: true, socket: null, isConnected: false, isConnecting: false, isReconnecting: false });
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
