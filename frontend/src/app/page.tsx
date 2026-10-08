@@ -82,10 +82,7 @@ import {
   Key,
 } from "lucide-react";
 
-// İstemciye özel güvenlik modalları (SSR devre dışı)
-const PinLockModal = dynamic(() => import("@/components/security/PinLockModal"), {
-  ssr: false,
-});
+// İstemciye özel güvenlik butonu (SSR devre dışı)
 const GhostPanicTouch = dynamic(() => import("@/components/security/GhostPanicTouch"), {
   ssr: false,
 });
@@ -463,6 +460,7 @@ export default function HomePage() {
   const initialScrolledConvsRef = useRef<Record<string, boolean>>({});
   const prevMessagesCountRef = useRef<Record<string, number>>({});
   const isPrependingOlderRef = useRef(false);
+  const hasUserInteractedRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef = useRef<number>(0);
 
@@ -485,6 +483,43 @@ export default function HomePage() {
       messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
     }
   }, []);
+
+  // loadMessages tamamlandığında veya arka plandan dönüldüğünde son mesaja odaklanma sinyali
+  useEffect(() => {
+    const handleSnapBottom = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (!customEvt.detail?.convId || customEvt.detail.convId === activeConversationId) {
+        if (activeConversationId) {
+          initialScrolledConvsRef.current[activeConversationId] = false;
+        }
+        const snap = () => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          }
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
+          }
+        };
+        snap();
+        requestAnimationFrame(snap);
+        const t1 = setTimeout(snap, 30);
+        const t2 = setTimeout(snap, 100);
+        const t3 = setTimeout(() => {
+          snap();
+          if (activeConversationId) {
+            initialScrolledConvsRef.current[activeConversationId] = true;
+          }
+        }, 250);
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+          clearTimeout(t3);
+        };
+      }
+    };
+    window.addEventListener("aura:snap_bottom", handleSnapBottom);
+    return () => window.removeEventListener("aura:snap_bottom", handleSnapBottom);
+  }, [activeConversationId]);
 
   useEffect(() => {
     updateViewportMetrics();
@@ -584,6 +619,7 @@ export default function HomePage() {
     if (!activeConversationId) return;
     initialScrolledConvsRef.current[activeConversationId] = false;
     isPrependingOlderRef.current = false;
+    hasUserInteractedRef.current = false;
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.overflowY = "hidden";
@@ -646,18 +682,46 @@ export default function HomePage() {
       return;
     }
 
-    // C. Yeni bir mesaj geldiğinde (aşağıya eklendiğinde)
+    // C. Yeni bir mesaj geldiğinde veya soket bildiriminden sonra geçmiş yüklendiğinde
     const prevCount = prevMessagesCountRef.current[activeConversationId] || 0;
     prevMessagesCountRef.current[activeConversationId] = currentMsgs.length;
 
     if (currentMsgs.length > prevCount) {
+      // Eğer konuşma soketten gelen tek bir bildirim mesajından (örn. Aura Güvenlik)
+      // tam geçmişe (loadMessages tamamlandığında çoklu mesaja) sıçradıysa: kesinlikle tabana sabitle
+      if (prevCount <= 1 && currentMsgs.length > 1) {
+        const snap = () => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          }
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
+          }
+        };
+        snap();
+        requestAnimationFrame(snap);
+        const t1 = setTimeout(snap, 40);
+        const t2 = setTimeout(snap, 120);
+        const t3 = setTimeout(() => {
+          snap();
+          if (activeConversationId) {
+            initialScrolledConvsRef.current[activeConversationId] = true;
+          }
+        }, 300);
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+          clearTimeout(t3);
+        };
+      }
+
       const isHidden = typeof document !== "undefined" && document.hidden;
       if (isHidden) {
         scrollToBottom("auto");
       } else {
         const el = messagesContainerRef.current;
         const isNearBottom = el
-          ? el.scrollHeight - el.scrollTop - el.clientHeight < 250
+          ? el.scrollHeight - el.scrollTop - el.clientHeight < 350
           : true;
         const lastMsg = currentMsgs[currentMsgs.length - 1];
         const isMine = lastMsg?.is_mine;
@@ -2227,14 +2291,31 @@ export default function HomePage() {
               {/* Mesaj Akışı */}
               <div
                 ref={messagesContainerRef}
-              onScroll={async (e) => {
-                const el = e.currentTarget;
-                if (!activeConversationId) return;
+                onTouchStart={() => {
+                  hasUserInteractedRef.current = true;
+                }}
+                onWheel={() => {
+                  hasUserInteractedRef.current = true;
+                }}
+                onMouseDown={() => {
+                  hasUserInteractedRef.current = true;
+                }}
+                onKeyDown={() => {
+                  hasUserInteractedRef.current = true;
+                }}
+                onScroll={async (e) => {
+                  const el = e.currentTarget;
+                  if (!activeConversationId) return;
 
-                // Konuşma henüz ilk kez tabana kaydırılmadıysa ASLA yukarı kaydırma sayfalama tetikleme
-                if (!initialScrolledConvsRef.current[activeConversationId]) {
-                  return;
-                }
+                  // Kullanıcı kasıtlı olarak scroll/dokunma hareketi yapmadıysa (örn. ilk mount/sayfa render'ı) ASLA sayfalama yapma
+                  if (!hasUserInteractedRef.current) {
+                    return;
+                  }
+
+                  // Konuşma henüz ilk kez tabana kaydırılmadıysa ASLA yukarı kaydırma sayfalama tetikleme
+                  if (!initialScrolledConvsRef.current[activeConversationId]) {
+                    return;
+                  }
 
                 if (
                   el.scrollTop < 60 &&
@@ -2788,9 +2869,6 @@ export default function HomePage() {
 
       {/* Mobil ve Web Hayalet Panik Butonu (AssistiveTouch) */}
       <GhostPanicTouch />
-
-      {/* 6 Haneli Ekran Kilit Paneli */}
-      <PinLockModal />
     </div>
     </>
   );

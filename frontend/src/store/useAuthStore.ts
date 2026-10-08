@@ -62,20 +62,12 @@ interface AuthState {
   terminateSession: (sessionId: string) => Promise<void>;
   terminateOtherSessions: () => Promise<void>;
   regenerateSecurityCode: () => Promise<string>;
-  isAppLocked: boolean;
-  hasAppPin: boolean;
-  lockApp: () => void;
-  unlockApp: (pin: string) => boolean;
-  setAppPin: (pin: string) => void;
-  removeAppPin: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
-  isAppLocked: false,
-  hasAppPin: false,
 
   checkAuth: async () => {
     try {
@@ -85,13 +77,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (user?.privacy_settings?.sound_alerts !== undefined) {
         soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
       }
-      let hasPin = false;
-      if (typeof window !== "undefined") {
-        try {
-          hasPin = !!localStorage.getItem("aura_app_pin_hash");
-        } catch (_) {}
-      }
-      set({ user, isAuthenticated: true, isLoading: false, hasAppPin: hasPin });
+      set({ user, isAuthenticated: true, isLoading: false });
       return true;
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false });
@@ -105,13 +91,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user?.privacy_settings?.sound_alerts !== undefined) {
       soundEffects.setSoundEnabled(user.privacy_settings.sound_alerts);
     }
-    let hasPin = false;
-    if (typeof window !== "undefined") {
-      try {
-        hasPin = !!localStorage.getItem("aura_app_pin_hash");
-      } catch (_) {}
-    }
-    set({ user, isAuthenticated: true, isLoading: false, hasAppPin: hasPin });
+    set({ user, isAuthenticated: true, isLoading: false });
     return res.data;
   },
 
@@ -250,47 +230,5 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     }
     return res.data.security_number_salt;
-  },
-
-  lockApp: () => {
-    set({ isAppLocked: true });
-  },
-
-  unlockApp: (pin: string) => {
-    if (typeof window === "undefined") return false;
-    let stored = null;
-    try {
-      stored = localStorage.getItem("aura_app_pin_hash");
-    } catch (_) {}
-    if (!stored) {
-      // PIN henüz kurulmamışsa serbest bırak
-      set({ isAppLocked: false });
-      return true;
-    }
-    try {
-      if (stored === btoa("aura_pin_v1_" + pin)) {
-        set({ isAppLocked: false });
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  },
-
-  setAppPin: (pin: string) => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("aura_app_pin_hash", btoa("aura_pin_v1_" + pin));
-        set({ hasAppPin: true });
-      } catch (_) {}
-    }
-  },
-
-  removeAppPin: () => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem("aura_app_pin_hash");
-        set({ hasAppPin: false, isAppLocked: false });
-      } catch (_) {}
-    }
   },
 }));

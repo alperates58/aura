@@ -68,6 +68,7 @@ type TabType =
   | "theme"
   | "general"
   | "chat"
+  | "banned_words"
   | "calls"
   | "security"
   | "logs"
@@ -220,6 +221,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [isSettingsLoading, setIsSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [bannedWordTester, setBannedWordTester] = useState("Örnek: Bu platformda küfür ve kumar kelimeleri yasaktır.");
+  const [quickBannedWordInput, setQuickBannedWordInput] = useState("");
 
   // Users state
   const [users, setUsers] = useState<User[]>([]);
@@ -756,6 +759,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       desc: "Maksimum dosya boyutu, mesaj düzenleme ve herkesten silme süreleri",
       icon: MessageSquare,
       color: "from-cyan-600 to-blue-600 text-cyan-300",
+    },
+    {
+      id: "banned_words",
+      label: "Yasaklı Kelimeler & Sansür",
+      desc: "Otomatik kelime sansürü, kural dışı kelime listesi ve canlı filtreleme",
+      icon: Ban,
+      color: "from-rose-600 to-pink-600 text-rose-300",
+      badge:
+        settings?.chat_settings?.banned_words && settings.chat_settings.banned_words.length > 0
+          ? `${settings.chat_settings.banned_words.length} kelime`
+          : undefined,
     },
     {
       id: "calls",
@@ -2186,21 +2200,199 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </button>
                   </div>
 
-                  {/* YASAKLI KELİMELER FİLTRESİ */}
-                  <div className="p-4 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
-                        <ShieldAlert className="w-4 h-4" />
+                  {/* YASAKLI KELİMELER BAĞLANTISI */}
+                  <div className="p-4 bg-gradient-to-r from-rose-950/20 to-[#12151D] border border-rose-500/20 rounded-2xl flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
+                        <Ban className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-xs font-bold text-white">Yasaklı Kelimeler Filtresi (Banned Words)</h3>
-                        <p className="text-[10px] text-slate-400">Belirlenen kelimeler hem geçmiş hem de canlı yazılan tüm mesajlarda otomatik maskelenir (Örn: elma ➔ e***)</p>
+                        <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                          <span>Yasaklı Kelimeler & Otomatik Sansür</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-normal">
+                            {(settings.chat_settings.banned_words || []).length} kelime
+                          </span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Yasaklı kelime yönetimi ve canlı test aracı sol menüde ayrı bir sekmeye taşındı.
+                        </p>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("banned_words")}
+                      className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-900/30"
+                    >
+                      <span>Yönet</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
+              {/* TAB: YASAKLI KELİMELER & SANSÜR (ÖZEL MENÜ) */}
+              {activeTab === "banned_words" && settings && (
+                <div className="space-y-5 animate-in fade-in duration-200">
+                  {/* Başlık Kartı */}
+                  <div className="p-5 bg-gradient-to-br from-rose-950/40 via-[#12151D] to-[#12151D] border border-rose-500/30 rounded-2xl relative overflow-hidden shadow-xl">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl pointer-events-none" />
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 shrink-0">
+                          <Ban className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base font-bold text-white tracking-tight">
+                              Yasaklı Kelimeler & Otomatik Sansür Kalkanı
+                            </h2>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                              Aktif Filtre
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                            Belirlediğiniz kelimeler hem geçmiş hem de canlı yazılan tüm birebir sohbet mesajlarında otomatik olarak sansürlenir (Örn: <code className="text-rose-300 font-mono">elma</code> ➔ <code className="text-emerald-400 font-mono">e***</code>).
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-2xl font-black text-rose-400 font-mono">
+                          {(settings.chat_settings.banned_words || []).length}
+                        </span>
+                        <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Kayıtlı Kelime
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hızlı Kelime Ekleme & Toplu Düzenleme */}
+                  <div className="p-5 bg-[#12151D] border border-[#222631] rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>Kelime Ekle & Toplu Liste</span>
+                      </h3>
+                      {settings.chat_settings.banned_words && settings.chat_settings.banned_words.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm("Tüm yasaklı kelimeleri silmek istediğinizden emin misiniz?")) {
+                              setSettings({
+                                ...settings,
+                                chat_settings: {
+                                  ...settings.chat_settings,
+                                  banned_words: [],
+                                },
+                              });
+                            }
+                          }}
+                          className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Tümünü Temizle</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Hızlı Tekli Kelime Ekleme Çubuğu */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={quickBannedWordInput}
+                          onChange={(e) => setQuickBannedWordInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const trimmed = quickBannedWordInput.trim().toLowerCase();
+                              if (!trimmed) return;
+                              const current = settings.chat_settings.banned_words || [];
+                              if (!current.includes(trimmed)) {
+                                setSettings({
+                                  ...settings,
+                                  chat_settings: {
+                                    ...settings.chat_settings,
+                                    banned_words: [...current, trimmed],
+                                  },
+                                });
+                              }
+                              setQuickBannedWordInput("");
+                            }
+                          }}
+                          placeholder="Hızlı kelime ekleyin ve Enter'a basın... (örn: kumar)"
+                          className="w-full bg-[#181B24] border border-[#292D38] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/60"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = quickBannedWordInput.trim().toLowerCase();
+                          if (!trimmed) return;
+                          const current = settings.chat_settings.banned_words || [];
+                          if (!current.includes(trimmed)) {
+                            setSettings({
+                              ...settings,
+                              chat_settings: {
+                                ...settings.chat_settings,
+                                banned_words: [...current, trimmed],
+                              },
+                            });
+                          }
+                          setQuickBannedWordInput("");
+                        }}
+                        className="px-4 py-2.5 bg-rose-600/30 hover:bg-rose-600/40 border border-rose-500/40 text-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Ekle</span>
+                      </button>
+                    </div>
+
+                    {/* İnteraktif Kelime Rozetleri (Silme butonlu 'x') */}
                     <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">
-                        Yasaklı Kelimeler Listesi (Virgülle veya satırla ayırın)
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-2">
+                        Tanımlı Kelimeler ({settings.chat_settings.banned_words?.length || 0})
+                      </label>
+                      {settings.chat_settings.banned_words && settings.chat_settings.banned_words.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 p-3 bg-[#181B24]/60 border border-[#292D38] rounded-xl max-h-48 overflow-y-auto">
+                          {settings.chat_settings.banned_words.map((word, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs font-mono font-medium group hover:bg-rose-500/25 transition-all"
+                            >
+                              <span>{word}</span>
+                              <span className="text-[10px] text-slate-400">➔</span>
+                              <span className="text-emerald-400">{maskBannedWords(word, [word])}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = (settings.chat_settings.banned_words || []).filter((_, i) => i !== idx);
+                                  setSettings({
+                                    ...settings,
+                                    chat_settings: {
+                                      ...settings.chat_settings,
+                                      banned_words: updated,
+                                    },
+                                  });
+                                }}
+                                className="w-4 h-4 rounded hover:bg-rose-600 text-rose-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors ml-0.5"
+                                title={`'${word}' kelimesini kaldır`}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-[#181B24]/40 border border-[#292D38] text-center text-xs text-slate-500">
+                          Henüz hiçbir yasaklı kelime eklenmedi. Yukarıdaki alandan veya aşağıdaki toplu metin kutusundan kelime ekleyebilirsiniz.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Toplu Düzenleme Alanı */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+                        Toplu Düzenleme (Virgül, noktalı virgül veya yeni satır ile ayırın)
                       </label>
                       <textarea
                         rows={3}
@@ -2209,47 +2401,63 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           const raw = e.target.value;
                           const words = raw
                             .split(/[,;\n]+/)
-                            .map((w) => w.trim())
+                            .map((w) => w.trim().toLowerCase())
                             .filter(Boolean);
+                          const uniqueWords = Array.from(new Set(words));
                           setSettings({
                             ...settings,
                             chat_settings: {
                               ...settings.chat_settings,
-                              banned_words: words,
+                              banned_words: uniqueWords,
                             },
                           });
                         }}
-                        placeholder="Örnek: elma, kumar, küfür1, gizlikelime"
+                        placeholder="Örnek: elma, armut, kumar, dolandırıcı, küfür"
                         className="w-full bg-[#181B24] border border-[#292D38] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500/50 resize-none font-mono"
                       />
                     </div>
+                  </div>
 
-                    {/* Canlı Sansür Test Alanı */}
-                    <div className="p-3 rounded-xl bg-[#181B24]/70 border border-[#292D38] space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Canlı Filtre Önizlemesi</span>
-                      <div className="text-xs text-slate-300">
-                        {settings.chat_settings.banned_words && settings.chat_settings.banned_words.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {settings.chat_settings.banned_words.map((w, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] font-mono">
-                                {w} ➔ {maskBannedWords(w, [w])}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-slate-500 italic">Henüz yasaklı kelime eklenmedi.</span>
-                        )}
-                      </div>
+                  {/* Canlı Test & Simülasyon Kum Havuzu */}
+                  <div className="p-5 bg-[#12151D] border border-[#222631] rounded-2xl space-y-3.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-xs font-bold text-white">Canlı Sansür Simülasyonu</h3>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        (Aşağıya bir cümle yazarak sansür algoritmasını anlık test edin)
+                      </span>
                     </div>
 
-                    <button
-                      onClick={() => handleSaveSetting("chat_settings", settings.chat_settings)}
-                      className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Yasaklı Kelimeleri Kaydet</span>
-                    </button>
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={bannedWordTester}
+                        onChange={(e) => setBannedWordTester(e.target.value)}
+                        placeholder="Test edilecek bir mesaj yazın..."
+                        className="w-full bg-[#181B24] border border-[#292D38] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50"
+                      />
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                          Sohbette Görünecek Nihai Çıktı:
+                        </span>
+                        <p className="text-xs font-medium text-emerald-300 break-words leading-relaxed font-mono">
+                          {maskBannedWords(bannedWordTester, settings.chat_settings.banned_words || []) || (
+                            <span className="text-slate-600 italic">Mesaj boş</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Kaydet Butonu */}
+                  <button
+                    onClick={() => handleSaveSetting("chat_settings", settings.chat_settings)}
+                    className="w-full py-3 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-rose-900/40"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Yasaklı Kelimeleri ve Sansür Kuralını Kaydet</span>
+                  </button>
                 </div>
               )}
 

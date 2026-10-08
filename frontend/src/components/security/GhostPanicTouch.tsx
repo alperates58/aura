@@ -3,38 +3,22 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
-import { Shield, Lock, LogOut, Radio, X, AlertTriangle, ArrowRight } from "lucide-react";
+import { Shield, LogOut, Radio, X, AlertTriangle, ArrowRight } from "lucide-react";
 import { performEmergencyEscape } from "@/lib/emergency";
 
 export default function GhostPanicTouch() {
-  const { user, lockApp, killSessions, logout, hasAppPin } = useAuthStore();
+  const { user, killSessions, logout } = useAuthStore();
   const securitySettings = useSettingsStore((s) => s.settings?.security_settings);
 
   // Buton konumu ve sürükleme durumu (SSR uyuşmazlığını önlemek için başlangıçta -1, -1)
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
 
-  const [hasPinLocal, setHasPinLocal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isOpenMenu, setIsOpenMenu] = useState(false);
   const [isAwake, setIsAwake] = useState(false);
   const [isKilling, setIsKilling] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-
-  // PIN kontrolü: Hem store hem localStorage kontrol edilir
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        const has = !!localStorage.getItem("aura_app_pin_hash");
-        setHasPinLocal(has);
-        if (has && !hasAppPin) {
-          useAuthStore.setState({ hasAppPin: true });
-        }
-      }
-    } catch (_) {}
-  }, [hasAppPin]);
-
-  const effectiveHasPin = hasAppPin || hasPinLocal;
 
   // Sürükleme ve tıklama ref'leri
   const pointerStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -207,11 +191,6 @@ export default function GhostPanicTouch() {
     }
   };
 
-  const handleLockScreen = () => {
-    setIsOpenMenu(false);
-    lockApp();
-  };
-
   // Dışarı tıklandığında menüyü kapat
   useEffect(() => {
     if (!isOpenMenu) return;
@@ -261,7 +240,7 @@ export default function GhostPanicTouch() {
             <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800/80 mb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5" />
-                <span>Panik Kalkanı</span>
+                <span>Security</span>
               </span>
               <button
                 onClick={() => setIsOpenMenu(false)}
@@ -285,49 +264,7 @@ export default function GhostPanicTouch() {
               </div>
             </button>
 
-            {/* 2. PIN ile Ekranı Kilitle (PIN belirlenmediyse pasif) */}
-            <button
-              onClick={() => {
-                if (!effectiveHasPin) {
-                  setToast("Önce Ayarlar > Güvenlik menüsünden 6 haneli PIN belirleyin.");
-                  setTimeout(() => setToast(null), 3500);
-                  return;
-                }
-                handleLockScreen();
-              }}
-              disabled={!effectiveHasPin}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-left transition-all ${
-                effectiveHasPin
-                  ? "hover:bg-slate-800/80 cursor-pointer"
-                  : "opacity-40 cursor-not-allowed hover:bg-transparent"
-              }`}
-              title={effectiveHasPin ? "Ekranı 6 haneli PIN ile dondur" : "PIN kodu henüz belirlenmedi (Pasif)"}
-            >
-              <div
-                className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  effectiveHasPin
-                    ? "bg-purple-600/20 text-purple-400"
-                    : "bg-slate-800 text-slate-500"
-                }`}
-              >
-                <Lock className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className={effectiveHasPin ? "text-white" : "text-slate-400"}>PIN ile Kilitle</span>
-                  {!effectiveHasPin && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-normal">
-                      Pasif
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  {effectiveHasPin ? "Ekranı 6 haneli PIN ile dondur" : "PIN belirlenmedi (Ayarlar'dan kurun)"}
-                </span>
-              </div>
-            </button>
-
-            {/* 3. Tüm Cihazları Düşür */}
+            {/* 2. Tüm Cihazları Düşür */}
             <button
               onClick={handleKillAllSessions}
               disabled={isKilling}
@@ -341,10 +278,6 @@ export default function GhostPanicTouch() {
                 <span className="text-[10px] text-amber-400/70 font-normal">Diğer telefon & PC oturumlarını öldür</span>
               </div>
             </button>
-
-            <div className="px-2 py-1.5 text-[9px] text-slate-400 leading-tight bg-slate-950/60 rounded-lg border border-slate-800/60 mt-1">
-              💡 <b>Refleks:</b> Butona <b>3 kez seri</b> vurduğunuzda direkt Google&apos;a atar. Çift tıkla bu menü açılır. İstediğiniz yere sürükleyebilirsiniz.
-            </div>
           </div>
         )}
 
@@ -354,17 +287,17 @@ export default function GhostPanicTouch() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`w-11 h-11 rounded-full bg-slate-950/80 border border-white/20 shadow-2xl backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity duration-300 ${
+          className={`w-11 h-11 rounded-full bg-slate-950/85 border border-white/40 ring-1 ring-white/10 shadow-[0_0_12px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-all duration-300 ${
             isOpenMenu
               ? "opacity-100 ring-2 ring-purple-500/60 scale-105"
               : isDragging
               ? "opacity-100 ring-2 ring-purple-400 scale-110 shadow-purple-500/40"
               : isAwake
               ? "opacity-95"
-              : "opacity-20 hover:opacity-90 active:opacity-100"
+              : "opacity-55 hover:opacity-95 active:opacity-100"
           }`}
-          title="Panik Butonu (3 Tık: Acil Kaçış, Çift Tık: Menü, Sürükle: Taşı)"
-          aria-label="AssistiveTouch Panik Butonu"
+          title="Security (3 Tık: Acil Kaçış, Çift Tık: Menü, Sürükle: Taşı)"
+          aria-label="AssistiveTouch Security Butonu"
         >
           <div className="w-6 h-6 rounded-full border border-purple-400/60 flex items-center justify-center bg-purple-600/20 pointer-events-none">
             <Shield className="w-3.5 h-3.5 text-purple-300" />
