@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/server ./cmd/server
 
 # 2. Aşama: Üretim Çalışma Zamanı (Production Runtime)
-FROM alpine:3.20
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates tzdata curl ffmpeg && \
     cp /usr/share/zoneinfo/Europe/Istanbul /etc/localtime && \
