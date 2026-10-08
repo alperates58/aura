@@ -229,3 +229,58 @@ func extractDurationFromStderr(stderr string) float64 {
 
 	return (hours * 3600) + (minutes * 60) + seconds
 }
+
+// OptimizeImageToWebP büyük görselleri (JPG/PNG/BMP) WhatsApp kalitesinde maksimum 1920px WebP'ye dönüştürür.
+// -map_metadata -1 ile EXIF/GPS verilerini temizler ve boyutu %90'a varan oranda düşürür.
+func OptimizeImageToWebP(inputPath string) (string, error) {
+	if !IsAvailable() {
+		return "", fmt.Errorf("ffmpeg sistemde yüklü değil")
+	}
+
+	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_opt_%s.webp", uuid.New().String()))
+
+	// En-boy oranını koruyarak max 1920px ölçekleme, 82 kalite WebP
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-i", inputPath,
+		"-map_metadata", "-1",
+		"-vf", "scale=if(gte(iw\\,ih)\\,min(1920\\,iw)\\,-2):if(lt(iw\\,ih)\\,min(1920\\,ih)\\,-2)",
+		"-c:v", "libwebp",
+		"-quality", "82",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(outputPath)
+		// Fallback: libwebp yoksa yüksek kaliteli JPEG olarak optimize et
+		return optimizeImageToJPEG(inputPath)
+	}
+
+	return outputPath, nil
+}
+
+func optimizeImageToJPEG(inputPath string) (string, error) {
+	outputPath := filepath.Join(os.TempDir(), fmt.Sprintf("aura_opt_%s.jpg", uuid.New().String()))
+
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-i", inputPath,
+		"-map_metadata", "-1",
+		"-vf", "scale=if(gte(iw\\,ih)\\,min(1920\\,iw)\\,-2):if(lt(iw\\,ih)\\,min(1920\\,ih)\\,-2)",
+		"-q:v", "3",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(outputPath)
+		return "", fmt.Errorf("görsel optimize edilemedi: %w (stderr: %s)", err, stderr.String())
+	}
+
+	return outputPath, nil
+}

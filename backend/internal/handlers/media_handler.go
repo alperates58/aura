@@ -324,6 +324,31 @@ func (h *MediaHandler) GetMediaFile(c *fiber.Ctx) error {
 		}
 	}
 
+	// 4. Mevcut büyük fotoğrafları (JPG, PNG, BMP) on-the-fly WhatsApp standardı WebP'ye dönüştür ve MinIO'da önbelleğe al
+	lowerObj := strings.ToLower(objectName)
+	isImageFile := bucket == "media" && (strings.HasSuffix(lowerObj, ".jpg") || strings.HasSuffix(lowerObj, ".jpeg") || strings.HasSuffix(lowerObj, ".png") || strings.HasSuffix(lowerObj, ".bmp"))
+	if isImageFile && transcoder.IsAvailable() && !strings.Contains(lowerObj, ".opt.") {
+		optObjectName := objectName + ".opt.webp"
+		if _, statErr := h.storage.StatObject(c.Context(), bucket, optObjectName); statErr == nil {
+			objectName = optObjectName
+		} else {
+			// Sadece 350 KB'tan büyük görselleri optimize et (zaten küçük olanlar orijinal sunulur)
+			if origStat, statErr := h.storage.StatObject(c.Context(), bucket, objectName); statErr == nil && origStat.Size > 350*1024 {
+				tmpIn := filepath.Join(os.TempDir(), fmt.Sprintf("src_opt_%s_%s", uuid.New().String(), filepath.Base(objectName)))
+				if err := h.storage.FGetObject(c.Context(), bucket, objectName, tmpIn, minio.GetObjectOptions{}); err == nil {
+					if convertedPath, err := transcoder.OptimizeImageToWebP(tmpIn); err == nil {
+						_, _ = h.storage.FPutObject(c.Context(), bucket, optObjectName, convertedPath, minio.PutObjectOptions{
+							ContentType: "image/webp",
+						})
+						_ = os.Remove(convertedPath)
+						objectName = optObjectName
+					}
+					_ = os.Remove(tmpIn)
+				}
+			}
+		}
+	}
+
 	rangeHeader := c.Get("Range")
 	var opts minio.GetObjectOptions
 
