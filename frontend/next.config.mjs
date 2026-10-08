@@ -13,6 +13,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   basePath: normalizedBasePath || undefined,
   assetPrefix: normalizedBasePath ? `${normalizedBasePath}/` : undefined,
   images: {

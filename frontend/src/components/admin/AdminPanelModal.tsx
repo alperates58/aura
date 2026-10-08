@@ -71,7 +71,8 @@ type TabType =
   | "calls"
   | "security"
   | "logs"
-  | "stats";
+  | "stats"
+  | "emergency";
 
 export const THEME_PRESETS = [
   {
