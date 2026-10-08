@@ -37,63 +37,63 @@ export async function compressImage(
   }
 
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let width = img.width;
+      let height = img.height;
 
-        // Boyut oranlarını koru
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
+      // WhatsApp Standardı: Boyut oranlarını koruyarak maksimum 1920px ölçekleme
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return resolve(file);
+      }
+
+      // Pürüzsüz yüksek kaliteli anti-aliasing ölçekleme
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const supportsWebp = checkWebpSupport();
+      const outputType = supportsWebp ? "image/webp" : "image/jpeg";
+      const extension = supportsWebp ? ".webp" : ".jpg";
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) {
+            return resolve(file);
           }
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          return resolve(file);
-        }
-
-        // Pürüzsüz yüksek kaliteli anti-aliasing ölçekleme
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const supportsWebp = checkWebpSupport();
-        const outputType = supportsWebp ? "image/webp" : "image/jpeg";
-        const extension = supportsWebp ? ".webp" : ".jpg";
-
-        canvas.toBlob(
-          (blob) => {
-            if (!blob || blob.size >= file.size) {
-              return resolve(file);
-            }
-            const cleanName = file.name.replace(/\.[^/.]+$/, "") + extension;
-            const compressedFile = new File([blob], cleanName, {
-              type: outputType,
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
-          },
-          outputType,
-          quality
-        );
-      };
-      img.onerror = () => resolve(file);
-      img.src = e.target?.result as string;
+          const cleanName = file.name.replace(/\.[^/.]+$/, "") + extension;
+          const compressedFile = new File([blob], cleanName, {
+            type: outputType,
+            lastModified: Date.now(),
+          });
+          resolve(compressedFile);
+        },
+        outputType,
+        quality
+      );
     };
-    reader.onerror = () => resolve(file);
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+    img.src = objectUrl;
   });
 }
 

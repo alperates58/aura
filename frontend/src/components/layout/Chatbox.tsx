@@ -171,6 +171,7 @@ export default function Chatbox({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesInnerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef<boolean>(true);
+  const prevLastMsgIdRef = useRef<string | null>(null);
 
   // Arama Eşleşmeleri ve Vurgu
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -237,6 +238,7 @@ export default function Chatbox({
     setIsEmojiPickerOpen(false);
     if (!activeConversationId) return;
     isNearBottomRef.current = true;
+    prevLastMsgIdRef.current = null;
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.overflowY = "hidden";
@@ -283,7 +285,7 @@ export default function Chatbox({
     };
   }, [activeConversationId]);
 
-  // Yeni mesaj geldiğinde veya mesajlar belleğe yüklendiğinde tabana yerleş
+  // Sadece yeni bir son mesaj geldiğinde tabana yerleş
   useEffect(() => {
     if (!activeConversationId) return;
     const currentMsgs = messages[activeConversationId];
@@ -293,7 +295,21 @@ export default function Chatbox({
     if (!container) return;
 
     const lastMsg = currentMsgs[currentMsgs.length - 1];
-    if (lastMsg?.is_mine) {
+    if (!lastMsg) return;
+
+    // İlk yükleme: sadece ID'yi kaydet, ilk mount zaten tabana yerleştiriyor
+    if (!prevLastMsgIdRef.current) {
+      prevLastMsgIdRef.current = lastMsg.id;
+      return;
+    }
+
+    // Son mesaj değişmediyse (eski mesajlar/arşiv/reaksiyon yüklendiyse) tabana kaydırma!
+    if (prevLastMsgIdRef.current === lastMsg.id) {
+      return;
+    }
+    prevLastMsgIdRef.current = lastMsg.id;
+
+    if (lastMsg.is_mine) {
       scrollToBottom("smooth");
     } else if (isNearBottomRef.current) {
       container.scrollTop = container.scrollHeight;
@@ -526,48 +542,53 @@ export default function Chatbox({
   const handleJumpToMessage = async (conversationId: string, messageId: string) => {
     if (!messageId) return;
 
+    // Hedef mesaja atlarken tabana sabitlemeyi hemen kapat
+    isNearBottomRef.current = false;
+
     if (activeConversationId !== conversationId) {
       await selectConversation(conversationId);
+      isNearBottomRef.current = false;
     }
     setShowContactDrawer(false);
     setIsGalleryOpen(false);
 
+    // Çekmece kapanışı ve layout reflow'u için kısa süre tanı
+    await new Promise((r) => setTimeout(r, 120));
+
+    const scrollToTarget = (element: HTMLElement) => {
+      isNearBottomRef.current = false;
+      setHighlightedMessageId(messageId);
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        isNearBottomRef.current = false;
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    };
+
     // 1. Doğrudan DOM kontrolü
     let el = document.getElementById(`msg-${messageId}`);
     if (el) {
-      setHighlightedMessageId(messageId);
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      scrollToTarget(el);
       return;
     }
 
-    // 2. Hassas yükleme
+    // 2. Hassas yükleme (loadMessagesAround)
     await useChatStore.getState().loadMessagesAround(conversationId, messageId);
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 150));
 
     el = document.getElementById(`msg-${messageId}`);
     if (el) {
-      setHighlightedMessageId(messageId);
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      scrollToTarget(el);
       return;
     }
 
-    // 3. İkinci deneme
-    await new Promise((r) => setTimeout(r, 200));
-    el = document.getElementById(`msg-${messageId}`);
-    if (el) {
-      setHighlightedMessageId(messageId);
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-
-    // 4. Fallback: Kademeli yükleme
+    // 3. Fallback: Kademeli yükleme
     for (let i = 0; i < 5; i++) {
       const hasMore = await useChatStore.getState().loadOlderMessages(conversationId);
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 150));
       el = document.getElementById(`msg-${messageId}`);
       if (el) {
-        setHighlightedMessageId(messageId);
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        scrollToTarget(el);
         break;
       }
       if (!hasMore) break;
@@ -591,6 +612,7 @@ export default function Chatbox({
 
   useEffect(() => {
     if (activeMatchedMessageId) {
+      isNearBottomRef.current = false;
       const el = document.getElementById(`msg-${activeMatchedMessageId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });

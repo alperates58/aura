@@ -38,7 +38,7 @@ export default function InChatSearchBar({
               onClose();
             }
           }}
-          placeholder="Sohbette ara (Enter: sonraki, Shift+Enter: önceki)..."
+          placeholder="Sohbette ara..."
           className="w-full bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
           autoFocus
         />

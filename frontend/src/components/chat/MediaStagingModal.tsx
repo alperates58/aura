@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Loader2, FileText, Image as ImageIcon, Video, Music, RefreshCw, Smile } from "lucide-react";
+import { X, Send, Loader2, FileText, Image as ImageIcon, Video, Music, RefreshCw, Smile, Sparkles } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
+import { compressImage } from "@/lib/compression";
 
 interface Props {
   file: File | null;
@@ -18,6 +19,8 @@ export default function MediaStagingModal({ file, isOpen, onClose, onSend }: Pro
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [compressedFile, setCompressedFile] = useState<File | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -28,6 +31,8 @@ export default function MediaStagingModal({ file, isOpen, onClose, onSend }: Pro
       setUploadProgress(0);
       setErrorMsg(null);
       setShowEmojiPicker(false);
+      setCompressedFile(null);
+      setIsCompressing(false);
       return;
     }
 
@@ -40,6 +45,35 @@ export default function MediaStagingModal({ file, isOpen, onClose, onSend }: Pro
       };
     } else {
       setPreviewUrl(null);
+    }
+  }, [file, isOpen]);
+
+  // Görseller için arka planda hızlı WhatsApp standardı sıkıştırma ön-hesaplama
+  useEffect(() => {
+    if (!file || !isOpen) return;
+    const fileName = file.name.toLowerCase();
+    const isImg = file.type.startsWith("image/") || /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(fileName);
+    if (isImg && file.size > 200 * 1024) {
+      let isCancelled = false;
+      setIsCompressing(true);
+      compressImage(file)
+        .then((comp) => {
+          if (!isCancelled) {
+            setCompressedFile(comp);
+            setIsCompressing(false);
+          }
+        })
+        .catch(() => {
+          if (!isCancelled) {
+            setIsCompressing(false);
+          }
+        });
+      return () => {
+        isCancelled = true;
+      };
+    } else {
+      setCompressedFile(null);
+      setIsCompressing(false);
     }
   }, [file, isOpen]);
 
@@ -66,7 +100,8 @@ export default function MediaStagingModal({ file, isOpen, onClose, onSend }: Pro
     abortControllerRef.current = controller;
 
     try {
-      await onSend(file, caption.trim(), (percent) => {
+      const finalFile = compressedFile || file;
+      await onSend(finalFile, caption.trim(), (percent) => {
         setUploadProgress(percent);
       }, controller.signal);
       onClose();
@@ -112,10 +147,31 @@ export default function MediaStagingModal({ file, isOpen, onClose, onSend }: Pro
               <FileText className="w-5 h-5 text-amber-400" />
             )}
             <div>
-              <h3 className="text-sm font-bold text-white truncate max-w-[280px] sm:max-w-md">
+              <h3 className="text-sm font-bold text-white truncate max-w-[240px] sm:max-w-md">
                 {file.name}
               </h3>
-              <p className="text-[11px] text-slate-400">{formatFileSize(file.size)}</p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {formatFileSize(file.size)}
+                </span>
+                {isImage && (
+                  compressedFile && compressedFile.size < file.size ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span>WhatsApp Standardı: {formatFileSize(compressedFile.size)}</span>
+                    </span>
+                  ) : isCompressing ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-indigo-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>WhatsApp optimizasyonu...</span>
+                    </span>
+                  ) : file.size <= 200 * 1024 ? (
+                    <span className="text-[10px] text-emerald-400 font-medium">
+                      • Optimize HD Boyut
+                    </span>
+                  ) : null
+                )}
+              </div>
             </div>
           </div>
 
