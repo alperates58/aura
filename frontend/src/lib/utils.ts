@@ -167,7 +167,7 @@ export function focusChatInput(delayMs: number = 0) {
   const doFocus = () => {
     const textarea = document.getElementById("aura-chat-input") as HTMLTextAreaElement | null;
     if (textarea) {
-      textarea.focus();
+      textarea.focus({ preventScroll: true });
       const len = textarea.value.length;
       textarea.setSelectionRange(len, len);
     }

@@ -175,8 +175,24 @@ export default function Chatbox({
   // WhatsApp Stili Scroll Motoru & ResizeObserver
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesInnerRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef<boolean>(true);
   const prevLastMsgIdRef = useRef<string | null>(null);
+
+  // Kullanıcı Niyeti (User Intent) Takipçisi - Focus veya layout shift sırasında pagination tetiklenmesini önler
+  const isUserInteractingRef = useRef<boolean>(false);
+  const userInteractionTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const markUserInteracting = useCallback(() => {
+    isUserInteractingRef.current = true;
+    if (userInteractionTimerRef.current) {
+      clearTimeout(userInteractionTimerRef.current);
+    }
+    userInteractionTimerRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 1200);
+  }, []);
 
   // Arama Eşleşmeleri ve Vurgu
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -208,20 +224,25 @@ export default function Chatbox({
   const hasOtherUnviewed = !!otherUserStoryGroup?.has_unviewed;
   const isOtherCloseFriends = !!otherUserStoryGroup?.has_close_friends;
 
-  // WhatsApp stili otomatik genişleyen mesaj kutusu hesaplayıcısı
+  // Dünya Standardı: Layout Thrashing (düzen çöküşü) yapmayan akıllı textarea boyutlayıcı
   const adjustTextareaHeight = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    const maxHeight = 140; // ~5-6 satır
-    const scrollHeight = el.scrollHeight;
-    if (scrollHeight > maxHeight) {
-      el.style.height = `${maxHeight}px`;
-      el.style.overflowY = "auto";
-    } else {
-      el.style.height = `${Math.max(scrollHeight, 40)}px`;
-      el.style.overflowY = "hidden";
+    // Modern CSS field-sizing desteği varsa JS hesaplaması yapma (sıfır reflow)
+    if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) {
+      return;
     }
+    // Güvenli Fallback: Boyut gerçekten değişmediyse DOM'a müdahale etme
+    const prevHeight = el.offsetHeight;
+    el.style.height = "auto";
+    const maxHeight = 140;
+    const targetHeight = Math.min(Math.max(el.scrollHeight, 40), maxHeight);
+    if (Math.abs(prevHeight - targetHeight) > 2) {
+      el.style.height = `${targetHeight}px`;
+    } else {
+      el.style.height = `${prevHeight}px`;
+    }
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
   }, []);
 
   // WhatsApp Standardı: En alta kaydırma fonksiyonu
@@ -283,27 +304,12 @@ export default function Chatbox({
     isNearBottomRef.current = true;
     container.scrollTop = container.scrollHeight;
 
-    let prevContainerHeight = container.clientHeight;
-
     // Hem içerik div'i (mesajlar, görseller) hem de dış container (klavye, ekran kilidi açılışı, yeniden boyutlandırma)
     // boyutu değiştikçe kullanıcı yukarı kaydırmadıysa tabanda tut
     const ro = new ResizeObserver(() => {
       if (!container) return;
-      const currentHeight = container.clientHeight;
-      const heightChanged = Math.abs(currentHeight - prevContainerHeight) > 2;
-      prevContainerHeight = currentHeight;
-
-      if (isNearBottomRef.current || isInputFocused || heightChanged) {
-        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        if (isInputFocused || distFromBottom < 250 || isNearBottomRef.current) {
-          isNearBottomRef.current = true;
-          container.scrollTop = container.scrollHeight;
-          requestAnimationFrame(() => {
-            if (container) {
-              container.scrollTop = container.scrollHeight;
-            }
-          });
-        }
+      if (isNearBottomRef.current) {
+        container.scrollTop = container.scrollHeight;
       }
     });
 
@@ -321,7 +327,50 @@ export default function Chatbox({
       ro.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [activeConversationId, isInputFocused]);
+  }, [activeConversationId]);
+
+  // Dünya Standardı: IntersectionObserver ile Nöbetçi Div (Top Sentinel) Tabanlı Eski Mesaj Yükleme
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const sentinel = topSentinelRef.current;
+    if (!container || !sentinel || !activeConversationId) return;
+
+    const observer = new IntersectionObserver(
+      async (entries) => {
+        const entry = entries[0];
+        // SADECE kullanıcı bilinçli olarak yukarı kaydırıyorsa eski mesajları çek!
+        // Klavye açılması, focus olması veya layout sarsıntısı anında tetiklenmeyi KESİNLİKLE ENGELLER!
+        if (
+          entry &&
+          entry.isIntersecting &&
+          isUserInteractingRef.current &&
+          !useChatStore.getState().loadingOlderMessages &&
+          useChatStore.getState().hasMoreMessages[activeConversationId] !== false &&
+          container.scrollHeight > container.clientHeight
+        ) {
+          const prevScrollHeight = container.scrollHeight;
+          const prevScrollTop = container.scrollTop;
+          const loaded = await useChatStore.getState().loadOlderMessages(activeConversationId);
+          if (loaded) {
+            requestAnimationFrame(() => {
+              if (messagesContainerRef.current) {
+                const diff = messagesContainerRef.current.scrollHeight - prevScrollHeight;
+                messagesContainerRef.current.scrollTop = prevScrollTop + diff;
+              }
+            });
+          }
+        }
+      },
+      {
+        root: container,
+        rootMargin: "80px 0px 0px 0px",
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeConversationId]);
 
   // Mobil sanal klavye açılıp kapanırken visualViewport resize/scroll takibi ve anlık tabana sabitleme
   useEffect(() => {
@@ -338,14 +387,8 @@ export default function Chatbox({
       }
       const container = messagesContainerRef.current;
       if (!container) return;
-      if (isNearBottomRef.current || isInputFocused) {
-        isNearBottomRef.current = true;
+      if (isNearBottomRef.current) {
         container.scrollTop = container.scrollHeight;
-        requestAnimationFrame(() => {
-          if (container) {
-            container.scrollTop = container.scrollHeight;
-          }
-        });
       }
     };
 
@@ -355,7 +398,7 @@ export default function Chatbox({
       vv.removeEventListener("resize", handleVVChange);
       vv.removeEventListener("scroll", handleVVChange);
     };
-  }, [isInputFocused]);
+  }, []);
 
   // Sadece yeni bir son mesaj geldiğinde tabana yerleş
   useEffect(() => {
@@ -955,38 +998,24 @@ export default function Chatbox({
             {/* Mesaj Akışı */}
             <div
               ref={messagesContainerRef}
-              onScroll={async (e) => {
+              onWheel={markUserInteracting}
+              onTouchStart={markUserInteracting}
+              onTouchMove={markUserInteracting}
+              onScroll={(e) => {
                 const el = e.currentTarget;
                 if (!activeConversationId) return;
 
-                // Kullanıcı tabana 150px'ten yakın mı kontrol et
+                // Kullanıcı tabana 120px'ten yakın mı kontrol et
                 const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-                isNearBottomRef.current = distFromBottom < 150;
-
-                // Yukarı kaydırınca eski mesajları yükle (Pagination)
-                if (
-                  el.scrollTop < 60 &&
-                  !loadingOlderMessages &&
-                  hasMoreMessages[activeConversationId] !== false &&
-                  el.scrollHeight > el.clientHeight
-                ) {
-                  const prevScrollHeight = el.scrollHeight;
-                  const prevScrollTop = el.scrollTop;
-                  const loaded = await loadOlderMessages(activeConversationId);
-                  if (loaded) {
-                    requestAnimationFrame(() => {
-                      if (messagesContainerRef.current) {
-                        const diff = messagesContainerRef.current.scrollHeight - prevScrollHeight;
-                        messagesContainerRef.current.scrollTop = prevScrollTop + diff;
-                      }
-                    });
-                  }
-                }
+                isNearBottomRef.current = distFromBottom < 120;
               }}
               className="flex-1 min-h-0 p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
-              style={{ scrollBehavior: "auto", overflowAnchor: "none" }}
+              style={{ scrollBehavior: "auto" }}
             >
-              <div ref={messagesInnerRef} className="flex flex-col min-h-full">
+              <div ref={messagesInnerRef} className="flex flex-col min-h-full justify-end">
+                {/* DÜNYA STANDARDI: TOP SENTINEL (IntersectionObserver Gözlemcisi) */}
+                <div ref={topSentinelRef} className="h-2 w-full flex-shrink-0 pointer-events-none" />
+
                 {loadingOlderMessages && (
                   <div className="flex justify-center py-2">
                     <div className="w-5 h-5 border-2 border-grupo-accent border-t-transparent rounded-full animate-spin" />
@@ -1004,8 +1033,6 @@ export default function Chatbox({
                   </div>
                 ) : (
                   <>
-                    {/* WhatsApp Standardı: Mesajlar ekranı doldurmadığında tabana sabitleyen esnek boşluk */}
-                    <div className="flex-1 min-h-0" />
                     {activeMessages.map((m, index) => {
                     const prevMsg = index > 0 ? activeMessages[index - 1] : null;
                     const currentTimestamp = m.sent_at || m.created_at;
@@ -1048,7 +1075,8 @@ export default function Chatbox({
                   })}
                 </>
               )}
-                <div className="h-1 flex-shrink-0" style={{ overflowAnchor: "none" }} />
+                {/* DÜNYA STANDARDI: BOTTOM ANCHOR (Tarayıcının Scroll Çapası) */}
+                <div ref={bottomAnchorRef} className="h-px w-full flex-shrink-0 pointer-events-none" style={{ overflowAnchor: "auto" }} />
               </div>
             </div>
           </div>
@@ -1154,23 +1182,9 @@ export default function Chatbox({
                         }}
                         onFocus={() => {
                           setIsInputFocused(true);
-                          isNearBottomRef.current = true;
-                          const ensureBottomAndNoWindowScroll = () => {
-                            if (typeof window !== "undefined") {
-                              if (window.scrollY !== 0 || window.scrollX !== 0) {
-                                window.scrollTo(0, 0);
-                              }
-                              if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
-                              if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
-                            }
+                          if (isNearBottomRef.current) {
                             scrollToBottom("auto");
-                          };
-
-                          ensureBottomAndNoWindowScroll();
-                          setTimeout(ensureBottomAndNoWindowScroll, 50);
-                          setTimeout(ensureBottomAndNoWindowScroll, 150);
-                          setTimeout(ensureBottomAndNoWindowScroll, 350);
-                          setTimeout(ensureBottomAndNoWindowScroll, 500);
+                          }
                         }}
                         onBlur={() => {
                           setIsInputFocused(false);
@@ -1186,6 +1200,7 @@ export default function Chatbox({
                             : undefined,
                           minHeight: "40px",
                           maxHeight: "140px",
+                          fieldSizing: "content",
                         }}
                         className="flex-1 bg-slate-900/90 border border-grupo-dark-border rounded-2xl py-2 sm:py-2.5 px-3.5 sm:px-4 text-[15px] sm:text-sm text-white focus:outline-none transition-all resize-none leading-normal overflow-y-hidden"
                       />
