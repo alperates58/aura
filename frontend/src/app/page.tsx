@@ -464,6 +464,13 @@ export default function HomePage() {
     };
 
     const checkInactivityAndRedirect = (): boolean => {
+      const authState = useAuthStore.getState();
+      const currentUser = authState.user || user;
+      const isUserAuthed = authState.isAuthenticated || isAuthenticated || !!currentUser;
+      if (!isUserAuthed || !currentUser) {
+        return false;
+      }
+
       const sec = getEffectiveSecuritySettings();
       if (!sec || !sec.inactivity_logout_enabled) {
         return false;
@@ -544,7 +551,7 @@ export default function HomePage() {
           const apiBase = getApiBaseUrl().replace(/\/+$/, "");
           const alertUrl = `${apiBase}/auth/inactivity-alert`;
           const logoutUrl = `${apiBase}/auth/logout`;
-          const currentUsername = user?.username || useAuthStore.getState().user?.username || "";
+          const currentUsername = currentUser.username || user?.username || useAuthStore.getState().user?.username || "";
 
           const alertPayload = JSON.stringify({
             username: currentUsername,

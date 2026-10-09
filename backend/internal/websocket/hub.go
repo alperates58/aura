@@ -217,6 +217,11 @@ func (h *Hub) TerminateOtherSessions(userID uuid.UUID, excludeSessionID string, 
 
 // DisconnectSession belirli bir istemcinin oturumunu (sessionID) anında sonlandırır.
 func (h *Hub) DisconnectSession(userID uuid.UUID, sessionID string) {
+	h.DisconnectSessionWithReason(userID, sessionID, "session_deleted", "", "Bu cihazdaki oturumunuz kullanıcı tarafından kapatıldı.")
+}
+
+// DisconnectSessionWithReason belirli bir istemcinin oturumunu özel bir sebep ve yönlendirme hedefiyle sonlandırır
+func (h *Hub) DisconnectSessionWithReason(userID uuid.UUID, sessionID string, reason, redirectURL, message string) {
 	h.mu.RLock()
 	clients, ok := h.userClients[userID]
 	var toClose []*Client
@@ -229,10 +234,15 @@ func (h *Hub) DisconnectSession(userID uuid.UUID, sessionID string) {
 	}
 	h.mu.RUnlock()
 
-	termMsg, _ := NewWSMessage("session_terminated", map[string]string{
-		"reason":  "session_deleted",
-		"message": "Bu cihazdaki oturumunuz kullanıcı tarafından kapatıldı.",
-	})
+	payload := map[string]string{
+		"reason":  reason,
+		"message": message,
+	}
+	if redirectURL != "" {
+		payload["redirect_url"] = redirectURL
+	}
+
+	termMsg, _ := NewWSMessage("session_terminated", payload)
 
 	for _, c := range toClose {
 		client := c

@@ -623,8 +623,12 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 			}
 		}
 		currentSessionID := strings.TrimSpace(c.Get("X-Session-ID"))
-		if h.sessionRepo != nil && currentSessionID != "" {
-			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
+		if h.sessionRepo != nil {
+			if currentSessionID != "" {
+				_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
+			} else {
+				_ = h.sessionRepo.DeleteAllSessions(ctx, userID)
+			}
 		}
 	}
 

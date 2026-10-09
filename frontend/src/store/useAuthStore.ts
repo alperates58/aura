@@ -138,6 +138,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (err) {
       console.error("Çıkış hatası:", err);
     } finally {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aura_inactive_since");
+        localStorage.removeItem("aura_last_active");
+      }
       set({ user: null, isAuthenticated: false });
     }
   },

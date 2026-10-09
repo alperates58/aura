@@ -216,6 +216,26 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			continue
 		}
 
+		// 2. OTURUM BAĞLANTI & ÇEVRİMİÇİ KONTROLÜ (YANLIŞ ALARM ÖNLEME):
+		// Kullanıcı sekmesini veya tarayıcısını kendi isteğiyle kapatmışsa (WebSocket bağlantısı yoksa ve çevrimdışıysa),
+		// ortada sahipsiz/açık bırakılmış bir ekran yoktur; kullanıcı zaten daha önce kendi isteğiyle ayrılmıştır.
+		// Bu nedenle tüm siteye ve sohbetlere "hareketsizlik zaman aşımı ihlali" mesajı / hikayesi ATILMAZ!
+		// Yalnızca süresi dolan eski oturum kaydı veritabanından sessizce temizlenir.
+		isSessionConnected := h.hub != nil && cand.SessionID != "" && h.hub.IsSessionConnected(cand.UserID, cand.SessionID)
+		isUserConnected := h.hub != nil && h.hub.IsUserConnected(cand.UserID)
+		isUserOnline := h.presenceService != nil && h.presenceService.IsUserOnline(ctx, cand.UserID)
+
+		if !isSessionConnected && !isUserConnected && !isUserOnline {
+			_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+			continue
+		}
+
+		if cand.SessionID != "" && !isSessionConnected {
+			// Bu spesifik oturum (cihaz/sekme) artık bağlı değil, sessizce sil
+			_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
+			continue
+		}
+
 		// Redis'teki en son soket/mesaj aktivitesini kontrol et
 		if h.rdb != nil {
 			lastActiveUnixStr, err := h.rdb.Get(ctx, "user:"+cand.UserID.String()+":last_active").Result()
@@ -273,9 +293,15 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			targetURL,
 		)
 
-		// Oturumu ve yetkileri güvenle sonlandır
+		// Oturumu ve yetkileri güvenle sonlandır (tanımlı hedef URL bilgisiyle)
 		if h.hub != nil {
-			h.hub.DisconnectSession(cand.UserID, cand.SessionID)
+			h.hub.DisconnectSessionWithReason(
+				cand.UserID,
+				cand.SessionID,
+				"inactivity_timeout",
+				targetURL,
+				fmt.Sprintf("Hareketsizlik nedeniyle oturumunuz sonlandırıldı ve %s adresine yönlendiriliyorsunuz.", targetURL),
+			)
 		}
 		_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
 

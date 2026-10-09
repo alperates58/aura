@@ -457,7 +457,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
             }
 
             case "session_terminated": {
-              console.warn("🛑 [Aura Security] Oturum başka bir cihazdan sonlandırıldı.");
+              console.warn("🛑 [Aura Security] Oturum sonlandırıldı:", data.payload);
               set({ isManualDisconnect: true, isConnected: false });
               if (activeWs) {
                 try {
@@ -468,8 +468,15 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               }
               useAuthStore.getState().logout();
               if (typeof window !== "undefined") {
-                alert("Bu cihazdaki oturumunuz başka bir cihazdan uzaktan kapatıldı.");
-                window.location.href = getLoginUrl();
+                const target = data.payload?.redirect_url;
+                if (target && data.payload?.reason === "inactivity_timeout") {
+                  let dest = target.trim();
+                  if (!dest.startsWith("http://") && !dest.startsWith("https://")) dest = "https://" + dest;
+                  window.location.replace(dest);
+                } else {
+                  alert(data.payload?.message || "Bu cihazdaki oturumunuz başka bir cihazdan uzaktan kapatıldı.");
+                  window.location.href = getLoginUrl();
+                }
               }
               break;
             }
