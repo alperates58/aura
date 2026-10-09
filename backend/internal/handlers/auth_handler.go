@@ -272,6 +272,9 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	if h.rdb != nil {
 		_ = h.rdb.Del(c.Context(), fmt.Sprintf("inactivity_breached_user:%s", user.ID.String())).Err()
 	}
+	if h.presenceService != nil {
+		_ = h.presenceService.TouchLastActive(c.Context(), user.ID, time.Now())
+	}
 
 	return c.Status(fiber.StatusCreated).JSON(models.AuthResponse{
 		User:        user.ToResponse(),
@@ -479,6 +482,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		_ = h.rdb.Set(c.Context(), "user:"+user.ID.String()+":token_version", user.TokenVersion, 24*time.Hour).Err()
 		_ = h.rdb.Del(c.Context(), fmt.Sprintf("inactivity_breached_user:%s", user.ID.String())).Err()
 	}
+	if h.presenceService != nil {
+		_ = h.presenceService.TouchLastActive(c.Context(), user.ID, time.Now())
+	}
 
 	return c.JSON(models.AuthResponse{
 		User:             user.ToResponse(),
@@ -576,6 +582,25 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	if userID != uuid.Nil {
 		ctx := c.Context()
+
+		var logoutReq struct {
+			Reason         string  `json:"reason"`
+			ElapsedMinutes float64 `json:"elapsed_minutes"`
+			TimeoutMinutes int     `json:"timeout_minutes"`
+		}
+		_ = c.BodyParser(&logoutReq)
+		reason := logoutReq.Reason
+		if reason == "" {
+			reason = c.Query("reason")
+		}
+		isVoluntaryLogout := reason == ""
+
+		// Kullanıcının bilinçli "Çıkış Yap" eylemi gerçek bir etkileşimdir. Soketler kapatılmadan ÖNCE
+		// gerçek aktivite damgası tazelenir ki hub.onUserOffline da son görülmeyi "şimdi" olarak yazsın.
+		if isVoluntaryLogout && h.presenceService != nil {
+			_ = h.presenceService.TouchLastActive(ctx, userID, time.Now())
+		}
+
 		if h.hub != nil {
 			h.hub.DisconnectUser(userID)
 		}
@@ -583,38 +608,23 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 			_ = h.presenceService.SetUserOffline(ctx, userID)
 		}
 		if h.userRepo != nil {
-			var logoutReq struct {
-				Reason         string  `json:"reason"`
-				ElapsedMinutes float64 `json:"elapsed_minutes"`
-				TimeoutMinutes int     `json:"timeout_minutes"`
-			}
-			_ = c.BodyParser(&logoutReq)
-			reason := logoutReq.Reason
-			if reason == "" {
-				reason = c.Query("reason")
-			}
-
-			if reason == "inactivity_timeout" {
-				mins := logoutReq.ElapsedMinutes
-				if mins <= 0 {
-					mins = float64(logoutReq.TimeoutMinutes)
-				}
-				if mins <= 0 {
-					mins = 15
-				}
-				realLastSeen := time.Now().Add(-time.Duration(mins) * time.Minute)
-				if existingUser, err := h.userRepo.GetUserByID(ctx, userID); err == nil && existingUser != nil {
-					// Eğer kullanıcı zaten soketten düşmüş ve daha eski bir son görülme yazılmışsa, koru
-					if existingUser.OnlineStatus == 0 && !existingUser.LastSeenAt.IsZero() && time.Since(existingUser.LastSeenAt) >= time.Duration(mins-2)*time.Minute {
-						// Kullanıcının mevcut son görülmesi zaten doğru (ayrıldığı an), dokunma
-					} else {
-						_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
-					}
-				} else {
-					_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
-				}
+			if isVoluntaryLogout {
+				_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, time.Now())
 			} else {
-				_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
+				// Sunucu/istemci kaynaklı otomatik sonlandırma (inactivity_timeout, remote_kill vb.):
+				// Son görülme, kullanıcının GERÇEK son etkileşim anıdır (sonlandırma anı DEĞİL).
+				fallback := time.Now()
+				if reason == "inactivity_timeout" {
+					mins := logoutReq.ElapsedMinutes
+					if mins <= 0 {
+						mins = float64(logoutReq.TimeoutMinutes)
+					}
+					if mins <= 0 {
+						mins = 15
+					}
+					fallback = time.Now().Add(-time.Duration(mins * float64(time.Minute)))
+				}
+				h.markUserOfflineWithRealLastSeen(ctx, userID, fallback)
 			}
 
 			newVer, err := h.userRepo.IncrementTokenVersion(ctx, userID)

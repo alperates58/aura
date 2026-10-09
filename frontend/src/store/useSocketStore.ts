@@ -35,6 +35,24 @@ let heartbeatInterval: NodeJS.Timeout | null = null;
 
 const OUTBOX_STORAGE_KEY = "aura_outbox";
 
+/**
+ * Heartbeat (ping) paketinin payload'ı.
+ * idle_ms: Kullanıcının son GERÇEK etkileşiminden (dokunma, tıklama, klavye, scroll) bu yana geçen süre.
+ * Sunucu ping'in kendisini aktivite saymaz; "son görülme" ve inaktivite hesabını bu değerle yapar.
+ * Göreli süre gönderildiği için cihaz saatinin yanlış olması sonucu etkilemez.
+ */
+function buildHeartbeatPayload(): { idle_ms?: number } {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem("aura_last_active");
+    const lastActive = raw ? parseInt(raw, 10) : 0;
+    if (!lastActive || isNaN(lastActive)) return {};
+    return { idle_ms: Math.max(0, Date.now() - lastActive) };
+  } catch {
+    return {};
+  }
+}
+
 function loadOutbox(): QueuedAction[] {
   if (typeof window === "undefined") return [];
   try {
@@ -109,15 +127,45 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               reconnectTimer = null;
             }
             reconnectAttempts = 0;
-            get().connect();
+            setTimeout(() => {
+              // İnaktivite kontrolü oturumu kapattıysa (manuel disconnect) tekrar bağlanma
+              if (!get().isManualDisconnect) get().connect();
+            }, 150);
           } else {
-            // Soket açık ise hemen ping göndererek presence ve canlılığı tazele
-            get().sendAction("ping", {});
+            // Soket açık: yeniden bağlanmaya gerek yok
+            // Ön plana dönüldü → kısa gecikmeyle "görünür" bildir (kullanıcı tekrar çevrimiçi olur).
+            // Gecikme: page.tsx'teki inaktivite kontrolü önce çalışsın; süresi dolmuş kullanıcı bir an bile çevrimiçi görünmesin.
+            setTimeout(() => {
+              const s = activeWs || get().socket;
+              if (
+                !get().isManualDisconnect &&
+                s &&
+                s.readyState === WebSocket.OPEN &&
+                document.visibilityState === "visible"
+              ) {
+                get().sendAction("presence_state", { visible: true, ...buildHeartbeatPayload() });
+              }
+            }, 150);
           }
         }
       };
       document.addEventListener("visibilitychange", handleWakeOrFocus);
       window.addEventListener("focus", handleWakeOrFocus);
+
+      // WHATSAPP TARZI ÇEVRİMİÇİ: Chrome alta alındığında / ekran kilitlendiğinde / sekme değiştirildiğinde
+      // sunucuya ANINDA "görünmez" bildirilir → kullanıcı diğerlerine çevrimiçi görünmez, son görülmesi yazılır.
+      // Soket kapatılmaz: mesajlar arka planda gelmeye (çift gri tik) ve inaktivite takibi çalışmaya devam eder.
+      const handleGoingHidden = () => {
+        const cur = activeWs || get().socket;
+        if (cur && cur.readyState === WebSocket.OPEN) {
+          get().sendAction("presence_state", { visible: false, ...buildHeartbeatPayload() });
+        }
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") handleGoingHidden();
+      });
+      window.addEventListener("pagehide", handleGoingHidden);
+      document.addEventListener("freeze", handleGoingHidden);
 
       // 2.2 Düzeltmesi: Sekmeler arası outbox sayacını senkronize et
       window.addEventListener("storage", (e) => {
@@ -153,6 +201,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     const queryParams: string[] = [];
     if (token) queryParams.push(`token=${encodeURIComponent(token)}`);
     if (sessionId) queryParams.push(`session_id=${encodeURIComponent(sessionId)}`);
+    if (typeof document !== "undefined") {
+      // Arka planda (ör. ağ kopması sonrası) yeniden bağlanan sekme kullanıcıyı çevrimiçi göstermesin
+      queryParams.push(`visible=${document.visibilityState === "hidden" ? 0 : 1}`);
+    }
     const queryString = queryParams.length > 0 ? (wsUrl.includes("?") ? "&" : "?") + queryParams.join("&") : "";
     const url = `${wsUrl}${queryString}`;
 
@@ -181,11 +233,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
           reconnectTimer = null;
         }
 
-        // Mobil ağlarda (4G/5G/WiFi NAT) bağlantının sessizce kopmasını önlemek için 20sn keep-alive heartbeat
+        // Mobil ağlarda (4G/5G/WiFi NAT) bağlantının sessizce kopmasını önlemek için 20sn keep-alive heartbeat.
+        // Ping, kullanıcının gerçek boşta kalma süresini (idle_ms) taşır; sunucu ping'i aktivite saymaz.
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
           if (activeWs && activeWs.readyState === WebSocket.OPEN) {
-            get().sendAction("ping", {});
+            get().sendAction("ping", buildHeartbeatPayload());
           }
         }, 20000);
 
@@ -194,6 +247,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
           isConnected: true,
           isConnecting: false,
           isReconnecting: false,
+        });
+
+        // Bağlantı kurulur kurulmaz güncel görünürlüğü ve gerçek etkileşim zamanını sunucuya bildir
+        get().sendAction("presence_state", {
+          visible: typeof document === "undefined" || document.visibilityState !== "hidden",
+          ...buildHeartbeatPayload(),
         });
 
         // Bağlantı kurulduğunda bekleyen çevrimdışı kuyruğu (Outbox) gönder
@@ -466,7 +525,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
                 } catch (e) {}
                 activeWs = null;
               }
-              useAuthStore.getState().logout();
+              // Sunucu kaynaklı sonlandırma: sebebi ilet ki son görülme atılma anıyla ezilmesin
+              useAuthStore.getState().logout({
+                reason: (typeof data.payload?.reason === "string" && data.payload.reason) || "session_terminated",
+              });
               if (typeof window !== "undefined") {
                 const target = data.payload?.redirect_url;
                 if (target && data.payload?.reason === "inactivity_timeout") {

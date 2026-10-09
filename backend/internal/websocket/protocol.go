@@ -96,3 +96,20 @@ type PresenceUpdatePayload struct {
 	Status     int       `json:"status"` // 0: offline, 1: online
 	LastSeenAt time.Time `json:"last_seen_at"`
 }
+
+// PingPayload istemcinin heartbeat paketidir.
+// IdleMs: Kullanıcının son GERÇEK etkileşiminden (dokunma, tıklama, klavye, scroll) bu yana geçen süre (ms).
+// Göreli süre gönderildiği için istemci/sunucu saat farkından etkilenmez.
+// nil ise (eski istemci) ping geriye dönük uyumluluk gereği aktivite kabul edilir.
+type PingPayload struct {
+	IdleMs *int64 `json:"idle_ms,omitempty"`
+}
+
+// PresenceStatePayload istemcinin ön plan / arka plan bildirimidir (WhatsApp tarzı çevrimiçi durumu).
+// Visible=false: Sekme/uygulama arka plana alındı → kullanıcı (başka ön plan bağlantısı yoksa) çevrimdışı görünür.
+// Visible=true:  Ön plana dönüldü → kullanıcı çevrimiçi görünür.
+// IdleMs: Son gerçek etkileşimden bu yana geçen süre (son görülme hesabı için, PingPayload ile aynı anlam).
+type PresenceStatePayload struct {
+	Visible bool   `json:"visible"`
+	IdleMs  *int64 `json:"idle_ms,omitempty"`
+}

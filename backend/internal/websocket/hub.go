@@ -23,6 +23,8 @@ type Hub struct {
 	register        chan *Client
 	unregister      chan *Client
 	broadcast       chan []byte
+	presenceSync    chan uuid.UUID     // Ön plan/arka plan değişikliklerinde kullanıcı çevrimiçi durumunu yeniden hesaplatır
+	userOnline      map[uuid.UUID]bool // Yalnızca Run goroutine'inde erişilir: kullanıcı için en son yayınlanan çevrimiçi durumu
 	mu              sync.RWMutex
 	chatRepo        *database.ChatRepository
 	userRepo        *database.UserRepository
@@ -55,6 +57,8 @@ func NewHub(
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		broadcast:       make(chan []byte),
+		presenceSync:    make(chan uuid.UUID, 1024),
+		userOnline:      make(map[uuid.UUID]bool),
 		chatRepo:        chatRepo,
 		userRepo:        userRepo,
 		pushRepo:        pushRepo,
@@ -86,13 +90,13 @@ func (h *Hub) Run() {
 			if _, ok := h.userClients[client.userID]; !ok {
 				h.userClients[client.userID] = make(map[*Client]bool)
 			}
-			isFirstConn := len(h.userClients[client.userID]) == 0
+			// Çevrimiçi durumu "ilk bağlantı" ile değil, "en az bir ÖN PLAN bağlantısı" kuralıyla hesaplanır (WhatsApp tarzı)
 			h.userClients[client.userID][client] = true
 			h.mu.Unlock()
 
-			if isFirstConn {
-				h.onUserOnline(client.userID)
-			}
+			h.syncUserPresence(client.userID)
+			// (Arka planda açılan/yeniden bağlanan sekme kullanıcıyı çevrimiçi göstermez)
+
 
 			// Kullanıcı bağlandığında, henüz teslim edilmemiş bekleyen mesajları ilet
 			// Panik modundaki oturumlara gizlilik koruması gereği bekleyen mesajlar iletilmez
@@ -106,24 +110,63 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 			}
-			isLastConn := false
+			// Bağlantı kaldırıldıktan sonra kullanıcının çevrimiçi durumu yeniden hesaplanır
 			if clients, ok := h.userClients[client.userID]; ok {
 				delete(clients, client)
 				if len(clients) == 0 {
 					delete(h.userClients, client.userID)
-					isLastConn = true
+					// Kullanıcının bu podda başka bağlantısı kalmadı
 				}
 			}
 			h.mu.Unlock()
 
-			if isLastConn {
-				h.onUserOffline(client.userID)
-			}
+			h.syncUserPresence(client.userID)
+			// (Zaten arka planda/çevrimdışı olan kullanıcı için son görülme tekrar ezilmez)
+
+
+		case userID := <-h.presenceSync:
+			// İstemci ön plana/arka plana geçti → kullanıcı düzeyindeki çevrimiçi durumu uzlaştır
+			h.syncUserPresence(userID)
 
 		case message := <-h.broadcast:
 			h.broadcastToLocal(message)
 			h.publishRedisEvent("broadcast", nil, nil, message)
 		}
+	}
+}
+
+// RequestPresenceSync bir istemcinin ön plan/arka plan durumu değiştiğinde kullanıcının
+// çevrimiçi durumunun Run goroutine'inde (sıralı ve yarışsız) yeniden hesaplanmasını ister.
+func (h *Hub) RequestPresenceSync(userID uuid.UUID) {
+	h.presenceSync <- userID
+}
+
+// syncUserPresence WHATSAPP TARZI ÇEVRİMİÇİ KURALI: Kullanıcı, bu poddaki bağlantılarından EN AZ BİRİ
+// ön plandaysa (sekme görünür / uygulama açık) çevrimiçidir. Tüm bağlantıları arka planda ise (Chrome alta
+// alındı, ekran kilitlendi) soket açık kalsa bile çevrimdışı görünür ve son görülme yazılır.
+// Yalnızca durum DEĞİŞTİĞİNDE yayın yapılır. YALNIZCA Run goroutine'inden çağrılmalıdır.
+func (h *Hub) syncUserPresence(userID uuid.UUID) {
+	h.mu.RLock()
+	shouldBeOnline := false
+	for c := range h.userClients[userID] {
+		if c.IsForeground() {
+			shouldBeOnline = true
+			break
+		}
+	}
+	h.mu.RUnlock()
+
+	wasOnline := h.userOnline[userID]
+	if shouldBeOnline == wasOnline {
+		return
+	}
+
+	if shouldBeOnline {
+		h.userOnline[userID] = true
+		h.onUserOnline(userID)
+	} else {
+		delete(h.userOnline, userID)
+		h.onUserOffline(userID)
 	}
 }
 
@@ -285,12 +328,15 @@ func (h *Hub) DisconnectAllUsers() {
 func (h *Hub) onUserOffline(userID uuid.UUID) {
 	ctx := context.Background()
 	_ = h.presenceService.SetUserOffline(ctx, userID)
-	_ = h.userRepo.UpdateOnlineStatus(ctx, userID, 0)
-	if h.sessionRepo != nil {
-		_ = h.sessionRepo.TouchUserAllSessionsActivity(ctx, userID)
-	}
 
-	lastSeenAt := time.Now()
+	// SON GÖRÜLME = GERÇEK SON ETKİLEŞİM ANI (bağlantının koptuğu an DEĞİL!)
+	// Örn: Kullanıcı 07:48'de son mesajını atıp telefonu kilitlediyse ve soket 08:18'de
+	// inaktivite zaman aşımıyla kapatıldıysa son görülme 07:48 olmalıdır, 08:18 değil.
+	// Oturum son aktiflik saatleri de artık NOW() ile ezilmez (inaktivite ölçümü bozulmasın).
+	realLastSeen := h.presenceService.ResolveLastSeen(ctx, userID, time.Now())
+	_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
+
+	lastSeenAt := realLastSeen
 	if h.userRepo != nil {
 		user, _ := h.userRepo.GetUserByID(ctx, userID)
 		if user != nil && len(user.PrivacySettings) > 0 {

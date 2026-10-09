@@ -156,6 +156,8 @@ func (h *WSHandler) UpgradeMiddleware() fiber.Handler {
 			c.Locals("token_version", claims.TokenVersion)
 			c.Locals("session_id", sessionID)
 			c.Locals("is_panic_mode", claims.IsPanicMode)
+			// Sekme arka plandayken (visible=0) kurulan bağlantı kullanıcıyı çevrimiçi göstermez (WhatsApp tarzı)
+			c.Locals("is_foreground", strings.TrimSpace(c.Query("visible")) != "0")
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
@@ -172,6 +174,9 @@ func (h *WSHandler) HandleConnection() fiber.Handler {
 		isPanicMode, _ := conn.Locals("is_panic_mode").(bool)
 
 		client := auraws.NewClient(h.hub, conn, userID, username, sessionID, tokenVersion, isPanicMode)
+		if isForeground, ok := conn.Locals("is_foreground").(bool); ok {
+			client.SetForeground(isForeground)
+		}
 		h.hub.RegisterClient(client)
 
 		go client.WritePump()

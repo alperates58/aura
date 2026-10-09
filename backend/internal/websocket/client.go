@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"aura/internal/models"
@@ -29,6 +30,12 @@ type Client struct {
 	tokenVersion int
 	isPanicMode  bool
 
+	// WHATSAPP TARZI ÇEVRİMİÇİ DURUMU:
+	// Soket açık olsa bile uygulama/sekme arka plandaysa (Chrome alta alındı, ekran kilitlendi)
+	// kullanıcı diğerlerine "çevrimiçi" GÖSTERİLMEZ. Kullanıcı, en az bir bağlantısı ön plandaysa çevrimiçidir.
+	// ReadPump ve Hub goroutine'leri arasında paylaşıldığı için atomik tutulur.
+	isForeground atomic.Bool
+
 	// Rate limiting / Flood control
 	lastWindowStart time.Time
 	msgsInWindow    int
@@ -36,7 +43,7 @@ type Client struct {
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessionID string, tokenVersion int, isPanicMode bool) *Client {
-	return &Client{
+	c := &Client{
 		hub:          hub,
 		conn:         conn,
 		send:         make(chan []byte, 256),
@@ -47,6 +54,20 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID uuid.UUID, username, sessi
 		isPanicMode:  isPanicMode,
 		lastDbTouch:  time.Now(),
 	}
+	// Görünürlük bildirmeyen eski istemciler için varsayılan: ön planda
+
+	c.isForeground.Store(true)
+	return c
+}
+
+// SetForeground bağlantının ön plan/arka plan durumunu ayarlar (kayıttan önce başlangıç değeri için de kullanılır).
+func (c *Client) SetForeground(v bool) {
+	c.isForeground.Store(v)
+}
+
+// IsForeground bağlantının (sekme/uygulama) şu an ön planda olup olmadığını döndürür.
+func (c *Client) IsForeground() bool {
+	return c.isForeground.Load()
 }
 
 func (c *Client) ReadPump() {
@@ -111,25 +132,40 @@ func (c *Client) WritePump() {
 func (c *Client) handleAction(msg WSMessage) {
 	ctx := context.Background()
 
-	// Her gelen soket aktivitesinde kullanıcının Presence TTL süresini tazele
-	_ = c.hub.presenceService.RefreshUserOnline(ctx, c.userID)
-	if c.hub.rdb != nil {
-		_ = c.hub.rdb.Set(ctx, "user:"+c.userID.String()+":last_active", time.Now().Unix(), 24*time.Hour).Err()
+	// Çevrimiçi (Presence) TTL'i yalnızca ÖN PLANDAKİ bağlantının paketleriyle tazelenir (WhatsApp tarzı)
+	if c.IsForeground() && msg.Action != "presence_state" {
+		_ = c.hub.presenceService.RefreshUserOnline(ctx, c.userID)
 	}
 
-	// Kullanıcının oturumunun son aktiflik saatini DB'de de tazele (30 saniyede bir throttled veya mesaj anında)
-	if c.hub.sessionRepo != nil && (msg.Action == "send_message" || time.Since(c.lastDbTouch) >= 30*time.Second) {
-		c.lastDbTouch = time.Now()
-		go func(uid uuid.UUID, sid string) {
-			if sid != "" {
-				_ = c.hub.sessionRepo.TouchSessionActivity(context.Background(), uid, sid)
-			} else {
-				_ = c.hub.sessionRepo.TouchUserAllSessionsActivity(context.Background(), uid)
-			}
-		}(c.userID, c.sessionID)
+	// GERÇEK KULLANICI AKTİVİTESİ: Heartbeat ping'leri ve otomatik ack'ler son aktifliği İLERİ TAŞIMAZ.
+	// Aksi halde açık kalan sekme / kilitli telefon "aktif" görünür ve son görülme atılma anına kayar.
+	if activityAt, ok := c.resolveActivityTime(msg, time.Now()); ok {
+		_ = c.hub.presenceService.TouchLastActive(ctx, c.userID, activityAt)
+
+		// Oturumun son aktiflik saatini DB'de de tazele (30 saniyede bir throttled veya mesaj anında)
+		if c.hub.sessionRepo != nil && (msg.Action == "send_message" || time.Since(c.lastDbTouch) >= 30*time.Second) {
+			c.lastDbTouch = time.Now()
+			go func(uid uuid.UUID, sid string, at time.Time) {
+				if sid != "" {
+					_ = c.hub.sessionRepo.TouchSessionActivityAt(context.Background(), uid, sid, at)
+				} else {
+					_ = c.hub.sessionRepo.TouchUserAllSessionsActivity(context.Background(), uid)
+				}
+			}(c.userID, c.sessionID, activityAt)
+		}
 	}
 
 	switch msg.Action {
+	case "presence_state":
+		// WhatsApp tarzı: Sekme/uygulama arka plana alındığında (visible=false) kullanıcı çevrimdışı görünür,
+		// ön plana döndüğünde (visible=true) tekrar çevrimiçi olur. Soket açık kalır; mesajlar teslim edilmeye devam eder.
+		var p PresenceStatePayload
+		if err := json.Unmarshal(msg.Payload, &p); err != nil {
+			return
+		}
+		c.SetForeground(p.Visible)
+		c.hub.RequestPresenceSync(c.userID)
+
 	case "ping":
 		pongMsg, _ := NewWSMessage("pong", map[string]string{"status": "alive"})
 		c.send <- pongMsg
@@ -438,5 +474,37 @@ func (c *Client) handleAction(msg WSMessage) {
 				_ = c.hub.rdb.Set(ctx, rKey, sessBytes, 4*time.Hour).Err()
 			}
 		}
+	}
+}
+
+// resolveActivityTime gelen paketin kullanıcının GERÇEK etkileşimini temsil edip etmediğini ve
+// etkileşimin hangi anda yapıldığını belirler.
+//   - ping (idle_ms ile): Sunucu saati - idle_ms → son gerçek etkileşim anı (saat farkından bağımsız)
+//   - ping (idle_ms yok): Eski istemci, geriye dönük uyumluluk için "şimdi" kabul edilir
+//   - delivered_ack / read_ack: Uygulamanın otomatik gönderdiği onaylar, aktivite SAYILMAZ
+//   - Diğer tüm eylemler (mesaj, yazıyor, arama vb.): Bilinçli kullanıcı eylemi → "şimdi"
+func (c *Client) resolveActivityTime(msg WSMessage, now time.Time) (time.Time, bool) {
+	switch msg.Action {
+	case "ping", "presence_state":
+		if len(msg.Payload) == 0 {
+			return now, true
+		}
+		var p PingPayload
+		if err := json.Unmarshal(msg.Payload, &p); err != nil || p.IdleMs == nil {
+			return now, true
+		}
+		idleMs := *p.IdleMs
+		if idleMs < 0 {
+			idleMs = 0
+		}
+		if idleMs > int64(24*time.Hour/time.Millisecond) {
+			// Çok eski etkileşim: Mevcut damgayı ileri taşımaya gerek yok
+			return time.Time{}, false
+		}
+		return now.Add(-time.Duration(idleMs) * time.Millisecond), true
+	case "delivered_ack", "read_ack":
+		return time.Time{}, false
+	default:
+		return now, true
 	}
 }

@@ -45,7 +45,8 @@ All WebSocket frames are JSON strings adhering to this standard structure:
 | `call_accept` | Accept incoming WebRTC call | `{"call_id": "uuid"}` |
 | `call_reject` | Reject incoming call | `{"call_id": "uuid"}` |
 | `call_end` | Terminate ongoing call | `{"call_id": "uuid"}` |
-| `ping` | Connection heartbeat | `{}` (Responds with `pong`) |
+| `ping` | Connection heartbeat (every 20s) | `{"idle_ms": 12345}` (Responds with `pong`). `idle_ms` = ms since the user's last REAL interaction. Ping itself is NOT activity; server derives `user:<id>:last_active` = now - idle_ms. |
+| `presence_state` | WhatsApp-style foreground/background | `{"visible": false, "idle_ms": 1200}` — sent on `visibilitychange`/`pagehide`/`freeze` and on socket open. User is online only while at least one connection is visible; socket stays open in background. Initial state also via WS query `?visible=0\|1`. |
 
 ---
 

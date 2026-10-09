@@ -164,6 +164,26 @@ func (h *AuthHandler) isUserInCall(ctx context.Context, userID uuid.UUID) bool {
 	return err == nil && exists > 0
 }
 
+// markUserOfflineWithRealLastSeen kullanıcıyı çevrimdışı işaretler ve son görülmeyi
+// kullanıcının GERÇEK son etkileşim anına (Redis user:<id>:last_active) yazar.
+// Redis'te geçerli damga yoksa fallback kullanılır. Kullanıcı zaten çevrimdışıysa ve
+// daha eski (doğru) bir son görülme yazılmışsa değer asla ileri taşınmaz.
+func (h *AuthHandler) markUserOfflineWithRealLastSeen(ctx context.Context, userID uuid.UUID, fallback time.Time) {
+	if h.presenceService != nil {
+		_ = h.presenceService.SetUserOffline(ctx, userID)
+	}
+	if h.userRepo == nil {
+		return
+	}
+	realLastSeen := h.presenceService.ResolveLastSeen(ctx, userID, fallback)
+	if existing, err := h.userRepo.GetUserByID(ctx, userID); err == nil && existing != nil {
+		if existing.OnlineStatus == 0 && !existing.LastSeenAt.IsZero() && existing.LastSeenAt.Before(realLastSeen) {
+			return
+		}
+	}
+	_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
+}
+
 func (h *AuthHandler) StartInactivityWorker(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	go func() {
@@ -236,18 +256,15 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 			continue
 		}
 
-		// Redis'teki en son soket/mesaj aktivitesini kontrol et
-		if h.rdb != nil {
-			lastActiveUnixStr, err := h.rdb.Get(ctx, "user:"+cand.UserID.String()+":last_active").Result()
-			if err == nil && lastActiveUnixStr != "" {
-				if lastActiveUnix, err := strconv.ParseInt(lastActiveUnixStr, 10, 64); err == nil {
-					lastActiveTime := time.Unix(lastActiveUnix, 0)
-					if time.Since(lastActiveTime) < time.Duration(timeoutMinutes)*time.Minute {
-						// Kullanıcı Redis'te belirlenen süre içinde aktif olmuş. DB oturum saatini tazele ve atma!
-						_ = h.sessionRepo.TouchSessionActivity(ctx, cand.UserID, cand.SessionID)
-						continue
-					}
-				}
+		// Redis'teki en son GERÇEK kullanıcı etkileşimini kontrol et (heartbeat ping'leri sayılmaz)
+		if lastActiveTime, ok := h.presenceService.GetLastActive(ctx, cand.UserID); ok {
+			if time.Since(lastActiveTime) < time.Duration(timeoutMinutes)*time.Minute {
+				// Kullanıcı Redis'te belirlenen süre içinde aktif olmuş. DB oturum saatini gerçek etkileşim anına çek ve atma!
+				_ = h.sessionRepo.TouchSessionActivityAt(ctx, cand.UserID, cand.SessionID, lastActiveTime)
+				continue
+			}
+			if lastActiveTime.After(cand.LastActiveAt) {
+				cand.LastActiveAt = lastActiveTime
 			}
 		}
 
@@ -305,17 +322,14 @@ func (h *AuthHandler) checkInactiveSessions(ctx context.Context) {
 		}
 		_ = h.sessionRepo.DeleteSession(ctx, cand.UserID, cand.SessionID)
 
+		// Not: Soket 200ms gecikmeyle kapandığından genellikle kullanıcı burada hâlâ bağlı görünür;
+		// bu durumda son görülme hub.onUserOffline içinde gerçek etkileşim anıyla yazılır.
 		if h.hub != nil && !h.hub.IsUserConnected(cand.UserID) {
-			if h.presenceService != nil {
-				_ = h.presenceService.SetUserOffline(ctx, cand.UserID)
+			fallback := cand.LastActiveAt
+			if fallback.IsZero() {
+				fallback = time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
 			}
-			if h.userRepo != nil {
-				realLastSeen := cand.LastActiveAt
-				if realLastSeen.IsZero() {
-					realLastSeen = time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
-				}
-				_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, cand.UserID, 0, realLastSeen)
-			}
+			h.markUserOfflineWithRealLastSeen(ctx, cand.UserID, fallback)
 		}
 
 		if h.userRepo != nil {
@@ -429,19 +443,19 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 		}
 	}
 
+	// Redis'te gerçek etkileşim damgası yoksa: istemcinin bildirdiği geçen süre, o da yoksa timeout kadar öncesi
+	lastSeenFallback := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
+	if req.ElapsedMinutes > 0 {
+		lastSeenFallback = time.Now().Add(-time.Duration(req.ElapsedMinutes * float64(time.Minute)))
+	}
+
 	if alreadyBreached {
 		log.Printf("ℹ️ [Inactivity Alert] @%s için inaktivite bildirimi daha önce işlendi, mükerrer bildirim engellendi.", username)
 		if userID != uuid.Nil {
 			if h.hub != nil {
 				h.hub.DisconnectUser(userID)
 			}
-			if h.presenceService != nil {
-				_ = h.presenceService.SetUserOffline(ctx, userID)
-			}
-			if h.userRepo != nil {
-				realLastSeen := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
-				_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
-			}
+			h.markUserOfflineWithRealLastSeen(ctx, userID, lastSeenFallback)
 			if h.sessionRepo != nil && currentSessionID != "" {
 				_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
 			}
@@ -473,13 +487,7 @@ func (h *AuthHandler) InactivityAlert(c *fiber.Ctx) error {
 		if h.hub != nil {
 			h.hub.DisconnectUser(userID)
 		}
-		if h.presenceService != nil {
-			_ = h.presenceService.SetUserOffline(ctx, userID)
-		}
-		if h.userRepo != nil {
-			realLastSeen := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
-			_ = h.userRepo.UpdateOnlineStatusWithLastSeen(ctx, userID, 0, realLastSeen)
-		}
+		h.markUserOfflineWithRealLastSeen(ctx, userID, lastSeenFallback)
 		if h.sessionRepo != nil && currentSessionID != "" {
 			_ = h.sessionRepo.DeleteSession(ctx, userID, currentSessionID)
 		}

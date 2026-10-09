@@ -52,7 +52,7 @@ interface AuthState {
   checkAuth: () => Promise<boolean>;
   login: (login: string, pass: string) => Promise<{ user: User; is_panic_mode?: boolean; panic_redirect_url?: string }>;
   register: (username: string, displayName: string, email: string, pass: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (opts?: { reason?: string }) => Promise<void>;
   updateProfile: (displayName: string, bio: string) => Promise<void>;
   uploadAvatar: (file: File) => Promise<string>;
   updatePrivacy: (settings: Partial<User["privacy_settings"]>) => Promise<void>;
@@ -119,10 +119,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user, isAuthenticated: true, isLoading: false });
   },
 
-  logout: async () => {
+  logout: async (opts?: { reason?: string }) => {
+    const reason = typeof opts?.reason === "string" ? opts.reason : "";
     try {
       // 1. WebSocket'i manuel olarak kapat ve otomatik yeniden bağlanmasını engelle
       const { useSocketStore } = await import("./useSocketStore");
+      if (!reason) {
+        // Bilinçli çıkış gerçek bir etkileşimdir: soket kapanmadan önce sunucuya "şu an aktif" bildir
+        useSocketStore.getState().sendAction("ping", { idle_ms: 0 });
+      }
       useSocketStore.getState().disconnect();
 
       // 2. ChatStore durumunu sıfırla (aktif sohbeti ve mesajları temizle)
@@ -134,7 +139,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useCallStore.getState().resetCall();
 
       // 4. Sunucuya logout isteği gönder (sunucu da soketi kapatıp offline yayınlar)
-      await api.post("/auth/logout");
+      // Sebep (reason) varsa bu kullanıcının bilinçli çıkışı DEĞİLDİR (ör. inaktivite / uzaktan kapatma);
+      // sunucu son görülmeyi "şimdi" yerine kullanıcının gerçek son etkileşim anı olarak yazar.
+      await api.post("/auth/logout", reason ? { reason } : undefined);
     } catch (err) {
       console.error("Çıkış hatası:", err);
     } finally {

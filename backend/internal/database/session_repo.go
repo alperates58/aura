@@ -263,6 +263,20 @@ func (r *SessionRepository) TouchSessionActivity(ctx context.Context, userID uui
 	return err
 }
 
+// TouchSessionActivityAt oturumun son aktiflik saatini gerçek kullanıcı etkileşimi anına (at) ileri taşır.
+// Heartbeat ping'leri oturumu "aktif" göstermesin diye NOW() yerine istemcinin bildirdiği gerçek etkileşim anı kullanılır.
+func (r *SessionRepository) TouchSessionActivityAt(ctx context.Context, userID uuid.UUID, sessionID string, at time.Time) error {
+	if sessionID == "" || at.IsZero() {
+		return nil
+	}
+	if now := time.Now(); at.After(now) {
+		at = now
+	}
+	query := `UPDATE user_sessions SET last_active_at = GREATEST(last_active_at, $3::timestamptz) WHERE user_id = $1 AND session_id = $2`
+	_, err := r.db.ExecContext(ctx, query, userID, sessionID, at)
+	return err
+}
+
 // TouchUserAllSessionsActivity kullanıcının tüm oturumlarının son aktiflik saatini günceller (ör. socket disconnect anında)
 func (r *SessionRepository) TouchUserAllSessionsActivity(ctx context.Context, userID uuid.UUID) error {
 	query := `UPDATE user_sessions SET last_active_at = NOW() WHERE user_id = $1`
