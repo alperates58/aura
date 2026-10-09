@@ -807,12 +807,22 @@ export default function Chatbox({
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.overflowY = "hidden";
+      inputRef.current.focus({ preventScroll: true });
     }
     isNearBottomRef.current = true;
     scrollToBottom("auto");
-    requestAnimationFrame(() => scrollToBottom("auto"));
-    setTimeout(() => scrollToBottom("auto"), 40);
-    setTimeout(() => scrollToBottom("auto"), 120);
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+      inputRef.current?.focus({ preventScroll: true });
+    });
+    setTimeout(() => {
+      scrollToBottom("auto");
+      inputRef.current?.focus({ preventScroll: true });
+    }, 40);
+    setTimeout(() => {
+      scrollToBottom("auto");
+      inputRef.current?.focus({ preventScroll: true });
+    }, 120);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -1208,6 +1218,8 @@ export default function Chatbox({
                       {inputMessage.trim() ? (
                         <button
                           type="submit"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onPointerDown={(e) => e.preventDefault()}
                           style={{
                             backgroundColor: "var(--accent, #6366F1)",
                             color: "var(--accent-text, #ffffff)",
