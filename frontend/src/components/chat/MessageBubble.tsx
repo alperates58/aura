@@ -166,7 +166,8 @@ function MessageBubbleComponent({
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const resolvedMediaUrl = resolveMediaUrl(message.media_url);
 
-  // Menü ve mobil eylem butonları dışına tıklanınca, kaydırılınca veya pencere boyutu değişince kapat
+  // Menü ve mobil eylem butonları dışına tıklanınca veya liste kaydırılınca kapat
+  // DİKKAT: Mobil sanal klavye kapanırken tarayıcı "resize" yayar; resize dinlenirse menü anında geri kapanır!
   useEffect(() => {
     if (!showMenu && !isMobileActionsOpen && !showReactions) return;
 
@@ -192,21 +193,21 @@ function MessageBubbleComponent({
       }
     };
 
-    const handleScrollOrResize = () => {
+    const handleScroll = (e: Event) => {
+      // Menünün kendi içindeki kaydırma değilse menüyü kapat
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
       setShowMenu(false);
       setIsMobileActionsOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("touchstart", handleClickOutside);
-    window.addEventListener("scroll", handleScrollOrResize, true);
-    window.addEventListener("resize", handleScrollOrResize);
+    window.addEventListener("scroll", handleScroll, true);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("touchstart", handleClickOutside);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [showMenu, isMobileActionsOpen, showReactions]);
 
@@ -215,6 +216,13 @@ function MessageBubbleComponent({
     if (showMenu) {
       setShowMenu(false);
       return;
+    }
+
+    // Eğer klavye açıksa input'u yumuşakça kapat (blur)
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      if (document.activeElement.tagName === "TEXTAREA" || document.activeElement.tagName === "INPUT") {
+        document.activeElement.blur();
+      }
     }
 
     setShowReactions(false);
@@ -1105,6 +1113,9 @@ function MessageBubbleComponent({
               onClick={(e) => {
                 e.stopPropagation();
                 handleToggleMenu(e);
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
               }}
               title="Daha Fazla"
               className={`p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer ${

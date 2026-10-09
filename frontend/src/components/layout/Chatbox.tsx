@@ -811,18 +811,9 @@ export default function Chatbox({
     }
     isNearBottomRef.current = true;
     scrollToBottom("auto");
-    requestAnimationFrame(() => {
-      scrollToBottom("auto");
-      inputRef.current?.focus({ preventScroll: true });
-    });
-    setTimeout(() => {
-      scrollToBottom("auto");
-      inputRef.current?.focus({ preventScroll: true });
-    }, 40);
-    setTimeout(() => {
-      scrollToBottom("auto");
-      inputRef.current?.focus({ preventScroll: true });
-    }, 120);
+    requestAnimationFrame(() => scrollToBottom("auto"));
+    setTimeout(() => scrollToBottom("auto"), 40);
+    setTimeout(() => scrollToBottom("auto"), 120);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -1006,9 +997,29 @@ export default function Chatbox({
             {/* Mesaj Akışı */}
             <div
               ref={messagesContainerRef}
-              onWheel={markUserInteracting}
+              onWheel={() => {
+                markUserInteracting();
+                if (inputRef.current && document.activeElement === inputRef.current) {
+                  inputRef.current.blur();
+                }
+              }}
               onTouchStart={markUserInteracting}
-              onTouchMove={markUserInteracting}
+              onTouchMove={() => {
+                markUserInteracting();
+                // WhatsApp / Telegram Standardı: Kullanıcı mesajları kaydırmaya başladığında klavye kapanır
+                if (inputRef.current && document.activeElement === inputRef.current) {
+                  inputRef.current.blur();
+                }
+              }}
+              onPointerDown={(e) => {
+                // WhatsApp / Telegram Standardı: Boş sohbet alanına dokununca klavyeyi tek dokunuşla kapat
+                if (inputRef.current && document.activeElement === inputRef.current) {
+                  const target = e.target as HTMLElement;
+                  if (!target.closest("button, a, input, textarea, [role='button'], #aura-chat-input")) {
+                    inputRef.current.blur();
+                  }
+                }
+              }}
               onScroll={(e) => {
                 const el = e.currentTarget;
                 if (!activeConversationId) return;
