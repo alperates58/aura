@@ -246,23 +246,17 @@ export default function Chatbox({
   }, []);
 
   // WhatsApp Standardı: En alta kaydırma fonksiyonu
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = messagesContainerRef.current;
     if (!el) return;
     isNearBottomRef.current = true;
-    if (behavior === "auto") {
-      el.scrollTop = el.scrollHeight;
-      requestAnimationFrame(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-        }
-      });
-    } else {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: "smooth",
-      });
-    }
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      bottomAnchorRef.current?.scrollIntoView({ block: "end", behavior });
+    });
   }, []);
 
   // Harici uyanış veya taban tetikleyici dinleyicisi
@@ -400,7 +394,7 @@ export default function Chatbox({
     };
   }, []);
 
-  // Sadece yeni bir son mesaj geldiğinde tabana yerleş
+  // Mesajlar yüklendiğinde veya yeni bir son mesaj geldiğinde tabana yerleş
   useEffect(() => {
     if (!activeConversationId) return;
     const currentMsgs = messages[activeConversationId];
@@ -412,27 +406,27 @@ export default function Chatbox({
     const lastMsg = currentMsgs[currentMsgs.length - 1];
     if (!lastMsg) return;
 
-    // İlk yükleme: sadece ID'yi kaydet, ilk mount zaten tabana yerleştiriyor
+    // İlk yükleme (sohbete girildiğinde ve mesajlar asenkron olarak geldiğinde):
     if (!prevLastMsgIdRef.current) {
       prevLastMsgIdRef.current = lastMsg.id;
+      isNearBottomRef.current = true;
+      scrollToBottom("auto");
+      requestAnimationFrame(() => scrollToBottom("auto"));
+      setTimeout(() => scrollToBottom("auto"), 50);
       return;
     }
 
-    // Son mesaj değişmediyse (eski mesajlar/arşiv/reaksiyon yüklendiyse) tabana kaydırma!
+    // Son mesaj ID'si değişmediyse (eski mesajlar/arşiv yüklendiyse) tabana kaydırma!
     if (prevLastMsgIdRef.current === lastMsg.id) {
       return;
     }
     prevLastMsgIdRef.current = lastMsg.id;
 
-    if (lastMsg.is_mine) {
-      scrollToBottom("smooth");
-    } else if (isNearBottomRef.current) {
-      container.scrollTop = container.scrollHeight;
-      requestAnimationFrame(() => {
-        if (container && isNearBottomRef.current) {
-          container.scrollTop = container.scrollHeight;
-        }
-      });
+    // Yeni son mesaj geldiğinde: benim mesajımsa veya kullanıcı zaten tabana yakınsa KESİNLİKLE EN ALTA İN!
+    if (lastMsg.is_mine || isNearBottomRef.current) {
+      isNearBottomRef.current = true;
+      scrollToBottom("auto");
+      requestAnimationFrame(() => scrollToBottom("auto"));
     }
   }, [messages, activeConversationId, scrollToBottom]);
 
@@ -814,7 +808,11 @@ export default function Chatbox({
       inputRef.current.style.height = "auto";
       inputRef.current.style.overflowY = "hidden";
     }
-    setTimeout(() => scrollToBottom("smooth"), 50);
+    isNearBottomRef.current = true;
+    scrollToBottom("auto");
+    requestAnimationFrame(() => scrollToBottom("auto"));
+    setTimeout(() => scrollToBottom("auto"), 40);
+    setTimeout(() => scrollToBottom("auto"), 120);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -1012,7 +1010,7 @@ export default function Chatbox({
               className="flex-1 min-h-0 p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-y-auto overflow-x-hidden overscroll-contain"
               style={{ scrollBehavior: "auto" }}
             >
-              <div ref={messagesInnerRef} className="flex flex-col min-h-full justify-end">
+              <div ref={messagesInnerRef} className="flex flex-col min-h-full">
                 {/* DÜNYA STANDARDI: TOP SENTINEL (IntersectionObserver Gözlemcisi) */}
                 <div ref={topSentinelRef} className="h-2 w-full flex-shrink-0 pointer-events-none" />
 
@@ -1033,6 +1031,8 @@ export default function Chatbox({
                   </div>
                 ) : (
                   <>
+                    {/* Mesaj sayısı azken tabana yaslayan, taştığında scroll hesaplarını bozmayan Flex standardı */}
+                    <div className="mt-auto" />
                     {activeMessages.map((m, index) => {
                     const prevMsg = index > 0 ? activeMessages[index - 1] : null;
                     const currentTimestamp = m.sent_at || m.created_at;
