@@ -245,17 +245,15 @@ export default function Chatbox({
     el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
   }, []);
 
-  // WhatsApp Standardı: En alta kaydırma fonksiyonu
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+  // WhatsApp Standardı: En alta kaydırma fonksiyonu (Titremesiz ve tek merkezli)
+  const scrollToBottom = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
     isNearBottomRef.current = true;
-    el.scrollTop = el.scrollHeight;
     requestAnimationFrame(() => {
       if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       }
-      bottomAnchorRef.current?.scrollIntoView({ block: "end", behavior });
     });
   }, []);
 
@@ -410,9 +408,7 @@ export default function Chatbox({
     if (!prevLastMsgIdRef.current) {
       prevLastMsgIdRef.current = lastMsg.id;
       isNearBottomRef.current = true;
-      scrollToBottom("auto");
-      requestAnimationFrame(() => scrollToBottom("auto"));
-      setTimeout(() => scrollToBottom("auto"), 50);
+      scrollToBottom();
       return;
     }
 
@@ -425,8 +421,7 @@ export default function Chatbox({
     // Yeni son mesaj geldiğinde: benim mesajımsa veya kullanıcı zaten tabana yakınsa KESİNLİKLE EN ALTA İN!
     if (lastMsg.is_mine || isNearBottomRef.current) {
       isNearBottomRef.current = true;
-      scrollToBottom("auto");
-      requestAnimationFrame(() => scrollToBottom("auto"));
+      scrollToBottom();
     }
   }, [messages, activeConversationId, scrollToBottom]);
 
@@ -810,10 +805,7 @@ export default function Chatbox({
       inputRef.current.focus({ preventScroll: true });
     }
     isNearBottomRef.current = true;
-    scrollToBottom("auto");
-    requestAnimationFrame(() => scrollToBottom("auto"));
-    setTimeout(() => scrollToBottom("auto"), 40);
-    setTimeout(() => scrollToBottom("auto"), 120);
+    scrollToBottom();
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);

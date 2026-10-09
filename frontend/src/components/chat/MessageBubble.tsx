@@ -595,7 +595,7 @@ function MessageBubbleComponent({
           onContextMenu={handleContextMenu}
           style={{
             transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
-            transition: isSwiping ? "none" : "transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)",
+            transition: swipeOffset > 0 ? (isSwiping ? "none" : "transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)") : "none",
             backgroundColor: message.is_mine
               ? "var(--outgoing-bubble, #4F46E5)"
               : "var(--incoming-bubble, #181C28)",
